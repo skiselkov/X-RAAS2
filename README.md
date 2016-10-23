@@ -6,8 +6,7 @@ release, see:
 * https://github.com/skiselkov/X-RAAS2/releases
 
 The installation zip package includes a full user manual with installation
-instructions in `X-RAAS_docs/manual.pdf`. Refer to `X-RAAS_docs/COPYING`
-for the license.
+instructions in `docs/manual.pdf`. Refer to `COPYING` for the license.
 
 ### DISCLAIMER
 

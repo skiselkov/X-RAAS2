@@ -1,0 +1,7 @@
+The sample code under this directory is licensed under the MIT License.
+This allows you to include it freely in your product without having to
+release source code and places minimal restrictions on your use of
+X-RAAS's ND decoder routines. This license does not cover the main
+implementation of the X-RAAS plugin, which remains under the CDDL (which
+is still a fairly permissive license, but for example does require that
+you release changes to X-RAAS's code).
