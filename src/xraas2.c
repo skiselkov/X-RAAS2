@@ -15,6 +15,8 @@
  * Copyright 2016 Saso Kiselkov. All rights reserved.
  */
 
+#include <ctype.h>
+#include <stddef.h>
 #include <math.h>
 #include <stdint.h>
 #include <string.h>
@@ -23,10 +25,13 @@
 #include <windows.h>
 #else	/* !IBM */
 #include <sys/time.h>
+#include <sys/stat.h>
 #endif	/* !IBM */
 
 #include <XPLMDataAccess.h>
 
+#include "htbl.h"
+#include "list.h"
 #include "types.h"
 #include "helpers.h"
 #include "log.h"
@@ -175,7 +180,7 @@ typedef struct runway_end runway_end_t;
 
 struct runway_end {
 	char id[4];			/* runway ID, nul-terminated */
-	geo_pos3_t thrpos;		/* threshold position */
+	geo_pos3_t thr;			/* threshold position */
 	double displ;			/* threshold displacement in meters */
 	double blast;			/* stopway/blastpad length in meters */
 	double gpa;			/* glidepath angle in degrees */
@@ -190,7 +195,7 @@ struct runway {
 };
 
 struct airport {
-	const char	icao[5];	/* 4-letter ID, nul terminated */
+	char		icao[5];	/* 4-letter ID, nul terminated */
 	geo_pos3_t	refpt;		/* airport reference point location */
 	double		TA;		/* transition altitude in feet */
 	double		TL;		/* transition level in feet */
@@ -274,6 +279,10 @@ static int last_elev = 0;
 static double last_gs = 0;			/* in m/s */
 static uint64_t last_units_call = 0;
 
+static char *xpdir = NULL;
+static htbl_t *apt_dat = NULL;
+static htbl_t *airport_geo_table = NULL;
+
 static struct {
 	XPLMDataRef baro_alt;
 	XPLMDataRef rad_alt;
@@ -318,7 +327,7 @@ strsplit(const char *input, char *sep, bool_t skip_empty, size_t *num)
 		n++;
 	}
 
-	result = malloc(sizeof (char *) * n);
+	result = calloc(sizeof (char *), n + 1);
 
 	for (const char *a = input, *b = strstr(a, sep);
 	    a != NULL; a = b + seplen, b = strstr(a, sep)) {
@@ -332,8 +341,51 @@ strsplit(const char *input, char *sep, bool_t skip_empty, size_t *num)
 		i++;
 	}
 
-	*num = n;
+	if (num != NULL)
+		*num = n;
+
 	return (result);
+}
+
+static void
+free_strlist(char **comps)
+{
+	if (comps == NULL)
+		return;
+	for (char **comp = comps; *comp != NULL; comp++)
+		free(*comp);
+	free(comps);
+}
+
+static char *
+mkpathname(const char *comp, ...)
+{
+	size_t n = 0, len = 0;
+	char *str;
+	va_list ap;
+
+	if (comp == NULL)
+		return (strdup(""));
+
+	va_start(ap, comp);
+	len = strlen(comp);
+	for (const char *c = va_arg(ap, const char *); c != NULL;
+	    c = va_arg(ap, const char *)) {
+		len += 1 + strlen(c);
+	}
+	va_end(ap);
+
+	str = malloc(len + 1);
+	va_start(ap, comp);
+	n += sprintf(str, "%s", comp);
+	for (const char *c = va_arg(ap, const char *); c != NULL;
+	    c = va_arg(ap, const char *)) {
+		ASSERT(n < len);
+		n += sprintf(&str[n], "%c%s", DIRSEP, c);
+	}
+	va_end(ap);
+
+	return (str);
 }
 
 /*
@@ -348,6 +400,23 @@ number_in_rngs(double x, const range_t *rngs)
 			return (B_TRUE);
 	}
 	return (B_FALSE);
+}
+
+/*
+ * This is to be called ONCE per X-RAAS startup to log an initial startup
+ * message and then exit.
+ */
+static void
+log_init_msg(const char *msg, bool_t display, uint64_t timeout,
+    int man_sect_number, const char *man_sect_name)
+{
+	UNUSED(display);
+	UNUSED(timeout);
+	if (man_sect_number != -1)
+		logMsg("%s. See manual section %d \"%s\".\n", msg,
+		    man_sect_number, man_sect_name);
+	else
+		logMsg("%s\n", msg);
 }
 
 static uint64_t
@@ -371,6 +440,60 @@ dr_get(const char *drname)
 	XPLMDataRef dr = XPLMFindDataRef(drname);
 	VERIFY(dr != NULL);
 	return (dr);
+}
+
+/*
+ * Returns a 32-integer identifier that can be used as the key into the
+ * airport_geo_table to retrieve the tile for a given lat & lon.
+ */
+static uint32_t
+geo_table_idx(geo_pos2_t pos)
+{
+	int16_t lat_i, lon_i;
+	uint32_t res;
+
+	CTASSERT(sizeof (res) == sizeof (lat_i) + sizeof (lon_i));
+	ASSERT(pos.lat > -89 && pos.lat < 89);
+
+	lat_i = pos.lat;
+	if (pos.lon < -180)
+		pos.lon += 360;
+	if (pos.lon >= 180)
+		pos.lon -= 360;
+	lon_i = pos.lon;
+
+	memcpy(&res, &lat_i, sizeof (lat_i));
+	memcpy(((uint16_t *)&res) + 1, &lon_i, sizeof (lon_i));
+
+	return (res);
+}
+
+/*
+ * Retrieves the geo table tile which contains position `pos'. If create is
+ * B_TRUE, if the tile doesn't exit, it will be created.
+ * Returns the table tile (if it exists) and a boolean (in created_p if
+ * non-NULL) informing whether the table tile was created in this call
+ * (if create == B_TRUE).
+ */
+static list_t *
+geo_table_get_tile(geo_pos2_t pos, bool_t create, bool_t *created_p)
+{
+	bool_t created = B_FALSE;
+	uint32_t key = geo_table_idx(pos);
+	list_t *tile;
+
+	tile = htbl_lookup(airport_geo_table, &key);
+	if (tile == NULL && create) {
+		tile = malloc(sizeof (*tile));
+		list_create(tile, sizeof (airport_t),
+		    offsetof(airport_t, tile_node));
+		htbl_set(airport_geo_table, &key, tile);
+		created = B_TRUE;
+	}
+	if (created_p != NULL)
+		*created_p = created;
+
+	return (tile);
 }
 
 static void
@@ -565,10 +688,12 @@ map_apt_dat(const char *apt_dat_fname)
 {
 	FILE *apt_dat_f;
 	size_t arpt_cnt = 0;
-	airport_t *arpt;
-	runway_t *rwy;
+	airport_t *arpt = NULL;
 	char *line = NULL;
 	size_t linecap = 0;
+	int line_num = 0;
+	char **comps;
+	size_t ncomps;
 
 	dbg_log("tile", 2, "raas.map_apt_dat(\"%s\")", apt_dat_fname);
 
@@ -577,20 +702,21 @@ map_apt_dat(const char *apt_dat_fname)
 		return (0);
 
 	while (!feof(apt_dat_f)) {
+		line_num++;
 		if (getline(&line, &linecap, apt_dat_f) <= 0)
 			continue;
-		if (strnstr(line, "1 ") == line) {
-			size_t ncomps;
-			char **comps = strsplit(line, " ", B_TRUE, &ncomps);
+		strip_space(line);
+		if (strstr(line, "1 ") == line) {
 			const char *new_icao;
 			double TA = 0, TL = 0;
 			geo_pos3_t pos = NULL_GEO_POS3;
 
+			comps = strsplit(line, " ", B_TRUE, &ncomps);
 			if (ncomps < 5) {
-				dbg_log("tile", 0, "apt.dat \"%s\" contains "
-				    "an invalid '1' line, skipping. Offending "
-				    "line follows:\n%s", apt_dat_fname, line);
-				free(comps);
+				dbg_log("tile", 0, "%s:%d: malformed airport "
+				    "entry, skipping. Offending line:\n%s",
+				    apt_dat_fname, line_num, line);
+				free_strlist(comps);
 				continue;
 			}
 
@@ -607,7 +733,7 @@ map_apt_dat(const char *apt_dat_fname)
 				pos.lat = atof(&comps[7][4]);
 				pos.lon = atof(&comps[8][4]);
 			} else if (arpt != NULL) {
-				pos = arpt->pos;
+				pos = arpt->refpt;
 			}
 
 			if (arpt == NULL) {
@@ -615,61 +741,61 @@ map_apt_dat(const char *apt_dat_fname)
 				arpt = calloc(1, sizeof (*arpt));
 				list_create(&arpt->rwys, sizeof(runway_t),
 				    offsetof(runway_t, node));
-				strcpy(arpt->icao, new_icao);
-				arpt->pos = pos;
+				strlcpy(arpt->icao, new_icao,
+				    sizeof (arpt->icao));
+				arpt->refpt = pos;
 				arpt->TL = TL;
 				arpt->TA = TA;
 				htbl_set(apt_dat, new_icao, arpt);
 				if (!IS_NULL_GEO_POS(pos)) {
 					list_t *tile = geo_table_get_tile(
-					    GEO3_TO_GEO2(pos), B_FALSE);
+					    GEO3_TO_GEO2(pos), B_FALSE, NULL);
 					ASSERT(tile != NULL);
-					list_insert_tail(&tile->arpts, arpt);
+					list_insert_tail(tile, arpt);
 					dbg_log("tile", 2, "geo_xref\t%s\t%f"
 					    "\t%f", new_icao, pos.lat, pos.lon);
 				}
 			}
-			free(comps);
+			free_strlist(comps);
 		} else if (strstr(line, "100 ") == line && arpt != NULL) {
-			size_t ncomps;
-			char **comps = strsplit(line, " ", B_TRUE, &ncomps);
 			runway_t *rwy;
 
+			comps = strsplit(line, " ", B_TRUE, &ncomps);
 			if (ncomps < 8 + 9 + 5) {
-				dbg_log("tile", 0, "apt.dat \"%s\" contains "
-				    "an invalid '100' line, skipping. "
-				    "Offending line follows:\n%s",
-				    apt_dat_fname line);
-				free(comps);
+				dbg_log("tile", 0, "%s:%d: malformed runway "
+				    "entry, skipping. Offending line:\n%s",
+				    apt_dat_fname, line_num, line);
+				free_strlist(comps);
 				continue;
 			}
 
 			if (arpt == NULL) {
-				dbg_log("tile", 0, "apt.dat \"%s\" contains "
-				    "an invalid '100' line, which is not "
-				    "preceded by a '1' line. Skipping.");
-				free(comps);
+				dbg_log("tile", 0, "%s:%d: malformed apt.dat. "
+				    "Runway line is not preceded by a runway "
+				    "line, skipping.", apt_dat_fname, line_num);
+				free_strlist(comps);
 				continue;
 			}
 
-			if (rwy_is_hard(atoi(comps[2]))) then
+			if (rwy_is_hard(atoi(comps[2]))) {
 				rwy = calloc(1, sizeof (*rwy));
 
 				rwy->width = atof(comps[1]);
 
-				rwy->ends[0].id = atof(comps[8 + 0]);
-				rwy->ends[0].pos = GEO_POS3(atof(comps[8 + 1]),
-				    atof(comps[8 + 2]), 0);
+				strlcpy(rwy->ends[0].id, comps[8 + 0],
+				    sizeof (rwy->ends[0].id));
+				rwy->ends[0].thr = GEO_POS3(atof(comps[8 + 1]),
+				    atof(comps[8 + 2]), NAN);
 				rwy->ends[0].displ = atof(comps[8 + 3]);
 				rwy->ends[0].blast = atof(comps[8 + 4]);
 
-				rwy->ends[1].id = atof(comps[8 + 9 + 0]);
-				rwy->ends[1].pos = GEO_POS3(
+				strlcpy(rwy->ends[1].id, comps[8 + 9 + 0],
+				    sizeof (rwy->ends[1].id));
+				rwy->ends[1].thr = GEO_POS3(
 				    atof(comps[8 + 9 + 1]),
-				    atof(comps[8 + 9 + 2]), 0);
+				    atof(comps[8 + 9 + 2]), NAN);
 				rwy->ends[1].displ = atof(comps[8 + 9 + 3]);
 				rwy->ends[1].blast = atof(comps[8 + 9 + 4]);
-
 
 				if (ncomps >= 28 &&
 				    strstr(comps[22], "GPA1:") == comps[22] &&
@@ -682,14 +808,15 @@ map_apt_dat(const char *apt_dat_fname)
 					rwy->ends[1].gpa = atof(&comps[23][5]);
 					rwy->ends[0].tch = atof(&comps[24][5]);
 					rwy->ends[1].tch = atof(&comps[25][5]);
-					rwy->ends[0].pos.elev =
+					rwy->ends[0].thr.elev =
 					    atof(&comps[26][7]);
-					rwy->ends[1].pos.elev =
+					rwy->ends[1].thr.elev =
 					    atof(&comps[27][7]);
 				}
 
 				list_insert_tail(&arpt->rwys, rwy);
 			}
+			free_strlist(comps);
 		}
 	}
 
@@ -713,43 +840,216 @@ map_apt_dat(const char *apt_dat_fname)
  */
 static char **
 find_all_apt_dats(size_t *num)
+{
 	size_t n = 0;
-	local i = 1
+	char *fname;
+	FILE *scenery_packs_ini;
+	char *line = NULL;
+	size_t linecap = 0;
+	char **apt_dats = NULL;
 
-	local scenery_packs_ini = fopen(xpdir ..
-	    "Custom Scenery" .. DIRSEP .. "scenery_packs.ini")
+	fname = mkpathname(xpdir, "Custom Scenery", "scenery_packs.ini", NULL);
+	scenery_packs_ini = fopen(fname, "r");
+	free(fname);
 
-	if scenery_packs_ini ~= nil then
-		for line in scenery_packs_ini:lines() do
-			if line:find("SCENERY_PACK ", 1, true) == 1 then
-				local scn_name = line:sub(14)
-				local filename = scn_name ..
-				    "Earth nav data" .. DIRSEP .. "apt.dat"
-				local fp = io.open(raas.const.xpdir ..
-				    filename)
-				if fp ~= nil then
-					fp:close()
-					if as_keys then
-						apt_dats[filename] = i
-						i = i + 1
-					else
-						apt_dats[#apt_dats + 1] =
-						    filename
-					end
-				end
-			end
-		end
-		io.close(scenery_packs_ini)
-	end
+	if (scenery_packs_ini != NULL) {
+		while (!feof(scenery_packs_ini)) {
+			if (getline(&line, &linecap, scenery_packs_ini) <= 0)
+				continue;
+			strip_space(line);
+			if (strstr(line, "SCENERY_PACK ") == line) {
+				char *scn_name, *filename;
+				FILE *fp;
 
-	local default_apt_dat_filename = "Resources" .. DIRSEP ..
-	    "default scenery" .. DIRSEP .. "default apt dat" ..
-	    DIRSEP .. "Earth nav data" .. DIRSEP .. "apt.dat"
-	if as_keys then
-		apt_dats[default_apt_dat_filename] = i
-	else
-		apt_dats[#apt_dats + 1] = default_apt_dat_filename
-	end
+				scn_name = strdup(&line[13]);
+				strip_space(scn_name);
+				filename = mkpathname(xpdir, scn_name,
+				    "Earth nav data", "apt.dat", NULL);
+				fp = fopen(filename, "r");
+				if (fp != NULL) {
+					fclose(fp);
+					n++;
+					apt_dats = realloc(apt_dats,
+					    n * sizeof (char *));
+					apt_dats[n - 1] = filename;
+				} else {
+					free(filename);
+				}
+				free(scn_name);
+			}
+		}
+		fclose(scenery_packs_ini);
+	}
 
-	return apt_dats
-end
+	/* append the default apt.dat and a terminating NULL */
+	n += 2;
+	apt_dats = realloc(apt_dats, n * sizeof (char *));
+	apt_dats[n - 2] = mkpathname(xpdir, "Resources", "default scenery",
+	    "default apt dat", "Earth nav data", "apt.dat", NULL);
+	apt_dats[n - 1] = NULL;
+
+	free(line);
+
+	if (num != NULL)
+		*num = n;
+
+	return (apt_dats);
+}
+
+/*
+ * Reloads ~/GNS430/navdata/Airports.txt and populates our apt_dat airports
+ * with the latest info in it, notably:
+ * *) transition altitudes & transition levels for the airports
+ * *) runway threshold elevation, glide path angle & threshold crossing height
+ */
+static bool_t
+load_airports_txt(void)
+{
+	char *fname;
+	FILE *fp;
+	char *line = NULL;
+	size_t linecap = 0;
+	int line_num = 0;
+	char **comps;
+	size_t ncomps;
+	airport_t *arpt = NULL;
+
+	/* We first try the Custom Data version, as that's more up to date */
+	fname = mkpathname(xpdir, "Custom Data", "GNS430", "navdata",
+	    "Airports.txt", NULL);
+	fp = fopen(fname, "r");
+
+	if (fp == NULL) {
+		/* Try the Airports.txt shipped with X-Plane. */
+		free(fname);
+		fname = mkpathname(xpdir, "Resources", "GNS430", "navdata",
+		    "Airports.txt", NULL);
+		fp = fopen(fname, "r");
+
+		if (fp == NULL) {
+			free(fname);
+			log_init_msg("X-RAAS navdata error: your "
+			    "Airports.txt is missing or unreadable. "
+			    "Please correct this and recreate the cache.",
+			    B_TRUE, INIT_ERR_MSG_TIMEOUT, 2, "Installation");
+			return (B_FALSE);
+		}
+	}
+
+	while (!feof(fp)) {
+		line_num++;
+		if (getline(&line, &linecap, fp) <= 0)
+			continue;
+		strip_space(line);
+		if (strstr(line, "A,") == line) {
+			char *icao;
+
+			comps = strsplit(line, ",", B_FALSE, &ncomps);
+			if (ncomps < 8) {
+				dbg_log("tile", 0, "%s:%d: malformed airport "
+				    "entry, skipping. Offending line:\n%s",
+				    fname, line_num, line);
+				free_strlist(comps);
+				continue;
+			}
+			icao = comps[1];
+			arpt = htbl_lookup(apt_dat, icao);
+
+			if (arpt != NULL) {
+				arpt->refpt = GEO_POS3(atof(comps[3]),
+				    atof(comps[4]), arpt->refpt.elev);
+				arpt->TA = atof(comps[6]);
+				arpt->TL = atof(comps[7]);
+			}
+			free_strlist(comps);
+		} else if (strstr(line, "R,") == line) {
+			char *rwy_id;
+			double telev, gpa, tch;
+
+			if (arpt == NULL) {
+				dbg_log("tile", 0, "%s:%d: malformed runway "
+				    "entry not following an airport entry, "
+				    "skipping. Offending line:\n%s",
+				    fname, line_num, line);
+				continue;
+			}
+
+			comps = strsplit(line, ",", B_FALSE, &ncomps);
+			if (ncomps < 13) {
+				dbg_log("tile", 0, "%s:%d: malformed runway "
+				    "entry, skipping. Offending line:\n%s",
+				    fname, line_num, line);
+				free_strlist(comps);
+				continue;
+			}
+
+			rwy_id = comps[1];
+			telev = atof(comps[10]);
+			gpa = atof(comps[11]);
+			tch = atof(comps[12]);
+
+			for (runway_t *rwy = list_head(&arpt->rwys);
+			    rwy != NULL; rwy = list_next(&arpt->rwys, rwy)) {
+				if (strcmp(rwy->ends[0].id, rwy_id) == 0) {
+					rwy->ends[0].thr.elev = telev;
+					rwy->ends[0].gpa = gpa;
+					rwy->ends[0].tch = tch;
+					break;
+				} else if (strcmp(rwy->ends[1].id, rwy_id) ==
+				    0) {
+					rwy->ends[1].thr.elev = telev;
+					rwy->ends[1].gpa = gpa;
+					rwy->ends[1].tch = tch;
+					break;
+				}
+			}
+			free_strlist(comps);
+		}
+	}
+
+	fclose(fp);
+	free(fname);
+
+	return (B_TRUE);
+}
+
+static void
+create_directories(const char **dirnames)
+{
+	if (dirnames == NULL)
+		return;
+
+	for (const char **dirname = dirnames; *dirname != NULL; dirname++)
+		mkdir(*dirname, 0777);
+}
+
+/*
+ * Check if the aircraft is a helicopter (or at least flies like one).
+ */
+static bool_t
+chk_acf_is_helo(void)
+{
+#if 0
+	/* TODO: implement AIRCRAFT_FILENAME */
+	FILE *fp = fopen(AIRCRAFT_FILENAME, "r");
+	char *line = NULL;
+	size_t linecap = 0;
+	bool_t result = B_FALSE;
+
+	if (fp != NULL) {
+		while (!feof(fp)) {
+			if (getline(&line, &linecap, fp) <= 0)
+				continue;
+			if (strstr(line, "P acf/_fly_like_a_helo") == line) {
+				result = (strstr(line,
+				    "P acf/_fly_like_a_helo 1") == line);
+				break;
+			}
+		}
+	}
+	free(line);
+	return (result);
+#else	/* !0 */
+	return (B_FALSE);
+#endif	/* !0 */
+}
