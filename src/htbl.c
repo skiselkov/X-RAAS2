@@ -258,12 +258,18 @@ htbl_foreach(const htbl_t *htbl, void (*func)(const void *, void *, void *),
 {
 	for (size_t i = 0; i < htbl->tbl_sz; i++) {
 		list_t *bucket = &htbl->buckets[i];
-		for (const htbl_bucket_item_t *item = list_head(bucket); item;
-		    item = list_next(bucket, item)) {
+		const htbl_bucket_item_t *item, *next_item;
+		for (item = list_head(bucket); item; item = next_item) {
+			/*
+			 * Grab the next item now to allow removal of the
+			 * current item in the callback.
+			 */
+			next_item = list_next(bucket, item);
 			if (htbl->multi_value) {
 				const list_t *ml = &item->multi.list;
-				for (htbl_multi_value_t *mv = list_head(ml);
-				    mv; mv = list_next(ml, mv)) {
+				htbl_multi_value_t *mv, *mv_next;
+				for (mv = list_head(ml); mv; mv = mv_next) {
+					mv_next = list_next(ml, mv);
 					func(item->key, mv->value, arg);
 				}
 			} else {

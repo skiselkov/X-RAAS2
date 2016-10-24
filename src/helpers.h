@@ -197,6 +197,9 @@ void append_format(char **str, size_t *sz, const char *format, ...)
 #define	AVG(x, y)	(((x) + (y)) / 2)
 #endif	/* MIN or MAX */
 
+#define	USEC2SEC(usec)	(usec / 1000000llu)
+#define	SEC2USEC(sec)	(sec * 1000000llu)
+
 /*
  * Weighted avg, 'w' is weight fraction from 0.0 = all of x to 1.0 = all of y.
  */

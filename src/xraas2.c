@@ -143,7 +143,7 @@ static range_t RAAS_accel_stop_distances[] = {
  *				feet or meters. '0' means 'do not display'.
  * Bits 8 through 23 are only used by the ND_ALERT_APP and ND_ALERT_ON messages
  */
-enum nd_alert_msg_type {
+typedef enum nd_alert_msg_type {
     ND_ALERT_FLAPS = 1,		/* 'FLAPS' message on ND */
     ND_ALERT_TOO_HIGH = 2,	/* 'TOO HIGH' message on ND */
     ND_ALERT_TOO_FAST = 3,	/* 'TOO FAST' message on ND */
@@ -159,38 +159,52 @@ enum nd_alert_msg_type {
 				/* 'XX' means runway ID (bits 8 - 15). */
 				/* 'ZZ' means runway length (bits 16 - 23). */
     ND_ALERT_LONG_LAND = 10
-};
+} nd_alert_msg_type_t;
 
 /* ND alert severity */
-enum nd_alert_level {
+typedef enum nd_alert_level {
     ND_ALERT_ROUTINE = 0,
     ND_ALERT_NONROUTINE = 1,
     ND_ALERT_CAUTION = 2
-};
+} nd_alert_level_t;
 
-enum msg_prio {
+typedef enum msg_prio {
     MSG_PRIO_LOW = 1,
     MSG_PRIO_MED = 2,
     MSG_PRIO_HIGH = 3
-};
+} msg_prio_t;
 
 typedef struct airport airport_t;
 typedef struct runway runway_t;
 typedef struct runway_end runway_end_t;
 
 struct runway_end {
-	char id[4];			/* runway ID, nul-terminated */
-	geo_pos3_t thr;			/* threshold position */
-	double displ;			/* threshold displacement in meters */
-	double blast;			/* stopway/blastpad length in meters */
-	double gpa;			/* glidepath angle in degrees */
-	double tch;			/* threshold clearing height in feet */
+	char		id[4];		/* runway ID, nul-terminated */
+	geo_pos3_t	thr;		/* threshold position */
+	double		displ;		/* threshold displacement in meters */
+	double		blast;		/* stopway/blastpad length in meters */
+	double		gpa;		/* glidepath angle in degrees */
+	double		tch;		/* threshold clearing height in feet */
+
+	/* computed on load_airport */
+	vect2_t		thr_v;		/* threshold vector coord */
+	vect2_t		dthr_v;		/* displaced threshold vector coord */
+	double		hdg;		/* true heading */
+	vect2_t		*apch_bbox;	/* in-air approach bbox */
 };
 
 struct runway {
 	airport_t	*arpt;
 	double		width;
 	runway_end_t	ends[2];
+
+	/* computed on load_airport */
+	double		length;		/* meters */
+	vect2_t		*prox_bbox;	/* on-ground approach bbox */
+	vect2_t		*rwy_bbox;	/* above runway for landing */
+	vect2_t		*tora_bbox;	/* on-runway on ground (for tkoff) */
+	vect2_t		*asda_bbox;	/* on-runway on ground (for stopping) */
+
 	list_node_t	node;
 };
 
@@ -200,11 +214,22 @@ struct airport {
 	double		TA;		/* transition altitude in feet */
 	double		TL;		/* transition level in feet */
 	list_t		rwys;
-	list_node_t	tile_node;
+
+	bool_t		load_complete;	/* true if we've done load_airport */
+	vect3_t		ecef;		/* refpt ECEF coordinates */
+	fpp_t		fpp;		/* ortho fpp centered on refpt */
+
+	list_node_t	cur_arpts_node;	/* cur_arpts list */
+	list_node_t	tile_node;	/* tiles in the airport_geo_table */
+	list_node_t	nearest_node;	/* find_nearest_arpts */
 };
 
+typedef struct tile_key_s {
+	int		lat, lon;
+} tile_key_t;
+
 static bool_t enabled = B_TRUE;
-static int min_engines = 2;		/* count */
+static int min_engines = 2;			/* count */
 static int min_MTOW = 5700;			/* kg */
 static bool_t allow_helos = B_FALSE;
 static bool_t auto_disable_notify = B_TRUE;
@@ -280,8 +305,18 @@ static double last_gs = 0;			/* in m/s */
 static uint64_t last_units_call = 0;
 
 static char *xpdir = NULL;
-static htbl_t *apt_dat = NULL;
-static htbl_t *airport_geo_table = NULL;
+static list_t *cur_arpts = NULL;
+static htbl_t apt_dat;
+static htbl_t airport_geo_table;
+static uint64_t last_airport_reload = 0;
+static uint64_t last_units_call = 0;
+static htbl_t on_rwy_ann;			/* runway ID key list */
+static htbl_t apch_rwy_ann;			/* runway ID key list */
+static bool_t apch_rwys_ann = B_FALSE;		/* > 1 runways approached? */
+static htbl_t air_apch_rwy_ann;			/* runway ID key list */
+static bool_t air_apch_rwys_ann = B_FALSE;	/* > 1 runways approached? */
+
+static bool_t landing = B_FALSE;
 
 static struct {
 	XPLMDataRef baro_alt;
@@ -327,7 +362,7 @@ strsplit(const char *input, char *sep, bool_t skip_empty, size_t *num)
 		n++;
 	}
 
-	result = calloc(sizeof (char *), n + 1);
+	result = calloc(sizeof (char *), n);
 
 	for (const char *a = input, *b = strstr(a, sep);
 	    a != NULL; a = b + seplen, b = strstr(a, sep)) {
@@ -348,13 +383,26 @@ strsplit(const char *input, char *sep, bool_t skip_empty, size_t *num)
 }
 
 static void
-free_strlist(char **comps)
+free_strlist(char **comps, size_t len)
 {
 	if (comps == NULL)
 		return;
-	for (char **comp = comps; *comp != NULL; comp++)
-		free(*comp);
+	for (size_t i = 0; i < len; i++)
+		free(comps[i]);
 	free(comps);
+}
+
+static void
+expand_strlist(char ***strlist, size_t *len)
+{
+	*strlist = realloc(*strlist, ++(*len) * sizeof (char *));
+}
+
+static void
+append_strlist(char ***strlist, size_t *len, char *str)
+{
+	expand_strlist(strlist, len);
+	(*strlist)[(*len) - 1] = str;
 }
 
 static char *
@@ -386,6 +434,25 @@ mkpathname(const char *comp, ...)
 	va_end(ap);
 
 	return (str);
+}
+
+static char *
+m_sprintf(const char *fmt, ...)
+{
+	char *buf;
+	int len;
+	va_list ap;
+
+	va_start(ap, fmt);
+	len = vsnprintf(NULL, 0, fmt, ap);
+	va_end(ap);
+	ASSERT(len >= 0);
+	buf = malloc(len + 1);
+	va_start(ap, fmt);
+	len = vsnprintf(buf, len + 1, fmt, ap);
+	va_end(ap);
+
+	return (buf);
 }
 
 /*
@@ -443,27 +510,22 @@ dr_get(const char *drname)
 }
 
 /*
- * Returns a 32-integer identifier that can be used as the key into the
- * airport_geo_table to retrieve the tile for a given lat & lon.
+ * Returns a key that can be used in the airport_geo_table to retrieve the
+ * tile for a given lat & lon.
  */
-static uint32_t
-geo_table_idx(geo_pos2_t pos)
+static tile_key_t
+geo_table_key(geo_pos2_t pos)
 {
-	int16_t lat_i, lon_i;
-	uint32_t res;
+	tile_key_t key;
 
-	CTASSERT(sizeof (res) == sizeof (lat_i) + sizeof (lon_i));
 	ASSERT(pos.lat > -89 && pos.lat < 89);
 
-	lat_i = pos.lat;
+	key.lat = pos.lat;
 	if (pos.lon < -180)
 		pos.lon += 360;
 	if (pos.lon >= 180)
 		pos.lon -= 360;
-	lon_i = pos.lon;
-
-	memcpy(&res, &lat_i, sizeof (lat_i));
-	memcpy(((uint16_t *)&res) + 1, &lon_i, sizeof (lon_i));
+	key.lon = pos.lon;
 
 	return (res);
 }
@@ -479,15 +541,15 @@ static list_t *
 geo_table_get_tile(geo_pos2_t pos, bool_t create, bool_t *created_p)
 {
 	bool_t created = B_FALSE;
-	uint32_t key = geo_table_idx(pos);
+	tile_key_t key = geo_table_key(pos);
 	list_t *tile;
 
-	tile = htbl_lookup(airport_geo_table, &key);
+	tile = htbl_lookup(&airport_geo_table, &key);
 	if (tile == NULL && create) {
 		tile = malloc(sizeof (*tile));
 		list_create(tile, sizeof (airport_t),
 		    offsetof(airport_t, tile_node));
-		htbl_set(airport_geo_table, &key, tile);
+		htbl_set(&airport_geo_table, &key, tile);
 		created = B_TRUE;
 	}
 	if (created_p != NULL)
@@ -716,13 +778,13 @@ map_apt_dat(const char *apt_dat_fname)
 				dbg_log("tile", 0, "%s:%d: malformed airport "
 				    "entry, skipping. Offending line:\n%s",
 				    apt_dat_fname, line_num, line);
-				free_strlist(comps);
+				free_strlist(comps, ncomps);
 				continue;
 			}
 
 			new_icao = comps[4];
 			pos.elev = atof(comps[1]);
-			arpt = htbl_lookup(apt_dat, new_icao);
+			arpt = htbl_lookup(&apt_dat, new_icao);
 			if (ncomps >= 9 &&
 			    strstr(comps[5], "TA:") == comps[5] &&
 			    strstr(comps[6], "TL:") == comps[6] &&
@@ -746,7 +808,7 @@ map_apt_dat(const char *apt_dat_fname)
 				arpt->refpt = pos;
 				arpt->TL = TL;
 				arpt->TA = TA;
-				htbl_set(apt_dat, new_icao, arpt);
+				htbl_set(&apt_dat, new_icao, arpt);
 				if (!IS_NULL_GEO_POS(pos)) {
 					list_t *tile = geo_table_get_tile(
 					    GEO3_TO_GEO2(pos), B_FALSE, NULL);
@@ -756,7 +818,7 @@ map_apt_dat(const char *apt_dat_fname)
 					    "\t%f", new_icao, pos.lat, pos.lon);
 				}
 			}
-			free_strlist(comps);
+			free_strlist(comps, ncomps);
 		} else if (strstr(line, "100 ") == line && arpt != NULL) {
 			runway_t *rwy;
 
@@ -765,7 +827,7 @@ map_apt_dat(const char *apt_dat_fname)
 				dbg_log("tile", 0, "%s:%d: malformed runway "
 				    "entry, skipping. Offending line:\n%s",
 				    apt_dat_fname, line_num, line);
-				free_strlist(comps);
+				free_strlist(comps, ncomps);
 				continue;
 			}
 
@@ -773,7 +835,7 @@ map_apt_dat(const char *apt_dat_fname)
 				dbg_log("tile", 0, "%s:%d: malformed apt.dat. "
 				    "Runway line is not preceded by a runway "
 				    "line, skipping.", apt_dat_fname, line_num);
-				free_strlist(comps);
+				free_strlist(comps, ncomps);
 				continue;
 			}
 
@@ -816,7 +878,7 @@ map_apt_dat(const char *apt_dat_fname)
 
 				list_insert_tail(&arpt->rwys, rwy);
 			}
-			free_strlist(comps);
+			free_strlist(comps, ncomps);
 		}
 	}
 
@@ -949,11 +1011,11 @@ load_airports_txt(void)
 				dbg_log("tile", 0, "%s:%d: malformed airport "
 				    "entry, skipping. Offending line:\n%s",
 				    fname, line_num, line);
-				free_strlist(comps);
+				free_strlist(comps, ncomps);
 				continue;
 			}
 			icao = comps[1];
-			arpt = htbl_lookup(apt_dat, icao);
+			arpt = htbl_lookup(&apt_dat, icao);
 
 			if (arpt != NULL) {
 				arpt->refpt = GEO_POS3(atof(comps[3]),
@@ -961,7 +1023,7 @@ load_airports_txt(void)
 				arpt->TA = atof(comps[6]);
 				arpt->TL = atof(comps[7]);
 			}
-			free_strlist(comps);
+			free_strlist(comps, ncomps);
 		} else if (strstr(line, "R,") == line) {
 			char *rwy_id;
 			double telev, gpa, tch;
@@ -979,7 +1041,7 @@ load_airports_txt(void)
 				dbg_log("tile", 0, "%s:%d: malformed runway "
 				    "entry, skipping. Offending line:\n%s",
 				    fname, line_num, line);
-				free_strlist(comps);
+				free_strlist(comps, ncomps);
 				continue;
 			}
 
@@ -1003,7 +1065,7 @@ load_airports_txt(void)
 					break;
 				}
 			}
-			free_strlist(comps);
+			free_strlist(comps, ncomps);
 		}
 	}
 
@@ -1023,8 +1085,1260 @@ create_directories(const char **dirnames)
 		mkdir(*dirname, 0777);
 }
 
+static void
+remove_directory(const char *dirname)
+{
+	/* TODO: implement recursive directory removal */
+	UNUSED(dirname);
+}
+
+static char *
+apt_dat_cache_dir(geo_pos2_t pos)
+{
+	/* TODO: implement this */
+#define	SCRIPT_DIRECTORY ""
+	char lat_lon[16];
+	snprintf(lat_lon, sizeof (lat_lon), "%.0f_%.0f",
+	    floor(pos.lat / 10) * 10, floor(pos.lon / 10) * 10);
+	return (mkpathname(SCRIPT_DIRECTORY, "X-RAAS_apt_dat_cache", lat_lon));
+}
+
+static void
+write_apt_dat(const airport_t *arpt)
+{
+	char lat_lon[16];
+	char *cache_dir, *fname;
+	FILE *fp;
+
+	cache_dir = apt_dat_cache_dir(GEO3_TO_GEO2(arpt->refpt));
+	snprintf(lat_lon, sizeof (lat_lon), "%03.0f_%03.0f",
+	    arpt->refpt.lat, arpt->refpt.lon);
+	fname = mkpathname(cache_dir, lat_lon);
+
+	fp = fopen(fname, "a");
+	VERIFY(fp != NULL);
+
+	free(cache_dir);
+	free(fname);
+
+	fprintf(fp, "1 %f 0 0 %s TA:%f TL:%f LAT:%f LON:%f\n",
+	    arpt->refpt.elev, arpt->icao, arpt->TL, arpt->TA,
+	    arpt->refpt.lat, arpt->refpt.lon);
+	for (const runway_t *rwy = list_head(&arpt->rwys); rwy != NULL;
+	    rwy = list_next(&arpt->rwys, rwy)) {
+		fprintf(fp, "100 %f 1 0 0 0 0 0 "
+		    "%s %f %f %f %f 0 0 0 0 "
+		    "%s %f %f %f %f "
+		    "GPA1:%f GPA2:%f TCH1:%f TCH2:%f TELEV1:%f TELEV2:%f\n",
+		    rwy->width,
+		    rwy->ends[0].id, rwy->ends[0].thr.lat,
+		    rwy->ends[0].thr.lon, rwy->ends[0].displ,
+		    rwy->ends[0].blast,
+		    rwy->ends[1].id, rwy->ends[1].thr.lat,
+		    rwy->ends[1].thr.lon, rwy->ends[1].displ,
+		    rwy->ends[1].blast,
+		    rwy->ends[0].gpa, rwy->ends[1].gpa,
+		    rwy->ends[0].tch, rwy->ends[1].tch,
+		    rwy->ends[0].thr.elev, rwy->ends[1].thr.elev);
+	}
+	fclose(fp);
+}
+
 /*
- * Check if the aircraft is a helicopter (or at least flies like one).
+ * The approach proximity bounding box is constructed as follows:
+ *
+ *   5500 meters
+ *   |<=======>|
+ *   |         |
+ * d +-_  (c1) |
+ *   |   -._3 degrees
+ *   |      -_ c
+ *   |         +-------------------------------+
+ *   |         | ====  ----         ----  ==== |
+ * x +   thr_v-+ ==== - ------> dir_v - - ==== |
+ *   |         | ====  ----         ----  ==== |
+ *   |         +-------------------------------+
+ *   |      _- b
+ *   |   _-.
+ * a +--    (b1)
+ *
+ * If there is another parallel runway, we make sure our bounding boxes
+ * don't overlap. We do this by introducing two additional points, b1 and
+ * c1, in between a and b or c and d respectively. We essentially shear
+ * the overlapping excess from the bounding polygon.
+ */
+static vect2_t *
+make_apch_prox_bbox(const runway_t *rwy, const runway_end_t *end,
+    const runway_end_t *oend)
+{
+	const fpp_t *fpp = &rwy->arpt->fpp;
+	double limit_left, limit_right = 1000000, 1000000;
+	vect2_t x, a, b, b1, c, c1, d, thr_v, othr_v, dir_v;
+	vect2_t *bbox = calloc(sizeof (vect2_t), 7);
+	size_t n_pts = 0;
+
+	ASSERT(fpp != NULL);
+
+	/*
+	 * By pre-initing the whole array to null vectors, we can make the
+	 * bbox either contain 4, 5 or 6 points, depending on whether
+	 * shearing due to a close parallel runway needs to be applied.
+	 */
+	for (int i = 0; i < 7; i++)
+		bbox[i] = NULL_VECT2;
+
+	thr_v = geo2fpp(GEO3_TO_GEO2(end->thr), fpp);
+	othr_v = geo2fpp(GEO3_TO_GEO2(oend->thr), fpp);
+	dir_v = vect2_sub(othr_v, thr_v);
+
+	x = vect2_add(thr_v, vect2_set_abs(vect2_neg(dir_v),
+	    RWY_APCH_PROXIMITY_LON_DISPL));
+	a = vect2_add(x, vect2_set_abs(vect2_norm(dir_v, B_TRUE),
+	    rwy->width / 2 + RWY_APCH_PROXIMITY_LAT_DISPL));
+	b = vect2_add(thr_v, vect2_set_abs(vect2_norm(dir_v, B_TRUE),
+	    rwy->width / 2));
+	c = vect2_add(thr_v, vect2_set_abs(vect2_norm(dir_v, B_FALSE),
+	    rwy->width / 2));
+	d = vect2_add(x, vect2_set_abs(vect2_norm(dir_v, B_FALSE),
+	    rwy->width / 2 + RWY_APCH_PROXIMITY_LAT_DISPL));
+
+	b1 = NULL_VECT2;
+	c1 = NULL_VECT2;
+
+	/*
+	 * If our rwy_id designator contains a L/C/R, then we need to
+	 * look for another parallel runway.
+	 */
+	if (strlen(end->id) >= 3) {
+		int my_num_id = atoi(end->id);
+
+		for (const runway_t *orwy = list_head(&rwy->arpt->rwys);
+		    orwy != NULL; orwy = list_next(&rwy->arpt->rwys, orwy)) {
+			const runway_end_t *orwy_end;
+			vect2_t othr_v, v;
+			double a, dist;
+
+			if (orwy == rwy)
+				continue;
+			if (atoi(orwy->end[0].id) == my_num_id)
+				orwy_end = &orwy->end[0];
+			else if (atoi(orwy->end[1].id) == my_num_id)
+				orwy_end = &orwy->end[1];
+			else
+				continue;
+
+			/*
+			 * This is a parallel runway, measure the
+			 * distance to it from us.
+			 */
+			othr_v = sph2fpp(GEO3_TO_GEO2(orwy_end->thr), fpp);
+			v = vect2_sub(othr_v, thr_v);
+			a = rel_hdg(dir2hdg(dir_v), dir2hdg(v));
+			dist = fabs(sin(DEG2RAD(a)) * vect2_abs(v));
+
+			if (a < 0)
+				limit_left = MIN(dist / 2, limit_left);
+			else
+				limit_right = mIN(dist / 2, limit_right);
+		}
+	}
+
+	if (limit_left < RWY_APCH_PROXIMITY_LAT_DISPL) {
+		c1 = vect2vect_isect(vect2_sub(d, c), c, vect2_neg(dir_v),
+		    vect2_add(thr_v, vect2_set_abs(vect2_norm(dir_v, B_FALSE),
+		    limit_left)), B_FALSE);
+		d = vect2_add(x, vect2_set_abs(vect2_norm(dir_v, B_FALSE),
+		    limit_left));
+	}
+	if (limit_right < RWY_APCH_PROXIMITY_LAT_DISPL) {
+		b1 = vect2vect_isect(vect2_sub(b, a), a, vect2_neg(dir_v),
+		    vect2_add(thr_v, vect2_set_abs(vect2_norm(dir_v, B_TRUE),
+		    limit_right)), B_FALSE);
+		a = vect2_add(x, vect2_set_abs(vect2_norm(dir_v, B_TRUE),
+		    limit_right));
+	}
+
+	bbox[n_pts++] = a;
+	if (!IS_NULL_VECT(b1))
+		bbox[n_pts++] = b1;
+	bbox[n_pts++] = b;
+	bbox[n_pts++] = c;
+	if (!IS_NULL_VECT(c1))
+		bbox[n_pts++] = c1;
+	bbox[n_pts++] = d;
+
+	return (bbox);
+}
+
+/*
+ * Prepares a runway's bounding box vector coordinates using the airport
+ * coord fpp transform.
+ */
+static void
+load_rwy_info(runway_t *rwy)
+{
+	/*
+	 * RAAS runway proximity entry bounding box is defined as:
+	 *
+	 *              1000ft                                   1000ft
+	 *            |<======>|                               |<======>|
+	 *            |        |                               |        |
+	 *     ---- d +-------------------------------------------------+ c
+	 * 1.5x  ^    |        |                               |        |
+	 *  rwy  |    |        |                               |        |
+	 * width |    |        +-------------------------------+        |
+	 *       v    |        | ====  ----         ----  ==== |        |
+	 *     -------|-thresh-x ==== - - - - - - - - - - ==== |        |
+	 *       ^    |        | ====  ----         ----  ==== |        |
+	 * 1.5x  |    |        +-------------------------------+        |
+	 *  rwy  |    |                                                 |
+	 * width v    |                                                 |
+	 *     ---- a +-------------------------------------------------+ b
+	 */
+	vect2_t dt1v = sph2fpp(GEO3_TO_GEO2(rwy->end[0].thr), &rwy->arpt->fpp);
+	vect2_t dt2v = sph2fpp(GEO3_TO_GEO2(rwy->end[1].thr), &rwy->arpt->fpp);
+	double displ1 = rwy->end[0].displ;
+	double displ1 = rwy->end[1].displ;
+	double blast2 = rwy->end[0].blast;
+	double blast2 = rwy->end[1].blast;
+
+	vect2_t dir_v = vect2_sub(dt2v, dt1v);
+	double dlen = vect2_abs(dir_v);
+	double hdg1 = dir2hdg(dir_v);
+	double hdg2 = dir2hdg(vect2_neg(dir_v));
+
+	vect2_t t1v = vect2_add(dt1v, vect2_set_abs(dir_v, displ1));
+	vect2_t t2v = vect2_add(dt2v, vect2.set_abs(vect2_neg(dir_v), displ2));
+	double len = vect2_abs(vect2.sub(t2v, t1v));
+
+	double prox_lon_bonus1 = MAX(displ1, RWY_PROXIMITY_LON_DISPL - displ1);
+	double prox_lon_bonus2 = MAX(displ2, RWY_PROXIMITY_LON_DISPL - displ2);
+
+	rwy->end[0].thr_v = t1v;
+	rwy->end[1].thr_v = t2v;
+	rwy->end[0].dthr_v = dtv1;
+	rwy->end[1].dthr_v = dtv2;
+	rwy->end[0].hdg = hdg1;
+	rwy->end[1].hdg = hdg2;
+	rwy->length = len;
+
+	ASSERT(rwy->rwy_bbox == NULL);
+
+	rwy->rwy_bbox = make_rwy_bbox(t1v, dir_v, width, len, 0);
+	rwy->tora_bbox = make_rwy_bbox(dt1v, dir_v, width, dlen, 0);
+	rwy->asda_bbox = make_rwy_bbox(dt1v, dir_v, width,
+	    dlen + blast2, blast1);
+	rwy->prox_bbox = make_rwy_bbox(t1v, dir_v, RWY_PROXIMITY_LAT_FRACT *
+	    width, len + prox_lon_bonus2, prox_lon_bonus1);
+
+	rwy->end[0].apch_bbox = make_apch_prox_bbox(rwy, &rwy->end[0]);
+	rwy->end[1].apch_bbox = make_apch_prox_bbox(rwy, &rwy->end[1]);
+}
+
+static void
+unload_rwy_info(runway_t *rwy)
+{
+	ASSERT(rwy->rwy_bbox != NULL);
+
+	free(rwy->rwy_bbox);
+	rwy->rwy_bbox = NULL;
+	free(tora_bbox);
+	rwy->tora_bbox = NULL;
+	free(rwy->asda_bbox);
+	rwy->asda_bbox = NULL;
+	free(rwy->prox_bbox);
+	rwy->prox_bbox = NULL;
+
+	free(rwy->end[0].apch_bbox);
+	rwy->end[0].apch_bbox = NULL;
+	free(rwy->end[1].apch_bbox);
+	rwy->end[1].apch_bbox = NULL;
+}
+
+/*
+ * Given an airport, loads the information of the airport into a more readily
+ * workable (but more verbose) format. This function prepares a flat plane
+ * transform centered on the airport's reference point and pre-computes all
+ * relevant points for the airport in that space.
+ */
+static void
+load_airport(airport_t *arpt)
+{
+	if (arpt->load_complete)
+		return;
+
+	arpt->fpp = orth_fpp_init(GEO3_TO_GEO2(arpt->refpt), 0);
+	arpt->ecef = sph2ecef(arpt->refpt);
+
+	for (runway_t *rwy = list_head(&arpt->rwys); rwy != NULL;
+	    rwy = list_next(&arpt->rwys, rwy))
+		load_rwy_info(rwy);
+
+	arpt->load_complete = B_TRUE;
+}
+
+static void
+unload_airport(airport_t *arpt)
+{
+	if (!arpt->load_complete)
+		return;
+	for (runway_t *rwy = list_head(&arpt->rwys); rwy != NULL;
+	    rwy = list_next(&arpt->rwys, rwy))
+		unload_rwy_info(rwy);
+	arpt->load_complete = B_FALSE;
+}
+
+static void
+free_airport(airport_t *arpt)
+{
+	ASSERT(!arpt->load_complete);
+
+	for (runway_t *rwy = list_head(&arpt->rwys); rwy != NULL;
+	    rwy = list_head(&arpt->rwys)) {
+		list_remove(&arpt->rwys, rwy);
+		free(rwy);
+	}
+	list_destroy(&arpt->rwys);
+	ASSERT(!list_link_active(&arpt->cur_arpts_node));
+	ASSERT(!list_link_active(&arpt->tile_node));
+	ASSERT(!list_link_active(&arpt->nearest_node));
+	free(arpt);
+}
+
+/*
+ * The actual worker function for find_nearest_airports. Performs the
+ * search in a specified airport_geo_table square. Position is a 3-space
+ * ECEF vector.
+ */
+static void
+find_nearest_airports_tile(vect3_t ecef, geo_pos2_t tile_coord, list_t *l)
+{
+	list_t *tile = geo_table_get_tile(tile_coord, B_FALSE,
+	    NULL);
+
+	if (tile == NULL)
+		return;
+	for (const airport_t *arpt = list_head(tile); arpt != NULL;
+	    arpt = list_next(tile, arpt)) {
+		vect3_t arpt_ecef = sph2ecef(arpt->refpt);
+		if (vect3_abs(vect3_sub(ecef, arpt_ecef)) < ARPT_LOAD_LIMIT) {
+			list_insert_tail(l, arpt);
+			load_airport(arpt);
+		}
+	}
+}
+
+/*
+ * Locates all airports within an ARPT_LOAD_LIMIT distance limit (in meters)
+ * of a geographic reference position. The airports are searched for in the
+ * apt_dat database and this function returns its result into the list argument.
+ */
+static list_t *
+find_nearest_airports(double reflat, double reflon)
+	vect3_t ecef = sph2ecef(GEO_POS3(reflat, reflon, 0));
+	list_t *l;
+
+	l = malloc(sizeof (*l));
+	list_create(l, sizeof (airport), offsetof(airport_t, nearest_node));
+	for (int i = -1; i <= 1; i++) {
+		for (int j = -1; j <= 1; j++) {
+			find_nearest_airports_tile(ecef,
+			    GEO_POS2(reflat + i, reflon + j), l);
+		}
+	}
+
+	return (l);
+}
+
+static void
+free_nearest_airport_list(list_t *l)
+{
+	for (airport_t *a = list_head(l); a != NULL; arpt = list_head(l))
+		list_remove(l, a);
+	free(l);
+}
+
+static void
+load_airports_in_tile(geo_pos2_t tile_pos)
+{
+	bool_t created;
+	list_t *tile = geo_table_get_tile(tile_pos, B_TRUE, &created);
+	char *cache_dir, *fname;
+	char lat_lon[16];
+
+	cache_dir = apt_dat_cache_dir(tile_pos);
+	snprintf(lat_lon, sizeof (lat_lon), "%03.0f_%03.0f",
+	    tile_pos.lat, tile_pos.lon);
+	fname = mkpathname(cache_dir, lat_lon);
+
+	if (created)
+		map_apt_dat(fname);
+
+	free(cache_dir);
+	free(fname);
+}
+
+static void
+unload_tile(const tile_key_t *key, list_t *tile)
+{
+	for (airport_t *arpt = list_head(tile); arpt != NULL;
+	    arpt = list_head(tile)) {
+		list_remove(tile, arpt);
+		unload_airport(arpt);
+		free_airport(arpt);
+	}
+	htbl_remove(&airport_geo_table, key, B_FALSE);
+	free(tile);
+}
+
+static void
+load_nearest_airport_tiles(void)
+{
+	double lat = XPLMGetDatad(drs.lat);
+	double lon = XPLMGetDatad(drs.lon);
+
+	for (int i = -1; i <= 1; i++) {
+		for (int j = -1; j <= 1; j++) {
+			load_airports_in_tile(GEO_POS2(lat + i, lon + j));
+		}
+	}
+}
+
+static double
+lon_delta(double x, double y)
+{
+	double u = MAX(x, y), d = MIN(x, y);
+
+	if (u - d <= 180)
+		return (u - d);
+	else
+		return ((180 - u) - (-180 - d));
+}
+
+static void
+unload_distant_airport_tiles_i(const void *k, void *v, void *p)
+{
+	const tile_key_t *key = k;
+	list_t *tile = v;
+	const tile_key_t *my_pos_key = p;
+
+	if (key->lat < my_pos_key->lat - 1 ||
+	    key->lat > my_pos_key->lat + 1 ||
+	    key->lon < my_pos_key->lon - 1 ||
+	    key->lon > my_pos_key->lon + 1) {
+		dbg_log("tile", 1, "unloading tile %d x %d", key->lat,
+		    key->lon);
+		unload_tile(key, tile);
+	}
+}
+
+static void
+unload_distant_airport_tiles(void)
+{
+	tile_key_t my_pos_key = geo_table_key(GEO_POS2(XPLMGetDatad(drs.lat),
+	    XPLMGetDatad(drs.lon));
+	htbl_foreach(&airport_geo_table, unload_distant_airport_tiles_i,
+	    &my_pos_key);
+}
+
+/*
+ * Locates any airports within a 8 nm radius of the aircraft and loads
+ * their RAAS data from the apt_dat database. The function then updates
+ * cur_arpts with the new information and expunges airports that are no
+ * longer in range.
+ */
+static void
+load_nearest_airports(void)
+{
+	uint64_t now = microclock();
+
+	if (now - last_airport_reload < SEC2USEC(ARPT_RELOAD_INTVAL))
+		return;
+	last_airport_reload = now;
+
+	load_nearest_airport_tiles();
+	unload_distant_airport_tiles();
+
+	if (cur_arpts != NULL)
+		free_nearest_airport_list(cur_arpts);
+	cur_arpts = find_nearest_airports(XPLMGetDatad(drs.lat),
+	    XPLMGetDatad(drs.lon));
+}
+
+/*
+ * Computes the aircraft's on-ground velocity vector. The length of the
+ * vector is computed as a `time_fact' (in seconds) extra ahead of the
+ * actual aircraft's nosewheel position.
+ */
+static vect2_t
+acf_vel_vector(double time_fact)
+{
+	double nw_offset;
+	XPLMGetDatavf(drs.nw_offset, &nw_offset, 0, 1);
+	return (vect2_set_abs(hdg2dir(XPLMGetDatad(drs.hdg)),
+	    time_fact * XPLMGetDatad(drs.gs) - nw_offset));
+}
+
+/*
+ * Determines which of two ends of a runway is closer to the aircraft's
+ * current position.
+ */
+static runway_end_t *
+closest_rwy_end(vect2_t pos, runway_t *rwy)
+{
+	if (vect2_abs(vect2_sub(pos, rwy->end[0]->dthr_v) <
+	    vect2_abs(vect2_sub(pos, rwy->end[1]->dthr_v)))
+		return (&rwy->end[0]);
+	else
+		return (&rwy->end[1]);
+}
+
+/*
+ * Translates a runway identifier into a suffix suitable for passing to
+ * play_msg for announcing whether the runway is left, center or right.
+ * If no suffix is present, returns NULL.
+ */
+static const char *
+rwy_lcr_msg(const char *str)
+{
+	ASSERT(str != NULL);
+	if (strlen(str) < 3)
+		return (NULL);
+	switch (str[2]) {
+	case 'L':
+		return ("left");
+	case 'R':
+		return ("right");
+	default:
+		ASSERT(str[2] == 'C');
+		return ("center");
+	}
+}
+
+/*
+ * Given a runway ID, appends appropriate messages suitable for play_msg
+ * to speak it out loud.
+ */
+static void
+rwy_id_to_msg(const char *rwy_id, char ***msg, size_t *len)
+{
+	ASSERT(rwy_id != NULL);
+	ASSERT(msg != NULL);
+	ASSERT(len != NULL);
+	ASSERT(strlen(rwy_id) >= 2);
+
+	char first_digit = rwy_id[0];
+	const char *lcr = rwy_lcr_msg(rwy_id);
+
+	if (first_digit != '0' || !US_runway_numbers)
+		append_strlist(msg, len, m_sprintf("%c", first_digit));
+	append_strlist(msg, len, m_sprintf("%c", rwy_id[1]));
+	if (lcr != NULL)
+		append_strlist(msg, len, strdup(lcr));
+}
+
+/*
+ * Converts a thousands value to the proper single-digit pronunciation
+ */
+static void
+thousands_msg(unsigned thousands, char ***msg, size_t *len)
+{
+	ASSERT(thousands < 100);
+	if (thousands >= 10)
+		append_strlist(msg, len, m_sprintf("%d", thousands / 10));
+	append_strlist(msg, len, m_sprintf("%d", thousands % 10));
+}
+
+/*
+ * Given a distance in meters, converts it into a message suitable for
+ * raas.play_msg based on the user's current imperial/metric settings.
+ * If div_by_100 is B_TRUE, the distance readout is rounded down to the
+ * nearest multiple of 100 meters or 300 feet. Otherwise, it is rounded
+ * down to the nearest multiple of 1000 feet or 300 meters. If div_by_100
+ * is B_FALSE, the last 1000 feet or 300 meters feature two additional
+ * readouts, 500 feet or 100 meters, and 100 feet or 30 meters. Below
+ * these values, the distance readout is 0 feet or meters.
+ * This function also appends the units to the message if X-RAAS is
+ * configured to do so and it hasn't spoken the units used for at least
+ * UNITS_APPEND_INTVAL seconds.
+ */
+static void
+dist_to_msg(double dist, char ***msg, size_t *len, bool_t div_by_100)
+{
+	uint64_t now;
+
+	ASSERT(msg != NULL);
+	ASSERT(len != NULL);
+
+	if (!div_by_100) {
+		if (use_imperial) {
+			double dist_ft = MET2FEET(dist);
+			if (dist_ft >= 1000) {
+				thousands_msg(dist_ft / 1000, msg, len);
+				append_strlist(msg, len, "thousand");
+			} else if (dist_ft >= 500) {
+				append_strlist(msg, len, strdup("5"));
+				append_strlist(msg, len, strdup("hundred"));
+			} else if (dist_ft >= 100) {
+				append_strlist(msg, len, strdup("1"));
+				append_strlist(msg, len, strdup("hundred"));
+			} else {
+				append_strlist(msg, len, strdup("0"));
+			}
+		} else {
+			int dist_300incr = ((int)(dist / 300)) * 300;
+			int dist_thousands = (dist_300incr / 1000);
+			int dist_hundreds = dist_300incr % 1000;
+
+			if (dist_thousands > 0 and dist_hundreds > 0) {
+				thousands_msg(dist_thousands, msg, len);
+				append_strlist(msg, len, strdup("thousand"));
+				append_strlist(msg, len,
+				    m_sprintf("%d", dist_hundreds / 100));
+				append_strlist(msg, len, strdup("hundred"));
+			} else if (dist_thousands > 0) {
+				thousands_msg(msg, len, dist_thousands);
+				append_strlist(msg, len, strdup("thousand"));
+			} else if (dist >= 100) {
+				if (dist_hundreds > 0) {
+					append_strlist(msg, len, m_sprintf("%d",
+					    dist_hundreds / 100));
+					append_strlist(msg, len,
+					    strdup("hundred"));
+				} else {
+					append_strlist(msg, len, strdup("1"));
+					append_strlist(msg, len,
+					    strdup("hundred"));
+				}
+			} else if (dist >= 30) {
+				append_strlist(msg, len, strdup("30"));
+			} else {
+				append_strlist(msg, len, strdup("0"));
+			}
+		}
+	} else {
+		int thousands, hundreds;
+
+		if (use_imperial) {
+			int dist_ft = MET2FEET(dist);
+			thousands = dist_ft / 1000;
+			hundreds = (dist_ft % 1000) / 100;
+		} else {
+			thousands = dist / 1000;
+			hundreds = (dist % 1000) / 100;
+		}
+		if (thousands != 0) {
+			thousands_msg(thousands, msg, len);
+			append_strlist(msg, len, strdup("thousand"));
+		}
+		if (hundreds != 0) {
+			append_strlist(msg, len, m_sprintf("%d", hundreds));
+			append_strlist(msg, len, strdup("hundred"));
+		}
+		if (thousands == 0 && hundreds == 0)
+			append_strlist(msg, len, strdup("0"));
+	}
+
+	/* Optionally append units if it is time to do so */
+	now = microclock();
+	if (now - last_units_call > SEC2USEC(UNITS_APPEND_INTVAL) &&
+	    speak_units) {
+		if (use_imperial)
+			append_strlist(msg, len, strdup("feet"));
+		else
+			append_strlist(msg, len, strdup("meters"));
+	}
+	last_units_call = now;
+}
+
+static void
+rwy_id_key(const char *arpt_icao, const char *rwy_id, char key[16])
+{
+	ASSERT(strlen(arpt_icao) <= 4);
+	ASSERT(strlen(rwy_id) <= 4);
+	snprintf(key, 16, "%s/%s", arpt->icao, rwy_end->id);
+}
+
+static void
+do_approaching_rwy(const airport_t *arpt, const runway_t *rwy,
+    const runway_end_t *rwy_end, bool_t on_ground)
+{
+	char key[16];
+
+	ASSERT(arpt != NULL);
+	ASSERT(rwy != NULL);
+	ASSERT(&rwy->end[0] == rwy_end || &rwy->end[1] == rwy_end);
+
+	rwy_id_key(arpt->icao, rwy_end->id, key);
+
+	if ((on_ground && (htbl_lookup(&apch_rwy_ann, key) != NULL ||
+	    htbl_lookup(&on_rwy_ann, key) != NULL)) ||
+	    (!on_ground && htbl_lookup(&air_apch_rwy_ann], key) != NULL))
+		return;
+
+	if (!on_ground || XPLMGetDatad(drs.gs) < SPEED_THRESH) {
+		char **msg = NULL;
+		size_t msg_len = 0;
+		msg_prio_t msg_prio;
+		bool_t annunciated_rwys = B_TRUE;
+
+		if ((on_ground && apch_rwys_ann) ||
+		    (!on_ground && air_apch_rwys_ann))
+			return;
+
+		/* Multiple runways being approached? */
+		if ((on_ground && htbl_count(&apch_rwy_ann) != 0) ||
+		    (!on_ground && htbl_count(&air_apch_rwy_ann) != 0)) {
+			if (on_ground)
+				/*
+				 * On the ground we don't want to re-annunciate
+				 * "approaching" once the runway is resolved.
+				 */
+				htbl_set(&apch_rwy_ann, key, (void *)B_TRUE);
+			else
+				/*
+				 * In the air, we DO want to re-annunciate
+				 * "approaching" once the runway is resolved
+				 */
+				htbl_empty(&air_apch_rwy_ann, NULL, NULL);
+			/*
+			 * If the "approaching ..." annunciation for the
+			 * previous runway is still playing, try to modify
+			 * it to say "approaching runways".
+			 */
+#if 0
+			/* TODO: implement this */
+			if raas.cur_msg["msg"] ~= nil and
+			    raas.cur_msg["msg"][1] == "apch" and
+			    raas.cur_msg["playing"] <= 1 then
+				raas.cur_msg["msg"] = {"apch", "rwys"}
+				raas.cur_msg["prio"] = raas.const.MSG_PRIO_MED
+				annunciated_rwys = true
+				raas.ND_alert(ND_ALERT_APP, ND_ALERT_ROUTINE,
+				    "37")
+			end
+#endif
+			if (on_ground)
+				htbl_set(&apch_rwy_ann, key, (void *)B_TRUE);
+			else
+				htbl_set(&air_apch_rwy_ann, key,
+				    (void *)B_TRUE);
+
+			if (annunciated_rwys)
+				return;
+		}
+
+		if ((on_ground && htbl_lookup(&apch_rwys_ann, key) == NULL) ||
+		    (!on_ground && htbl_lookup(&air_apch_rwys_ann, key) ==
+		    NULL) || !annunciated_rwys) {
+			double dist_ND = NAN;
+			nd_alert_level_t level = ND_ALERT_ROUTINE;
+
+			append_strlist(&msg, &msg_len, strdup("apch"));
+			rwy_id_to_msg(rwy_end->id, &msg, &msg_len);
+			msg_prio = MSG_PRIO_LOW;
+
+			if (!on_ground && rwy->length < min_landing_dist) {
+				dist_to_msg(rwy_len, &msg, &msg_len, B_TRUE);
+				append_strlist(&msg, &msg_len, strdup("avail"));
+				msg_prio = MSG_PRIO_HIGH;
+				dist_ND = rwy->length;
+				level = ND_ALERT_NONROUTINE;
+			}
+
+			play_msg(msg, msg_prio)
+			ND_alert(ND_ALERT_APP, level, rwy_end->id, dist_ND);
+		}
+	}
+
+	if (on_ground)
+		htbl_set(&apch_rwy_ann, key, (void *)B_TRUE);
+	else
+		htbl_set(&air_apch_rwy_ann, key, (void *)B_TRUE);
+}
+
+static bool_t
+ground_runway_approach_arpt_rwy(const airport_t *arpt, const runway_t *rwy,
+    vect2_t pos_v, vect2_t vel_v)
+{
+	ASSERT(arpt != NULL);
+	ASSERT(rwy != NULL);
+
+	if (vect2_in_poly(pos_v, runway->prox_bbox) ||
+	    vect2_poly_isect(vel_v, pos_v, prox_bbox)) {
+		do_approaching_rwy(arpt, rwy, closest_rwy_end(pos_v, rwy),
+		    B_TRUE);
+		return (B_TRUE);
+	} else {
+		char key[16];
+		rwy_id_key(arpt->icao, rwy->end[0].id, key);
+		htbl_remove(&apch_rwy_ann, key, B_TRUE);
+		rwy_id_key(arpt->icao, rwy->end[1].id, key);
+		htbl_remove(&apch_rwy_ann, key, B_TRUE);
+		return (B_FALSE);
+	}
+}
+
+static unsigned
+ground_runway_approach_arpt(const airport_t *arpt, vect2_t vel_v)
+{
+	vect2_t pos_v;
+	unsigned in_prox = 0;
+
+	ASSERT(arpt != NULL);
+	ASSERT(!IS_NULL_VECT(vel_v));
+
+	ASSERT(arpt->load_complete);
+	pos_v = sph2fpp(GEO_POS2(XPLMGetDatad(drs.lat), XPLMGetDatad(drs.lon)),
+	    &arpt->fpp);
+
+	for (const runway_t *rwy = list_head(&arpt->rwys); rwy != NULL;
+	    rwy = list_next(&arpt->rwys, rwy)) {
+		if (ground_runway_approach_arpt_rwy(arpt, rwy, pos_v, vel_v)
+			in_prox++;
+	}
+
+	return (in_prox);
+}
+
+static void
+ground_runway_approach(void)
+{
+	unsigned in_prox = 0;
+
+	if (XPLMGetDatad(drs.rad_alt) < RADALT_FLARE_THRESH) {
+		vect2_t vel_v = acf_vel_vector(RWY_PROXIMITY_TIME_FACT);
+		ASSERT(cur_arpts != NULL);
+		for (const airport_t *arpt = list_head(cur_arpts);
+		    arpt != NULL; arpt = list_next(cur_arpts, arpt))
+			in_prox += ground_runway_approach_arpt(arpt, vel_v);
+	}
+
+	if (in_prox == 0) {
+		if (landing)
+			dbg_log("flt_state", 1, "landing = false")
+		landing = B_FALSE;
+	}
+	if (in_prox <= 1)
+		apch_rwys_ann = B_FALSE;
+}
+
+static void
+perform_on_rwy_ann(const char *rwy_id, vect2_t pos_v, vect2_t opp_thr_v,
+    bool_t no_flap_check, bool_t non_routine)
+{
+	char **msg = NULL;
+	size_t msg_len = 0;
+	double dist = 10000000, dist_ND = NAN;
+	double flaprqst = XPLMGetDatad(drs.flaprqst);
+	bool_t allow_on_rwy_ND_alert = B_TRUE;
+	nd_alert_level_t level = (non_routine ? ND_ALERT_NONROUTINE :
+	    ND_ALERT_ROUTINE);
+
+	ASSERT(rwy_id != NULL);
+	append_strlist(&msg, &msg_len, strdup("on_rwy"));
+
+	if (!IS_NULL_VECT(pos_v) && !IS_NULL_VECT(opp_thr_v))
+		dist = vect2_abs(vect2_sub(opp_thr_v, pos_v));
+
+	rwy_id_to_msg(rwy_id, &msg, &msg_len);
+	if (dist < min_takeoff_dist && !landing) {
+		dist_to_msg(dist, &msg, &msg_len, B_TRUE);
+		dist_ND = dist;
+		level = ND_ALERT_NONROUTINE;
+		append_strlist(&msg, &msg_len, strdup("rmng"));
+	}
+
+	if ((flaprqst < min_takeoff_flap || flaprqst > max_takeoff_flap) &&
+	    !landing && !gpws_flaps_ovrd() && !no_flap_check) {
+		append_strlist(&msg, &msg_len, strdup("flaps"));
+		append_strlist(&msg, &msg_len, strdup("flaps"));
+		allow_on_rwy_ND_alert = B_FALSE;
+		ND_alert(ND_ALERT_FLAPS, ND_ALERT_CAUTION);
+	}
+
+	play_msg(msg, msg_len, MSG_PRIO_HIGH);
+	if (allow_on_rwy_ND_alert)
+		ND_alert(ND_ALERT_ON, level, rwy_id, dist_ND);
+}
+
+static void
+on_rwy_check(const char *arpt_id, const char *rwy_id, double hdg,
+    double rwy_hdg, vect2_t pos_v, vect2_t opp_thr_v)
+{
+	uint64_t now = microclock();
+	double rhdg = fabs(rel_hdg(hdg, rwy_hdg));
+	char key[16];
+
+	ASSERT(arpt_id != NULL);
+	ASSERT(rwy_id != NULL);
+	rwy_id_key(arpt_id, rwy_id, key);
+
+	/*
+	 * If we are not at all on the appropriate runway heading, don't
+	 * generate any annunciations.
+	 */
+	if (rhdg >= 90) {
+		/* reset the annunciation if the aircraft turns around fully */
+		if (htbl_lookup(&on_rwy_ann, key) != NULL) {
+			dbg_log("ann_state", 1, "on_rwy_ann[%s] = 0", key);
+			htbl_remove(&on_rwy_ann, key, B_FALSE);
+		}
+		return;
+	}
+
+	if (on_rwy_timer != -1 && rejected_takeoff == B_FALSE &&
+	    ((now - on_rwy_timer > on_rwy_warn_initial &&
+	    on_rwy_warnings == 0) ||
+	    (now - on_rwy_timer - on_rwy_warn_initial >
+	    on_rwy_warnings * on_rwy_warn_repeat)) &&
+	    on_rwy_warnings < on_rwy_warn_max_n) {
+		on_rwy_warnings++;
+		perform_on_rwy_ann(rwy_id, NULL_VECT2, NULL_VECT2, B_TRUE,
+		    B_TRUE);
+		perform_on_rwy_ann(rwy_id, NULL_VECT2, NULL_VECT2, B_TRUE,
+		    B_TRUE);
+	}
+
+	if (rhdg > HDG_ALIGN_THRESH)
+		return;
+
+	if (htbl_lookup(&on_rwy_ann, key) != NULL) {
+		if (XPLMGetDatad(drs.gs) < SPEED_THRESH)
+			perform_on_rwy_ann(rwy_id, pos_v, opp_thr_v,
+			    rejected_takeoff, B_FALSE);
+		dbg_log("ann_state", 1, "raas.on_rwy_ann[%s] = 1", key);
+		htbl_set(&on_rwy_ann, key, (void *)B_TRUE);
+	}
+}
+
+static void
+stop_check_reset(const char *arpt_id, const char *rwy_id)
+{
+	char key[16];
+
+	ASSERT(arpt_id != NULL);
+	ASSERT(rwy_id != NULL);
+	rwy_id_key(arpt_id, rwy_id, key);
+
+	if (htbl_lookup(&accel_stop_max_spd, key) != NULL) {
+		htbl_remove(&accel_stop_max_spd, key, B_FALSE);
+		accel_stop_ann_initial = 0;
+		for (accel_stop_dist_t *asd = list_head(&accel_stop_distances);
+		    asd != NULL; asd = list_next(&accel_stop_distances, asd))
+			asd->ann = B_FALSE;
+	}
+}
+
+static void
+takeoff_rwy_dist_check(vect2_t opp_thr_v, vect2_t pos_v)
+{
+	double dist;
+
+	ASSERT(!IS_NULL_VECT(opp_thr_v));
+	ASSERT(!IS_NULL_VECT(pos_v));
+
+	if (short_rwy_takeoff_chk)
+		return;
+
+	dist = vect2_abs(vect2_sub(opp_thr_v, pos_v));
+	if (dist < RAAS_min_takeoff_dist) {
+		char **msg = NULL;
+		size_t msg_len = 0;
+		append_strlist(&msg, &msg_len, strdup("caution"));
+		append_strlist(&msg, &msg_len, strdup("short_rwy"));
+		append_strlist(&msg, &msg_len, strdup("short_rwy"));
+		play_msg(msg, msg_len, MSG_PRIO_HIGH);
+		ND_alert(ND_ALERT_SHORT_RWY, ND_ALERT_CAUTION);
+	}
+	short_rwy_takeoff_chk = B_TRUE;
+}
+
+static void
+perform_rwy_dist_remaining_callouts(vect2_t opp_thr_v, vect2_t pos_v,
+    char **prepend, size_t prepend_len)
+{
+	ASSERT(!IS_NULL_VECT(opp_thr_v));
+	ASSERT(!IS_NULL_VECT(pos_v));
+
+	double dist = vect2_abs(vect2_sub(opp_thr_v, pos_v));
+	accel_stop_dist_t *the_asd = NULL;
+	double maxdelta = 1000000;
+	char **msg = NULL;
+	size_t msg_len = 0;
+
+	for (accel_stop_dist_t *asd = list_head(&accel_stop_distances);
+	    asd != NULL; asd = list_next(&accel_stop_distances, asd)) {
+		local min = info["min"]
+		local max = info["max"]
+
+		if (dist > asd->min && dist < asd->max) {
+			the_asd = asd;
+			break;
+		}
+		if (prepend != NULL && dist > asd->min &&
+		    dist - asd->min < maxdelta) {
+			the_asd = asd;
+			maxdelta = dist - min;
+		}
+	}
+
+	ASSERT(prepend == NULL || the_asd != NULL);
+
+	if (the_asd == NULL || the_asd->ann)
+		return;
+
+	if (prepend != NULL) {
+		msg = prepend;
+		msg_len = prepend_len;
+	}
+
+	the_asd->ann = B_TRUE;
+	dist_to_msg(dist, &msg, &msg_len, B_FALSE);
+	append_strlist(&msg, &msg_len, strdup("rmng"));
+	play_msg(msg, msg_len, MSG_PRIO_MED);
+}
+
+/*
+ * Returns the relative pitch angle of the aircraft's nose to the average
+ * runway slope (in degrees), positive being nose-up. `te' and 'ote' are
+ * elevations of the runway thresholds, ordered in the direction of takeoff
+ * (`te' where takeoff was initiated, `ote' direction in which takeoff is
+ * being conducted). `len' is the runway length. The units of `te', `ote'
+ * and `len' don't matter, as long as they are all the same.
+ */
+static double
+acf_rwy_rel_pitch(double te, double ote, double len)
+{
+	double rwy_angle = RAD2DEG(asin((ote - te) / len));
+	return (XPLMGetDatad(drs.pitch) - rwy_angle);
+}
+
+/*
+ * Checks if at the current rate of deceleration, we are going to come to
+ * a complete stop before traveling `dist_rmng' (in meters). Returns B_TRUE
+ * if we are going to stop before that, B_FALSE otherwise.
+ */
+static bool_t
+decel_check(double dist_rmng)
+{
+	double cur_gs = XPLMGetDatad(drs.gs);
+	double decel_rate = (cur_gs - last_gs) / EXEC_INTVAL;
+	if (decel_rate >= 0)
+		return (B_FALSE);
+	double t = cur_gs / (-decel_rate);
+	double d = cur_gs * t + 0.5 * decel_rate * POW2(t);
+	return (d < dist_rmng);
+}
+
+static void
+stop_check(const char *arpt_id, runway_t *rwy, int end, double hdg,
+    vect2_t pos_v)
+{
+	ASSERT(arpt_id != NULL);
+	ASSERT(rwy != NULL);
+	ASSERT(end == 0 || end == 1);
+	ASSERT(!IS_NULL_VECT(pos_v));
+
+	int oend = !end;
+	runway_end_t *rwy_end = &rwy->end[end];
+	runway_end_t *orwy_end = &rwy->end[oend];
+	vect2_t opp_thr_v = orwy_end->thr_v;
+	double gs = XPLMGetDatad(drs.gs);
+	int maxspd;
+	double dist = vect2_abs(vect2_sub(opp_thr_v, pos_v));
+	double rhdg = fabs(rel_hdg(hdg, rwy_end->hdg));
+	char key[16];
+
+	if (gs < SPEED_THRESH) {
+		/*
+		 * If there's very little runway remaining, we always want to
+		 * call that fact out.
+		 */
+		if (dist < IMMEDIATE_STOP_DIST && rhdg < HDG_ALIGN_THRESH &&
+		    gs > SLOW_ROLL_THRESH) {
+			perform_rwy_dist_remaining_callouts(opp_thr_v, pos_v);
+		else
+			stop_check_reset(arpt_id, rwy_end->id);
+		return;
+	}
+
+	if (rhdg > HDG_ALIGN_THRESH)
+		return;
+
+	if (XPLMGetDatad(drs.rad_alt) > RADALT_GRD_THRESH) {
+		double clb_rate = raas.conv_per_min(MET2FEET(XPLMGetDatad(
+		    drs.elev) - last_elev));
+
+		stop_check_reset(arpt_id, rwy_id);
+		if (departed &&
+		    XPLMGetDatad(drs.rad_alt) <= RADALT_DEPART_THRESH &&
+		    clb_rate < GOAROUND_CLB_RATE_THRESH) {
+			/*
+			 * Our distance limit is the greater of either:
+			 * 1) the greater of:
+			 *	a) runway length minus 2000 feet
+			 *	b) 3/4 the runway length
+			 * 2) the lesser of:
+			 *	a) minimum safe landing distance
+			 *	b) full runway length
+			 */
+			double dist_lim = MAX(MAX(len - long_land_lim_abs,
+			    len * (1 - long_land_lim_fract)),
+			    MIN(len, min_landing_dist));
+			if (dist < dist_lim) {
+				if (!long_landing_ann) {
+					char **msg = NULL;
+					size_t msg_len = 0;
+					append_strlist(&msg, &msg_len,
+					    strdup("long_land"));
+					append_strlist(&msg, &msg_len,
+					    strdup("long_land"));
+					play_msg(msg, msg_len, MSG_PRIO_HIGH);
+					dbg_log("ann_state", 1,
+					    "raas.long_landing_ann = true");
+					long_landing_ann = B_TRUE;
+					ND_alert(ND_ALERT_LONG_LAND,
+					    ND_ALERT_CAUTION);
+				}
+				perform_rwy_dist_remaining_callouts(opp_thr_v,
+				    pos_v, NULL, 0);
+			}
+		}
+		return;
+	}
+
+	if (!arriving)
+		takeoff_rwy_dist_check(opp_thr_v, pos_v);
+
+	rwy_id_key(arpt_id, rwy_end->id, key);
+	maxspd = (int)htbl_lookup(&accel_stop_max_spd, key);
+	if (gs > maxspd) {
+		htbl_set(&accel_stop_max_spd, key, (void *)gs);
+		maxspd = gs;
+	}
+	if (!landing && gs < maxspd - ACCEL_STOP_SPD_THRESH)
+		strncpy(rejected_takeoff, rwy_id, sizeof (rejected_takeoff));
+
+	double rpitch = acf_rwy_rel_pitch(te, ote, rwy->length);
+	/*
+	 * We want to perform distance remaining callouts if:
+	 * 1) we are NOT landing and speed has decayed below the rejected
+	 *    takeoff threshold, or
+	 * 2) we ARE landing, distance remaining is below the stop readout
+	 *    cutoff and our deceleration is insufficient to stop within the
+	 *    remaining distance, or
+	 * 3) we are NOT landing, distance remaining is below the rotation
+	 *    threshold and our pitch angle to the runway indicates that
+	 *    rotation has not yet been initiated.
+	 */
+	if (strcmp(rejected_takeoff, rwy_id) == 0 ||
+	    (landing && dist < stop_dist_cutoff && !decel_check(dist)) ||
+	    (!landing && dist < min_rotation_dist &&
+	    XPLMGetDatad(drs.rad_alt) < RADALT_GRD_THRESH &&
+	    rpitch < min_rotation_angle)
+		perform_rwy_dist_remaining_callouts(opp_thr_v, pos_v);
+}
+
+function raas.ground_on_runway_aligned_arpt(arpt)
+	assert(arpt ~= nil)
+
+	local on_rwy = false
+	local pos_v = raas.vect2.add(raas.fpp.sph2fpp({dr.lat[0], dr.lon[0]},
+	    arpt["fpp"]), raas.acf_vel_vector(
+	    raas.const.LANDING_ROLLOUT_TIME_FACT))
+	local arpt_id = arpt["arpt_id"]
+	local hdg = dr.hdg[0]
+	local airborne = dr.rad_alt[0] > raas.const.RADALT_GRD_THRESH
+
+	for i, rwy in pairs(arpt["rwys"]) do
+		local rwy_id = rwy["id1"]
+		if not airborne and raas.vect2.in_poly(pos_v, rwy["tora_bbox"])
+		    then
+			on_rwy = true
+			raas.on_rwy_check(arpt_id, rwy["id1"], hdg,
+			    rwy["hdg1"], pos_v, rwy["dt2v"])
+			raas.on_rwy_check(arpt_id, rwy["id2"], hdg,
+			    rwy["hdg2"], pos_v, rwy["dt1v"])
+		else
+			if raas.on_rwy_ann[arpt_id .. rwy["id1"]] ~= nil then
+				raas.dbg.log("ann_state", 1, "raas.on_rwy_ann["
+				    .. arpt_id .. rwy["id1"] .. "] = nil")
+				raas.on_rwy_ann[arpt_id .. rwy["id1"]] = nil
+			end
+			if raas.on_rwy_ann[arpt_id .. rwy["id2"]] ~= nil then
+				raas.dbg.log("ann_state", 1, "raas.on_rwy_ann["
+				    .. arpt_id .. rwy["id2"] .. "] = nil")
+				raas.on_rwy_ann[arpt_id .. rwy["id2"]] = nil
+			end
+			if raas.rejected_takeoff == rwy["id1"] or
+			    raas.rejected_takeoff == rwy["id2"] then
+				raas.dbg.log("ann_state", 1,
+				    "raas.rejected_takeoff = nil")
+				raas.rejected_takeoff = nil
+			end
+		end
+		if raas.vect2.in_poly(pos_v, rwy["asda_bbox"]) then
+			raas.stop_check(arpt_id, rwy, "1", hdg, pos_v)
+			raas.stop_check(arpt_id, rwy, "2", hdg, pos_v)
+		else
+			raas.stop_check_reset(arpt_id, rwy["id1"])
+			raas.stop_check_reset(arpt_id, rwy["id2"])
+		end
+	end
+
+	return on_rwy
+end
+
+static bool_t
+ground_on_runway_aligned(void)
+{
+	bool_t on_rwy = B_FALSE;
+
+	if (XPLMGetDatad(drs.rad_alt) < RADALT_DEPART_THRESH) {
+		for (airport_t *arpt = list_head(&cur_arpts); arpt != NULL;
+		    arpt = list_next(&cur_arpts, arpt)) {
+			if (ground_on_runway_aligned_arpt(arpt) then
+				on_rwy = true
+			end
+		end
+	end
+
+	if on_rwy and dr.gs[0] < raas.const.STOPPED_THRESH then
+		if raas.on_rwy_timer == -1 then
+			raas.on_rwy_timer = os.time()
+		end
+	else
+		raas.on_rwy_timer = -1
+		raas.on_rwy_warnings = 0
+	end
+
+	if not on_rwy then
+		raas.short_rwy_takeoff_chk = false
+		raas.rejected_takeoff = nil
+	end
+
+	-- Taxiway takeoff check
+	if not on_rwy and dr.rad_alt[0] < raas.const.RADALT_GRD_THRESH and
+	    ((not raas.landing and dr.gs[0] >= raas.const.SPEED_THRESH) or
+	    (raas.landing and dr.gs[0] >= raas.const.HIGH_SPEED_THRESH)) then
+		if not raas.on_twy_ann then
+			raas.on_twy_ann = true
+			raas.play_msg({"caution", "on_twy", "on_twy"},
+			    raas.const.MSG_PRIO_HIGH)
+			raas.ND_alert(raas.const.ND_ALERT_ON,
+			    raas.const.ND_ALERT_CAUTION, "")
+		end
+	elseif dr.gs[0] < raas.const.SPEED_THRESH or
+	    dr.rad_alt[0] >= raas.const.RADALT_GRD_THRESH then
+		raas.on_twy_ann = false
+	end
+
+	return on_rwy
+end
+
+/*
+ * Check if the aircraft is a helicopter (or at least says it flies like one).
  */
 static bool_t
 chk_acf_is_helo(void)
