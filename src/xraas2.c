@@ -28,9 +28,12 @@
 #include <sys/stat.h>
 #endif	/* !IBM */
 
+#include <XPLMProcessing.h>
 #include <XPLMDataAccess.h>
 #include <XPLMNavigation.h>
+#include <XPLMUtilities.h>
 
+#include "avl.h"
 #include "math.h"
 #include "htbl.h"
 #include "list.h"
@@ -243,14 +246,18 @@ struct airport {
 	vect3_t		ecef;		/* refpt ECEF coordinates */
 	fpp_t		fpp;		/* ortho fpp centered on refpt */
 
+	avl_node_t	apt_dat_node;	/* apt_dat tree */
 	list_node_t	cur_arpts_node;	/* cur_arpts list */
-	list_node_t	tile_node;	/* tiles in the airport_geo_table */
+	list_node_t	tile_node;	/* tiles in the airport_geo_tree */
 	list_node_t	nearest_node;	/* find_nearest_arpts */
 };
 
-typedef struct tile_key_s {
-	int		lat, lon;
-} tile_key_t;
+typedef struct tile_s {
+	int		lat;
+	int		lon;
+	list_t		arpts;
+	avl_node_t	node;
+} tile_t;
 
 static bool_t enabled = B_TRUE;
 static int min_engines = 2;			/* count */
@@ -354,10 +361,11 @@ static int last_elev = 0;
 static double last_gs = 0;			/* in m/s */
 static uint64_t last_units_call = 0;
 
-static char *xpdir = NULL;
+static char xpdir[512] = { 0 };
+static char xpprefsdir[512] = { 0 };
 static list_t *cur_arpts = NULL;
-static htbl_t apt_dat;
-static htbl_t airport_geo_table;
+static avl_tree_t apt_dat;
+static avl_tree_t airport_geo_tree;
 static int64_t start_time = 0;
 static int64_t last_exec_time = 0;
 static int64_t last_airport_reload = 0;
@@ -401,8 +409,41 @@ static struct {
 	XPLMDataRef plug_bus_load;
 } drs;
 
+static void free_airport(airport_t *arpt);
 static void log_init_msg(bool_t display, int timeout, int man_sect_number,
     const char *man_sect_name, const char *fmt, ...) PRINTF_ATTR(5);
+
+static int
+apt_dat_compar(const void *a, const void *b)
+{
+	const airport_t *aa = a, *ab = b;
+	int res = strcmp(aa->icao, ab->icao);
+	if (res < 0)
+		return (-1);
+	else if (res == 0)
+		return (0);
+	else
+		return (1);
+}
+
+static int
+airport_geo_tree_compar(const void *a, const void *b)
+{
+	const tile_t *ta = a, *tb = b;
+
+	if (ta->lat < tb->lat) {
+		return (-1);
+	} else if (ta->lat == tb->lat) {
+		if (ta->lon < tb->lon)
+			return (-1);
+		else if (ta->lon == tb->lon)
+			return (0);
+		else
+			return (1);
+	} else {
+		return (1);
+	}
+}
 
 /*
  * Returns true if `x' is within the numerical ranges in `rngs'.
@@ -567,46 +608,28 @@ dr_get(const char *drname)
 }
 
 /*
- * Returns a key that can be used in the airport_geo_table to retrieve the
- * tile for a given lat & lon.
- */
-static tile_key_t
-geo_table_key(geo_pos2_t pos)
-{
-	tile_key_t key;
-
-	ASSERT(pos.lat > -89 && pos.lat < 89);
-
-	key.lat = pos.lat;
-	if (pos.lon < -180)
-		pos.lon += 360;
-	if (pos.lon >= 180)
-		pos.lon -= 360;
-	key.lon = pos.lon;
-
-	return (key);
-}
-
-/*
  * Retrieves the geo table tile which contains position `pos'. If create is
  * B_TRUE, if the tile doesn't exit, it will be created.
  * Returns the table tile (if it exists) and a boolean (in created_p if
  * non-NULL) informing whether the table tile was created in this call
  * (if create == B_TRUE).
  */
-static list_t *
+static tile_t *
 geo_table_get_tile(geo_pos2_t pos, bool_t create, bool_t *created_p)
 {
 	bool_t created = B_FALSE;
-	tile_key_t key = geo_table_key(pos);
-	list_t *tile;
+	tile_t srch = { .lat = pos.lat, .lon = pos.lon };
+	tile_t *tile;
+	avl_index_t where;
 
-	tile = htbl_lookup(&airport_geo_table, &key);
+	tile = avl_find(&airport_geo_tree, &srch, &where);
 	if (tile == NULL && create) {
 		tile = malloc(sizeof (*tile));
-		list_create(tile, sizeof (airport_t),
+		tile->lat = pos.lat;
+		tile->lon = pos.lon;
+		list_create(&tile->arpts, sizeof (airport_t),
 		    offsetof(airport_t, tile_node));
-		htbl_set(&airport_geo_table, &key, tile);
+		avl_insert(&airport_geo_tree, tile, where);
 		created = B_TRUE;
 	}
 	if (created_p != NULL)
@@ -711,11 +734,13 @@ gear_is_up(void)
 	return (B_TRUE);
 }
 
+#if 0
 static bool_t
 GPWS_has_priority(void)
 {
 	return (drs.gpws_prio ? XPLMGetDatai(drs.gpws_prio) != 0 : B_FALSE);
 }
+#endif
 
 static bool_t
 chk_acf_dr(const char **icaos, const char *drname)
@@ -781,39 +806,6 @@ gpws_flaps_ovrd(void)
 }
 
 /*
- * Given a runway ID, returns the reciprocal runway ID.
- */
-static void
-recip_rwy_id(const char *rwy_id, char out_rwy_id[4])
-{
-	int recip_num = atoi(rwy_id) + 18;
-
-	if (recip_num > 36)
-		recip_num -= 36;
-	ASSERT(recip_num >= 1 && recip_num <= 36);
-
-	if (strlen(rwy_id) > 2) {
-		char recip_suffix;
-
-		switch (rwy_id[2]) {
-		case 'L':
-			recip_suffix = 'R';
-			break;
-		case 'R':
-			recip_suffix = 'L';
-			break;
-		default:
-			ASSERT(rwy_id[2] == 'C');
-			recip_suffix = rwy_id[2];
-			break;
-		}
-		snprintf(out_rwy_id, 4, "%02d%c", recip_num, recip_suffix);
-	} else {
-		snprintf(out_rwy_id, 4, "%02d", recip_num);
-	}
-}
-
-/*
  * Given a runway threshold vector, direction vector, width, length and
  * threshold longitudinal displacement, prepares a bounding box which
  * encompasses that runway.
@@ -870,9 +862,25 @@ rwy_is_hard(int t)
 	return (t == 1 || t == 2 || t == 15);
 }
 
+static airport_t *
+apt_dat_lookup(const char *icao)
+{
+	airport_t srch;
+	strlcpy(srch.icao, icao, sizeof (srch.icao));
+	return (avl_find(&apt_dat, &srch, NULL));
+}
+
+static void
+apt_dat_insert(airport_t *arpt)
+{
+	avl_index_t where;
+	VERIFY(avl_find(&apt_dat, arpt, &where) == NULL);
+	avl_insert(&apt_dat, arpt, where);
+}
+
 /*
  * Parses an apt.dat (or X-RAAS_apt_dat.cache) file, parses its contents
- * and reconstructs our apt_dat table. This is called at the start of
+ * and reconstructs our apt_dat tree. This is called at the start of
  * X-RAAS to populate the airport and runway database.
  */
 static size_t
@@ -914,7 +922,7 @@ map_apt_dat(const char *apt_dat_fname)
 
 			new_icao = comps[4];
 			pos.elev = atof(comps[1]);
-			arpt = htbl_lookup(&apt_dat, new_icao);
+			arpt = apt_dat_lookup(new_icao);
 			if (ncomps >= 9 &&
 			    strstr(comps[5], "TA:") == comps[5] &&
 			    strstr(comps[6], "TL:") == comps[6] &&
@@ -938,12 +946,12 @@ map_apt_dat(const char *apt_dat_fname)
 				arpt->refpt = pos;
 				arpt->TL = TL;
 				arpt->TA = TA;
-				htbl_set(&apt_dat, new_icao, arpt);
+				apt_dat_insert(arpt);
 				if (!IS_NULL_GEO_POS(pos)) {
-					list_t *tile = geo_table_get_tile(
+					tile_t *tile = geo_table_get_tile(
 					    GEO3_TO_GEO2(pos), B_FALSE, NULL);
 					ASSERT(tile != NULL);
-					list_insert_tail(tile, arpt);
+					list_insert_tail(&tile->arpts, arpt);
 					dbg_log("tile", 2, "geo_xref\t%s\t%f"
 					    "\t%f", new_icao, pos.lat, pos.lon);
 				}
@@ -1145,7 +1153,7 @@ load_airports_txt(void)
 				continue;
 			}
 			icao = comps[1];
-			arpt = htbl_lookup(&apt_dat, icao);
+			arpt = apt_dat_lookup(icao);
 
 			if (arpt != NULL) {
 				arpt->refpt = GEO_POS3(atof(comps[3]),
@@ -1206,13 +1214,10 @@ load_airports_txt(void)
 }
 
 static void
-create_directories(const char **dirnames)
+create_directory(const char *dirname)
 {
-	if (dirnames == NULL)
-		return;
-
-	for (const char **dirname = dirnames; *dirname != NULL; dirname++)
-		mkdir(*dirname, 0777);
+	ASSERT(dirname != NULL);
+	mkdir(dirname, 0777);
 }
 
 static void
@@ -1223,33 +1228,34 @@ remove_directory(const char *dirname)
 }
 
 static char *
-apt_dat_cache_dir(geo_pos2_t pos)
+apt_dat_cache_dir(geo_pos2_t pos, const char *suffix)
 {
 	/* TODO: implement this */
-#define	SCRIPT_DIRECTORY ""
 	char lat_lon[16];
-	snprintf(lat_lon, sizeof (lat_lon), "%.0f_%.0f",
+	snprintf(lat_lon, sizeof (lat_lon), "%+03.0f%+04.0f",
 	    floor(pos.lat / 10) * 10, floor(pos.lon / 10) * 10);
-	return (mkpathname(SCRIPT_DIRECTORY, "X-RAAS_apt_dat_cache", lat_lon));
+
+	if (suffix != NULL)
+		return (mkpathname(xpprefsdir, "X-RAAS_apt_dat_cache", lat_lon,
+		    suffix, NULL));
+	else
+		return (mkpathname(xpprefsdir, "X-RAAS_apt_dat_cache", lat_lon,
+		    NULL));
 }
 
 static void
 write_apt_dat(const airport_t *arpt)
 {
 	char lat_lon[16];
-	char *cache_dir, *fname;
+	char *fname;
 	FILE *fp;
 
-	cache_dir = apt_dat_cache_dir(GEO3_TO_GEO2(arpt->refpt));
-	snprintf(lat_lon, sizeof (lat_lon), "%03.0f_%03.0f",
+	snprintf(lat_lon, sizeof (lat_lon), "%+03.0f+%04.0f",
 	    arpt->refpt.lat, arpt->refpt.lon);
-	fname = mkpathname(cache_dir, lat_lon);
+	fname = apt_dat_cache_dir(GEO3_TO_GEO2(arpt->refpt), lat_lon);
 
 	fp = fopen(fname, "a");
 	VERIFY(fp != NULL);
-
-	free(cache_dir);
-	free(fname);
 
 	fprintf(fp, "1 %f 0 0 %s TA:%f TL:%f LAT:%f LON:%f\n",
 	    arpt->refpt.elev, arpt->icao, arpt->TL, arpt->TA,
@@ -1272,6 +1278,90 @@ write_apt_dat(const airport_t *arpt)
 		    rwy->ends[0].thr.elev, rwy->ends[1].thr.elev);
 	}
 	fclose(fp);
+	free(fname);
+}
+
+/*
+ * Takes the current state of the raas.apt_dat table and writes all the
+ * airports in it to the X-RAAS_apt_dat.cache so that a subsequent run
+ * of X-RAAS can pick this info up.
+ */
+static bool_t
+recreate_apt_dat_cache(void)
+{
+	char *version_filename;
+	int version = -1;
+	FILE *version_file;
+
+	version_filename = mkpathname(xpprefsdir, "X-RAAS_apt_dat_cache",
+	    "version", NULL);
+	version_file = fopen(version_filename, "r");
+	if (version_file != NULL) {
+		if (fscanf(version_file, "%d", &version) != 1)
+			version = -1;
+		fclose(version_file);
+	}
+
+	if (version == XRAAS_apt_dat_cache_version) {
+		/* cache version current, no need to rebuild it */
+		free(version_filename);
+		dbg_log("tile", 1, "X-RAAS_apt_dat_cache up to date");
+		return (B_TRUE);
+	}
+	dbg_log("tile", 1, "X-RAAS_apt_dat_cache out of date");
+
+	size_t n_apt_dat_files;
+	char **apt_dat_files = find_all_apt_dats(&n_apt_dat_files);
+	bool_t success = B_TRUE;
+	char *filename;
+	void *cookie = NULL;
+
+	/* First scan all the provided apt.dat files */
+	for (size_t i = 0; i < n_apt_dat_files; i++)
+		map_apt_dat(apt_dat_files[i]);
+
+	free(apt_dat_files);
+
+	/* remove airports without runways */
+	airport_t *arpt, *next_arpt;
+	for (arpt = avl_first(&apt_dat); arpt != NULL; arpt = next_arpt) {
+		next_arpt = AVL_NEXT(&apt_dat, arpt);
+		if (list_head(&arpt->rwys) == NULL)
+			avl_remove(&apt_dat, arpt);
+	}
+	if (!load_airports_txt()) {
+		success = B_FALSE;
+		goto out;
+	}
+
+	filename = mkpathname(xpprefsdir, "X-RAAS_apt_dat_cache", NULL);
+	remove_directory(filename);
+	create_directory(filename);
+	free(filename);
+	version_file = fopen(version_filename, "w");
+	if (version_file == NULL) {
+		success = B_FALSE;
+		goto out;
+	}
+	fprintf(version_file, "%d\n", XRAAS_apt_dat_cache_version);
+	fclose(version_file);
+
+	for (arpt = avl_first(&apt_dat); arpt != NULL;
+	    arpt = AVL_NEXT(&apt_dat, arpt)) {
+		char *dirname = apt_dat_cache_dir(GEO3_TO_GEO2(arpt->refpt),
+		    NULL);
+		create_directory(dirname);
+		write_apt_dat(arpt);
+		free(dirname);
+	}
+out:
+	while ((arpt = avl_destroy_nodes(&airport_geo_tree, &cookie)) != NULL)
+		free_airport(arpt);
+
+	free_strlist(apt_dat_files, n_apt_dat_files);
+	free(version_filename);
+
+	return (B_FALSE);
 }
 
 /*
@@ -1544,19 +1634,18 @@ free_airport(airport_t *arpt)
 
 /*
  * The actual worker function for find_nearest_airports. Performs the
- * search in a specified airport_geo_table square. Position is a 3-space
+ * search in a specified airport_geo_tree tile. Position is a 3-space
  * ECEF vector.
  */
 static void
 find_nearest_airports_tile(vect3_t ecef, geo_pos2_t tile_coord, list_t *l)
 {
-	list_t *tile = geo_table_get_tile(tile_coord, B_FALSE,
-	    NULL);
+	tile_t *tile = geo_table_get_tile(tile_coord, B_FALSE, NULL);
 
 	if (tile == NULL)
 		return;
-	for (airport_t *arpt = list_head(tile); arpt != NULL;
-	    arpt = list_next(tile, arpt)) {
+	for (airport_t *arpt = list_head(&tile->arpts); arpt != NULL;
+	    arpt = list_next(&tile->arpts, arpt)) {
 		vect3_t arpt_ecef = sph2ecef(arpt->refpt);
 		if (vect3_abs(vect3_sub(ecef, arpt_ecef)) < ARPT_LOAD_LIMIT) {
 			list_insert_tail(l, arpt);
@@ -1607,7 +1696,7 @@ load_airports_in_tile(geo_pos2_t tile_pos)
 	if (!created)
 		return;
 
-	cache_dir = apt_dat_cache_dir(tile_pos);
+	cache_dir = apt_dat_cache_dir(tile_pos, NULL);
 	snprintf(lat_lon, sizeof (lat_lon), "%03.0f_%03.0f",
 	    tile_pos.lat, tile_pos.lon);
 	fname = mkpathname(cache_dir, lat_lon);
@@ -1617,26 +1706,23 @@ load_airports_in_tile(geo_pos2_t tile_pos)
 }
 
 static void
-free_tile(void *t, void *arg)
+free_tile(tile_t *tile)
 {
-	list_t *tile = t;
-	UNUSED(arg);
-
-	for (airport_t *arpt = list_head(tile); arpt != NULL;
-	    arpt = list_head(tile)) {
-		list_remove(tile, arpt);
+	for (airport_t *arpt = list_head(&tile->arpts); arpt != NULL;
+	    arpt = list_head(&tile->arpts)) {
+		list_remove(&tile->arpts, arpt);
 		unload_airport(arpt);
 		free_airport(arpt);
 	}
-	list_destroy(tile);
+	list_destroy(&tile->arpts);
 	free(tile);
 }
 
 static void
-unload_tile(const tile_key_t *key, list_t *tile)
+unload_tile(tile_t *tile)
 {
-	htbl_remove(&airport_geo_table, key, B_FALSE);
-	free_tile(tile, NULL);
+	avl_remove(&airport_geo_tree, tile);
+	free_tile(tile);
 }
 
 static void
@@ -1646,12 +1732,12 @@ load_nearest_airport_tiles(void)
 	double lon = XPLMGetDatad(drs.lon);
 
 	for (int i = -1; i <= 1; i++) {
-		for (int j = -1; j <= 1; j++) {
+		for (int j = -1; j <= 1; j++)
 			load_airports_in_tile(GEO_POS2(lat + i, lon + j));
-		}
 	}
 }
 
+#if 0
 static double
 lon_delta(double x, double y)
 {
@@ -1662,31 +1748,31 @@ lon_delta(double x, double y)
 	else
 		return ((180 - u) - (-180 - d));
 }
+#endif
 
 static void
-unload_distant_airport_tiles_i(const void *k, void *v, void *p)
+unload_distant_airport_tiles_i(tile_t *tile, geo_pos2_t my_pos)
 {
-	const tile_key_t *key = k;
-	list_t *tile = v;
-	const tile_key_t *my_pos_key = p;
-
-	if (key->lat < my_pos_key->lat - 1 ||
-	    key->lat > my_pos_key->lat + 1 ||
-	    key->lon < my_pos_key->lon - 1 ||
-	    key->lon > my_pos_key->lon + 1) {
-		dbg_log("tile", 1, "unloading tile %d x %d", key->lat,
-		    key->lon);
-		unload_tile(key, tile);
+	if (tile->lat < my_pos.lat - 1 || tile->lat > my_pos.lat + 1 ||
+	    tile->lon < my_pos.lon - 1 || tile->lon > my_pos.lon + 1) {
+		dbg_log("tile", 1, "unloading tile %d x %d",
+		    tile->lat, tile->lon);
+		unload_tile(tile);
 	}
 }
 
 static void
 unload_distant_airport_tiles(void)
 {
-	tile_key_t my_pos_key = geo_table_key(GEO_POS2(XPLMGetDatad(drs.lat),
-	    XPLMGetDatad(drs.lon)));
-	htbl_foreach(&airport_geo_table, unload_distant_airport_tiles_i,
-	    &my_pos_key);
+	geo_pos2_t my_pos = GEO_POS2(XPLMGetDatad(drs.lat),
+	    XPLMGetDatad(drs.lon));
+	tile_t *tile, *next_tile;
+
+	for (tile = avl_first(&airport_geo_tree); tile != NULL;
+	    tile = next_tile) {
+		next_tile = AVL_NEXT(&airport_geo_tree, tile);
+		unload_distant_airport_tiles_i(tile, my_pos);
+	}
 }
 
 /*
@@ -2365,7 +2451,7 @@ stop_check(const runway_t *rwy, int end, double hdg, vect2_t pos_v)
 		maxspd = gs;
 	}
 	if (!landing && gs < maxspd - ACCEL_STOP_SPD_THRESH)
-		strncpy(rejected_takeoff, rwy_end->id,
+		strlcpy(rejected_takeoff, rwy_end->id,
 		    sizeof (rejected_takeoff));
 
 	double rpitch = acf_rwy_rel_pitch(rwy_end->thr.elev,
@@ -3045,7 +3131,7 @@ altimeter_setting(void)
 		TL = cur_arpt->TL;
 		TATL_field_elev = cur_arpt->refpt.elev;
 		if (strcmp(arpt_id, TATL_source) != 0) {
-			strncpy(TATL_source, arpt_id, sizeof (TATL_source));
+			strlcpy(TATL_source, arpt_id, sizeof (TATL_source));
 			field_changed = B_TRUE;
 			dbg_log("altimeter", 1, "TATL_source: %s "
 			    "TA: %d TL: %d field_elev: %d", arpt_id,
@@ -3073,16 +3159,18 @@ altimeter_setting(void)
 		    vect3_abs(vect3_sub(pos_ecef, arpt_ecef)) <
 		    TATL_REMOTE_ARPT_DIST_LIMIT) {
 			load_airports_in_tile(GEO_POS2(outLat, outLon));
-			cur_arpt = htbl_lookup(&apt_dat, outID);
+			cur_arpt = apt_dat_lookup(outID);
 			if (cur_arpt == NULL) {
 				/* Grab the first airport in that tile */
-				list_t *tile = geo_table_get_tile(
+				tile_t *tile = geo_table_get_tile(
 				    GEO_POS2(outLat, outLon), B_FALSE, NULL);
 				if (tile != NULL) {
-					cur_arpt = list_head(tile);
-					dbg_log("altimeter", 2,
-					    "fallback airport = %s",
-					    cur_arpt->icao);
+					cur_arpt = list_head(&tile->arpts);
+					if (cur_arpt != NULL) {
+						dbg_log("altimeter", 2,
+						    "fallback airport = %s",
+						    cur_arpt->icao);
+					}
 				}
 			}
 		}
@@ -3091,7 +3179,7 @@ altimeter_setting(void)
 			TA = cur_arpt->TA;
 			TL = cur_arpt->TL;
 			TATL_field_elev = cur_arpt->refpt.elev;
-			strncpy(TATL_source, cur_arpt->icao,
+			strlcpy(TATL_source, cur_arpt->icao,
 			    sizeof (TATL_source));
 			field_changed = B_TRUE;
 			dbg_log("altimeter", 1, "TATL_source: %s "
@@ -3345,22 +3433,18 @@ raas_exec(void)
 	last_gs = XPLMGetDatad(drs.gs);
 }
 
-static void
-shutdown(void)
+static float
+raas_exec_cb(float elapsed_since_last_call, float elapsed_since_last_floop,
+    int counter, void *refcon)
 {
-	if (bus_loaded != -1) {
-		float bus_load;
-		XPLMGetDatavf(drs.plug_bus_load, &bus_load, bus_loaded, 1);
-		bus_load -= BUS_LOAD_AMPS;
-		XPLMSetDatavf(drs.plug_bus_load, &bus_load, bus_loaded, 1);
-		bus_loaded = -1;
-	}
-#if 0
-	if raas.cur_msg["snd"] ~= nil then
-		stop_sound(raas.cur_msg["snd"])
-		raas.cur_msg = {}
-	end
-#endif
+	UNUSED(elapsed_since_last_call);
+	UNUSED(elapsed_since_last_floop);
+	UNUSED(counter);
+	UNUSED(refcon);
+
+	raas_exec();
+
+	return (EXEC_INTVAL);
 }
 
 static char *
@@ -3480,9 +3564,10 @@ xraas_init(void)
 #define	GEO_TABLE_SZ		128
 #define	ICAO_SZ			4
 
-	htbl_create(&apt_dat, AIRPORT_TABLE_SZ, ICAO_SZ, B_FALSE);
-	htbl_create(&airport_geo_table, AIRPORT_TABLE_SZ, sizeof (tile_key_t),
-	    B_FALSE);
+	avl_create(&apt_dat, apt_dat_compar, sizeof (airport_t),
+	    offsetof(airport_t, apt_dat_node));
+	avl_create(&airport_geo_tree, airport_geo_tree_compar,
+	    sizeof (tile_t), offsetof(tile_t, node));
 
 #define	CREATE_RWY_TABLE(x)	\
 	htbl_create((x), RUNWAY_TABLE_SZ, RWY_ID_KEY_SZ, B_FALSE)
@@ -3500,16 +3585,44 @@ xraas_init(void)
 	CREATE_RWY_TABLE(&air_apch_spd2_ann);
 	CREATE_RWY_TABLE(&air_apch_spd3_ann);
 #undef	CREATE_RWY_TABLE
+
+	if (!recreate_apt_dat_cache())
+		return;
+
+	XPLMRegisterFlightLoopCallback(raas_exec_cb, EXEC_INTVAL, NULL);
 }
 
 static void
 xraas_fini(void)
 {
+	tile_t *tile;
+	void *cookie = NULL;
+
 	if (!enabled)
 		return;
 
-	htbl_empty(&airport_geo_table, free_tile, NULL);
-	htbl_destroy(&airport_geo_table);
+	if (bus_loaded != -1) {
+		float bus_load;
+		XPLMGetDatavf(drs.plug_bus_load, &bus_load, bus_loaded, 1);
+		bus_load -= BUS_LOAD_AMPS;
+		XPLMSetDatavf(drs.plug_bus_load, &bus_load, bus_loaded, 1);
+		bus_loaded = -1;
+	}
+#if 0
+	if raas.cur_msg["snd"] ~= nil then
+		stop_sound(raas.cur_msg["snd"])
+		raas.cur_msg = {}
+	end
+#endif
+
+	/* airports are freed in the free_tile function */
+	while (avl_destroy_nodes(&airport_geo_tree, &cookie) != NULL)
+		;
+	avl_destroy(&apt_dat);
+
+	while ((tile = avl_destroy_nodes(&airport_geo_tree, &cookie)) != NULL)
+		free_tile(tile);
+	avl_destroy(&airport_geo_tree);
 
 #define	DESTROY_SIMPLE_TABLE(x) \
 	do { \
@@ -3517,7 +3630,6 @@ xraas_fini(void)
 		htbl_destroy((x)); \
 	} while (0)
 	DESTROY_SIMPLE_TABLE(&accel_stop_max_spd);
-	DESTROY_SIMPLE_TABLE(&apt_dat);
 	DESTROY_SIMPLE_TABLE(&on_rwy_ann);
 	DESTROY_SIMPLE_TABLE(&apch_rwy_ann);
 	DESTROY_SIMPLE_TABLE(&air_apch_rwy_ann);
@@ -3536,6 +3648,8 @@ xraas_fini(void)
 		free(init_msg);
 		init_msg = NULL;
 	}
+
+	XPLMUnregisterFlightLoopCallback(raas_exec_cb, NULL);
 }
 
 PLUGIN_API int
@@ -3544,6 +3658,9 @@ XPluginStart(char *outName, char *outSig, char *outDesc)
 	strcpy(outName, XRAAS2_PLUGIN_NAME);
 	strcpy(outSig, XRAAS2_PLUGIN_SIG);
 	strcpy(outDesc, XRAAS2_PLUGIN_DESC);
+
+	XPLMGetSystemPath(xpdir);
+	XPLMGetPrefsPath(xpprefsdir);
 
 	return (1);
 }
