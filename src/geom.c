@@ -768,6 +768,81 @@ circ2circ_isect(vect2_t ca, double ra, vect2_t cb, double rb, vect2_t i[2])
 	}
 }
 
+
+static bool_t is_valid_poly(const vect2_t *poly) UNUSED_ATTR;
+static bool_t
+is_valid_poly(const vect2_t *poly)
+{
+	/* A polygon must contain at least 3 points */
+	return (poly != NULL && !IS_NULL_VECT(poly[0]) &&
+	    !IS_NULL_VECT(poly[1]) && !IS_NULL_VECT(poly[2]));
+}
+
+static unsigned
+get_poly_num_pts(const vect2_t *poly)
+{
+	for (unsigned i = 0;; i++) {
+		if (IS_NULL_VECT(poly[i]))
+			return (i);
+	}
+}
+
+/*
+ * Checks if a vector and a polygon intersect.
+ *	`a' Direction & magnitude of first vector.
+ *	`oa' Vector pointing to the origin of the first vector.
+ *	`poly' An array of 2-space vectors specifying the points of the
+ *		polygon. Must contain at least 3 points and must be
+ *		terminated by a final NULL_VECT2 point.
+ * Returns the number of the polygon's sides that the vector intersects.
+ * Please note that this only checks intersection with the sides, not if
+ * the vector is contained completely inside the polygon. Use vect2_in_poly
+ * with the vector's to test for that scenario.
+ */
+bool_t
+vect2poly_isect(vect2_t a, vect2_t oa, const vect2_t *poly)
+{
+	unsigned nisects = 0;
+	unsigned npts;
+
+	ASSERT(is_valid_poly(poly));
+	npts = get_poly_num_pts(poly);
+
+	for (unsigned i = 0; i < npts; i++) {
+		vect2_t pt1 = poly[i];
+		vect2_t pt2 = poly[(i + 1) % npts];
+		vect2_t v = vect2_sub(pt2, pt1);
+		vect2_t isect = vect2vect_isect(a, oa, v, pt1, B_TRUE);
+
+		if (!IS_NULL_VECT(isect))
+			nisects++;
+	}
+
+	return (nisects);
+}
+
+/*
+ * Checks if a point lies inside of a polygon.
+ *	`pt' A vector pointing to the position of the point to examine.
+ *	`poly' An array of 2-space vectors specifying the points of the
+ *		polygon. Must contain at least 3 points and must be
+ *		terminated by a final NULL_VECT2 point.
+ */
+bool_t
+vect2_in_poly(vect2_t pt, const vect2_t *poly)
+{
+	ASSERT(is_valid_poly(poly));
+	/*
+	 * Simplest approach is ray casting. Construct a vector from `pt' to
+	 * a point very far away and count how many edges of the bbox polygon
+	 * we hit. If we hit an even number, we're outside, otherwise we're
+	 * inside.
+	 */
+	vect2_t v = vect2_sub(VECT2(1e30, 1e30), pt);
+	unsigned nisects = vect2poly_isect(v, pt, poly);
+	return ((nisects % 2) != 0);
+}
+
 /*
  * Given a true heading in degrees, constructs a unit vector pointing in that
  * direction. 0 degress is parallel with y axis and hdg increases clockwise.

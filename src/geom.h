@@ -183,6 +183,8 @@ vect2_t vect2vect_isect(vect2_t da, vect2_t oa, vect2_t db, vect2_t ob,
     bool_t confined);
 unsigned circ2circ_isect(vect2_t ca, double ra, vect2_t cb, double rb,
     vect2_t i[2]);
+bool_t vect2poly_isect(vect2_t a, vect2_t oa, const vect2_t *poly);
+bool_t vect2_in_poly(vect2_t pt, const vect2_t *poly);
 
 /*
  * Converting between headings and direction vectors on a 2D plane.

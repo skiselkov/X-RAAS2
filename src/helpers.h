@@ -89,6 +89,7 @@ extern "C" {
 #define	MIN_ARC_RADIUS	0.1
 #define	MAX_ARC_RADIUS	100.0
 
+#define	UNUSED_ATTR		__attribute__((unused))
 #define	UNUSED(x)		(void)(x)
 #ifdef	DEBUG
 #define	ASSERT(x)		VERIFY(x)
@@ -197,8 +198,8 @@ void append_format(char **str, size_t *sz, const char *format, ...)
 #define	AVG(x, y)	(((x) + (y)) / 2)
 #endif	/* MIN or MAX */
 
-#define	USEC2SEC(usec)	(usec / 1000000llu)
-#define	SEC2USEC(sec)	(sec * 1000000llu)
+#define	USEC2SEC(usec)	(usec / 1000000ll)
+#define	SEC2USEC(sec)	(sec * 1000000ll)
 
 /*
  * Weighted avg, 'w' is weight fraction from 0.0 = all of x to 1.0 = all of y.
