@@ -101,6 +101,8 @@
 #define	XRAAS_apt_dat_cache_version	3
 #define	UNITS_APPEND_INTVAL		120	/* seconds */
 
+#define	RWY_ID_KEY_SZ			16
+
 typedef struct {
 	double min, max;
 	bool_t ann;
@@ -255,7 +257,7 @@ static int min_engines = 2;			/* count */
 static int min_MTOW = 5700;			/* kg */
 static bool_t allow_helos = B_FALSE;
 static bool_t auto_disable_notify = B_TRUE;
-static bool_t startup_notify = B_TRUE;
+//static bool_t startup_notify = B_TRUE;
 static bool_t override_electrical = B_FALSE;
 static bool_t override_replay = B_FALSE;
 //static bool_t use_TTS = B_FALSE;
@@ -269,7 +271,7 @@ static int min_rotation_angle = 3;			/* degrees */
 static int stop_dist_cutoff = 1500;		/* meters */
 //static int voice_female = B_TRUE;
 //static double voice_volume = 1.0;
-static int disable_ext_view = B_TRUE;
+//static int disable_ext_view = B_TRUE;
 static double min_landing_flap = 0.5;		/* ratio, 0-1 */
 static double min_takeoff_flap = 0.1;		/* ratio, 0-1 */
 static double max_takeoff_flap = 0.75;		/* ratio, 0-1 */
@@ -360,6 +362,9 @@ static int64_t start_time = 0;
 static int64_t last_exec_time = 0;
 static int64_t last_airport_reload = 0;
 
+static char *init_msg = NULL;
+static int64_t init_msg_end = 0;
+
 static const char *FJS737[] = { "B732", NULL };
 static const char *IXEG737[] = { "B733", NULL };
 static const char *FF757[] = { "B752", "B753", NULL };
@@ -395,6 +400,9 @@ static struct {
 	XPLMDataRef replay_mode;
 	XPLMDataRef plug_bus_load;
 } drs;
+
+static void log_init_msg(bool_t display, int timeout, int man_sect_number,
+    const char *man_sect_name, const char *fmt, ...) PRINTF_ATTR(5);
 
 /*
  * Returns true if `x' is within the numerical ranges in `rngs'.
@@ -534,23 +542,6 @@ number_in_rngs(double x, const range_t *rngs)
 	return (B_FALSE);
 }
 #endif
-
-/*
- * This is to be called ONCE per X-RAAS startup to log an initial startup
- * message and then exit.
- */
-static void
-log_init_msg(const char *msg, bool_t display, uint64_t timeout,
-    int man_sect_number, const char *man_sect_name)
-{
-	UNUSED(display);
-	UNUSED(timeout);
-	if (man_sect_number != -1)
-		logMsg("%s. See manual section %d \"%s\".\n", msg,
-		    man_sect_number, man_sect_name);
-	else
-		logMsg("%s\n", msg);
-}
 
 static int64_t
 microclock(void)
@@ -1129,10 +1120,10 @@ load_airports_txt(void)
 
 		if (fp == NULL) {
 			free(fname);
-			log_init_msg("X-RAAS navdata error: your "
+			log_init_msg(B_TRUE, INIT_ERR_MSG_TIMEOUT, 2,
+			    "Installation", "X-RAAS navdata error: your "
 			    "Airports.txt is missing or unreadable. "
-			    "Please correct this and recreate the cache.",
-			    B_TRUE, INIT_ERR_MSG_TIMEOUT, 2, "Installation");
+			    "Please correct this and recreate the cache.");
 			return (B_FALSE);
 		}
 	}
@@ -1626,16 +1617,26 @@ load_airports_in_tile(geo_pos2_t tile_pos)
 }
 
 static void
-unload_tile(const tile_key_t *key, list_t *tile)
+free_tile(void *t, void *arg)
 {
+	list_t *tile = t;
+	UNUSED(arg);
+
 	for (airport_t *arpt = list_head(tile); arpt != NULL;
 	    arpt = list_head(tile)) {
 		list_remove(tile, arpt);
 		unload_airport(arpt);
 		free_airport(arpt);
 	}
-	htbl_remove(&airport_geo_table, key, B_FALSE);
+	list_destroy(tile);
 	free(tile);
+}
+
+static void
+unload_tile(const tile_key_t *key, list_t *tile)
+{
+	htbl_remove(&airport_geo_table, key, B_FALSE);
+	free_tile(tile, NULL);
 }
 
 static void
@@ -1899,7 +1900,7 @@ dist_to_msg(double dist, char ***msg, size_t *len, bool_t div_by_100)
 }
 
 static void
-rwy_id_key(const char *arpt_icao, const char *rwy_id, char key[16])
+rwy_id_key(const char *arpt_icao, const char *rwy_id, char key[RWY_ID_KEY_SZ])
 {
 	ASSERT(strlen(arpt_icao) <= 4);
 	ASSERT(strlen(rwy_id) <= 4);
@@ -1910,7 +1911,7 @@ static void
 do_approaching_rwy(const airport_t *arpt, const runway_t *rwy,
     int end, bool_t on_ground)
 {
-	char key[16];
+	char key[RWY_ID_KEY_SZ];
 	const runway_end_t *rwy_end;
 
 	ASSERT(arpt != NULL);
@@ -2020,7 +2021,7 @@ ground_runway_approach_arpt_rwy(const airport_t *arpt, const runway_t *rwy,
 		    B_TRUE);
 		return (B_TRUE);
 	} else {
-		char key[16];
+		char key[RWY_ID_KEY_SZ];
 		rwy_id_key(arpt->icao, rwy->ends[0].id, key);
 		htbl_remove(&apch_rwy_ann, key, B_TRUE);
 		rwy_id_key(arpt->icao, rwy->ends[1].id, key);
@@ -2118,7 +2119,7 @@ on_rwy_check(const char *arpt_id, const char *rwy_id, double hdg,
 {
 	int64_t now = microclock();
 	double rhdg = fabs(rel_hdg(hdg, rwy_hdg));
-	char key[16];
+	char key[RWY_ID_KEY_SZ];
 
 	ASSERT(arpt_id != NULL);
 	ASSERT(rwy_id != NULL);
@@ -2165,7 +2166,7 @@ on_rwy_check(const char *arpt_id, const char *rwy_id, double hdg,
 static void
 stop_check_reset(const char *arpt_id, const char *rwy_id)
 {
-	char key[16];
+	char key[RWY_ID_KEY_SZ];
 
 	ASSERT(arpt_id != NULL);
 	ASSERT(rwy_id != NULL);
@@ -2292,7 +2293,7 @@ stop_check(const runway_t *rwy, int end, double hdg, vect2_t pos_v)
 	long maxspd;
 	double dist = vect2_abs(vect2_sub(opp_thr_v, pos_v));
 	double rhdg = fabs(rel_hdg(hdg, rwy_end->hdg));
-	char key[16];
+	char key[RWY_ID_KEY_SZ];
 
 	if (gs < SPEED_THRESH) {
 		/*
@@ -2688,7 +2689,7 @@ apch_config_chk(const char *arpt_id, const char *rwy_id, double height_abv_thr,
 
 	double clb_rate = conv_per_min(MET2FEET(XPLMGetDatad(drs.elev) -
 	    last_elev));
-	char key[16];
+	char key[RWY_ID_KEY_SZ];
 
 	rwy_id_key(arpt_id, rwy_id, key);
 
@@ -2815,7 +2816,7 @@ air_runway_approach_arpt_rwy(const airport_t *arpt, const runway_t *rwy,
 	double elev = arpt->refpt.elev;
 	double rwy_hdg = rwy_end->hdg;
 	bool_t in_prox_bbox = vect2_in_poly(pos_v, rwy_end->apch_bbox);
-	char key[16];
+	char key[RWY_ID_KEY_SZ];
 
 	rwy_id_key(arpt_id, rwy_id, key);
 
@@ -2904,7 +2905,7 @@ reset_airport_approach_table(htbl_t *tbl, const airport_t *arpt)
 
 	for (const runway_t *rwy = list_head(&arpt->rwys); rwy != NULL;
 	    rwy = list_next(&arpt->rwys, rwy)) {
-		char key[16];
+		char key[RWY_ID_KEY_SZ];
 
 		rwy_id_key(arpt->icao, rwy->ends[0].id, key);
 		htbl_remove(tbl, key, B_TRUE);
@@ -3362,6 +3363,59 @@ shutdown(void)
 #endif
 }
 
+static char *
+man_ref(int section_number, const char *section_name)
+{
+	return (m_sprintf("For more information, please refer to the X-RAAS "
+	    "user manual in docs%cmanual.pdf, section %d \"%s\".", DIRSEP,
+	    section_number, section_name));
+}
+
+/*
+ * This is to be called ONCE per X-RAAS startup to log an initial startup
+ * message and then exit.
+ */
+static void
+log_init_msg(bool_t display, int timeout, int man_sect_number,
+    const char *man_sect_name, const char *fmt, ...)
+{
+	char *mref = (man_sect_number == -1 ?
+	    man_ref(man_sect_number, man_sect_name) : NULL);
+	va_list ap;
+	int len;
+	char *msg;
+
+	va_start(ap, fmt);
+	len = vsnprintf(NULL, 0, fmt, ap);
+	va_end(ap);
+
+	if (mref != NULL)
+		/* +1 for newline and another for terminating nul */
+		msg = calloc(1, len + 1 + strlen(mref) + 1);
+	else
+		/* +1 for terminating nul */
+		msg = calloc(1, len + 1);
+
+	va_start(ap, fmt);
+	vsnprintf(msg, len + 1, fmt, ap);
+	va_end(ap);
+
+	if (mref != NULL) {
+		msg[len] = '\n';
+		strcpy(&msg[len + 1], mref);
+		free(mref);
+		mref = NULL;
+	}
+
+	logMsg("%s", msg);
+	if (display) {
+		init_msg = msg;
+		init_msg_end = microclock() + SEC2USEC(timeout);
+	} else {
+		free(msg);
+	}
+}
+
 /*
  * Check if the aircraft is a helicopter (or at least says it flies like one).
  */
@@ -3393,16 +3447,103 @@ chk_acf_is_helo(void)
 #endif	/* !0 */
 }
 
+static void
+xraas_init(void)
+{
+	start_time = microclock();
+
+	if (!enabled)
+		return;
+
+	raas_dr_reset();
+
+	if (chk_acf_is_helo() && !allow_helos)
+		return;
+	if (XPLMGetDatai(drs.num_engines) < min_engines ||
+	    XPLMGetDatad(drs.mtow) < min_MTOW) {
+		char icao[8];
+		memset(icao, 0, sizeof (icao));
+		XPLMGetDatab(drs.ICAO, icao, 0, sizeof (icao) - 1);
+		log_init_msg(auto_disable_notify, INIT_ERR_MSG_TIMEOUT,
+		    3, "Activating X-RAAS in the aircraft",
+		    "X-RAAS: auto-disabled: aircraft below X-RAAS limits:\n"
+		    "X-RAAS configuration: minimum number of engines: %d; "
+		    "minimum MTOW: %d kg\n"
+		    "Your aircraft: (%s) number of engines: %d; "
+		    "MTOW: %.0f kg\n", min_engines, min_MTOW, icao,
+		    XPLMGetDatai(drs.num_engines), XPLMGetDatad(drs.mtow));
+		return;
+	}
+
+#define	AIRPORT_TABLE_SZ	512
+#define	RUNWAY_TABLE_SZ		128
+#define	GEO_TABLE_SZ		128
+#define	ICAO_SZ			4
+
+	htbl_create(&apt_dat, AIRPORT_TABLE_SZ, ICAO_SZ, B_FALSE);
+	htbl_create(&airport_geo_table, AIRPORT_TABLE_SZ, sizeof (tile_key_t),
+	    B_FALSE);
+
+#define	CREATE_RWY_TABLE(x)	\
+	htbl_create((x), RUNWAY_TABLE_SZ, RWY_ID_KEY_SZ, B_FALSE)
+	CREATE_RWY_TABLE(&accel_stop_max_spd);
+	CREATE_RWY_TABLE(&on_rwy_ann);
+	CREATE_RWY_TABLE(&apch_rwy_ann);
+	CREATE_RWY_TABLE(&air_apch_rwy_ann);
+	CREATE_RWY_TABLE(&air_apch_flap1_ann);
+	CREATE_RWY_TABLE(&air_apch_flap2_ann);
+	CREATE_RWY_TABLE(&air_apch_flap3_ann);
+	CREATE_RWY_TABLE(&air_apch_gpa1_ann);
+	CREATE_RWY_TABLE(&air_apch_gpa2_ann);
+	CREATE_RWY_TABLE(&air_apch_gpa3_ann);
+	CREATE_RWY_TABLE(&air_apch_spd1_ann);
+	CREATE_RWY_TABLE(&air_apch_spd2_ann);
+	CREATE_RWY_TABLE(&air_apch_spd3_ann);
+#undef	CREATE_RWY_TABLE
+}
+
+static void
+xraas_fini(void)
+{
+	if (!enabled)
+		return;
+
+	htbl_empty(&airport_geo_table, free_tile, NULL);
+	htbl_destroy(&airport_geo_table);
+
+#define	DESTROY_SIMPLE_TABLE(x) \
+	do { \
+		htbl_empty((x), NULL, NULL); \
+		htbl_destroy((x)); \
+	} while (0)
+	DESTROY_SIMPLE_TABLE(&accel_stop_max_spd);
+	DESTROY_SIMPLE_TABLE(&apt_dat);
+	DESTROY_SIMPLE_TABLE(&on_rwy_ann);
+	DESTROY_SIMPLE_TABLE(&apch_rwy_ann);
+	DESTROY_SIMPLE_TABLE(&air_apch_rwy_ann);
+	DESTROY_SIMPLE_TABLE(&air_apch_flap1_ann);
+	DESTROY_SIMPLE_TABLE(&air_apch_flap2_ann);
+	DESTROY_SIMPLE_TABLE(&air_apch_flap3_ann);
+	DESTROY_SIMPLE_TABLE(&air_apch_gpa1_ann);
+	DESTROY_SIMPLE_TABLE(&air_apch_gpa2_ann);
+	DESTROY_SIMPLE_TABLE(&air_apch_gpa3_ann);
+	DESTROY_SIMPLE_TABLE(&air_apch_spd1_ann);
+	DESTROY_SIMPLE_TABLE(&air_apch_spd2_ann);
+	DESTROY_SIMPLE_TABLE(&air_apch_spd3_ann);
+#undef	DESTROY_SIMPLE_TABLE
+
+	if (init_msg != NULL) {
+		free(init_msg);
+		init_msg = NULL;
+	}
+}
+
 PLUGIN_API int
 XPluginStart(char *outName, char *outSig, char *outDesc)
 {
 	strcpy(outName, XRAAS2_PLUGIN_NAME);
 	strcpy(outSig, XRAAS2_PLUGIN_SIG);
 	strcpy(outDesc, XRAAS2_PLUGIN_DESC);
-
-	raas_dr_reset();
-
-	start_time = microclock();
 
 	return (1);
 }
@@ -3412,15 +3553,17 @@ XPluginStop(void)
 {
 }
 
-PLUGIN_API
-int XPluginEnable(void)
+PLUGIN_API int
+XPluginEnable(void)
 {
-	return 1;
+	xraas_init();
+	return (1);
 }
 
-PLUGIN_API
-void XPluginDisable(void)
+PLUGIN_API void
+XPluginDisable(void)
 {
+	xraas_fini();
 }
 
 PLUGIN_API void
