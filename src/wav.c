@@ -28,8 +28,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <OpenAL/alc.h>
+
 #include "helpers.h"
 #include "list.h"
+#include "log.h"
 #include "types.h"
 
 #include "wav.h"
@@ -157,6 +160,15 @@ riff_parse(uint32_t filetype, uint8_t *buf, size_t bufsz)
 	return (riff_parse_chunk(buf, bufsz, bswap));
 }
 
+/*
+ * Locates a specific chunk in a RIFF file. In `topchunk' pass the top-level
+ * RIFF file chunk. The `chunksz' will be filled with the size of the chunk
+ * being searched for (if found). The remaining arguments must be a
+ * 0-terminated list of uint32_t FourCCs of the nested chunks. Don't include
+ * the top-level chunk ID.
+ * Returns a pointer to the body of the chunk (if found, and chunksz will be
+ * populated with the amount of data in the chunk), or NULL if not found.
+ */
 static uint8_t *
 riff_find_chunk(riff_chunk_t *topchunk, size_t *chunksz, ...)
 {
@@ -191,6 +203,11 @@ riff_find_chunk(riff_chunk_t *topchunk, size_t *chunksz, ...)
 	return (topchunk->data);
 }
 
+/*
+ * Loads a WAV file from a file and returns a buffered representation
+ * ready to be passed to OpenAL. Currently we only support mono or
+ * stereo raw PCM (uncompressed) WAV files.
+ */
 wav_t *
 xraas_wav_load(const char *filename)
 {
@@ -202,9 +219,12 @@ xraas_wav_load(const char *filename)
 	uint8_t *chunkp;
 	size_t chunksz;
 	int sample_sz;
+	ALuint err;
 
-	if (fp == NULL)
+	if (fp == NULL) {
+		logMsg("Error loading WAV file %s: can't open file.", filename);
 		return (NULL);
+	}
 
 	fseek(fp, 0, SEEK_END);
 	filesz = ftell(fp);
@@ -216,12 +236,18 @@ xraas_wav_load(const char *filename)
 		goto errout;
 	if (fread(filebuf, 1, filesz, fp) != filesz)
 		goto errout;
-	if ((riff = riff_parse(WAVE_ID, filebuf, filesz)) == NULL)
+	if ((riff = riff_parse(WAVE_ID, filebuf, filesz)) == NULL) {
+		logMsg("Error loading WAV file %s: file doesn't appear to "
+		    "be valid RIFF.", filename);
 		goto errout;
+	}
 
 	chunkp = riff_find_chunk(riff, &chunksz, FMT_ID, 0);
-	if (chunkp == NULL || chunksz != sizeof (wav->fmt))
+	if (chunkp == NULL || chunksz != sizeof (wav->fmt)) {
+		logMsg("Error loading WAV file %s: file missing FMT chunk.",
+		    filename);
 		goto errout;
+	}
 	memcpy(&wav->fmt, chunkp, sizeof (wav->fmt));
 	if (riff->bswap) {
 		wav->fmt.datafmt = BSWAP16(wav->fmt.datafmt);
@@ -234,8 +260,11 @@ xraas_wav_load(const char *filename)
 	/* format support check */
 	if (wav->fmt.datafmt != 1 ||
 	    (wav->fmt.n_channels != 1 && wav->fmt.n_channels != 2) ||
-	    (wav->fmt.bps != 8 && wav->fmt.bps != 16))
+	    (wav->fmt.bps != 8 && wav->fmt.bps != 16)) {
+		logMsg("Error loading WAV file %s: unsupported audio format.",
+		    filename);
 		goto errout;
+	}
 
 	/*
 	 * Check the DATA chunk is present and contains the correct number
@@ -243,8 +272,13 @@ xraas_wav_load(const char *filename)
 	 */
 	sample_sz = (wav->fmt.n_channels * wav->fmt.bps) / 8;
 	chunkp = riff_find_chunk(riff, &chunksz, DATA_ID, 0);
-	if (chunkp == NULL || (chunksz & (sample_sz - 1)) != 0)
+	if (chunkp == NULL || (chunksz & (sample_sz - 1)) != 0) {
+		logMsg("Error loading WAV file %s: DATA chunk missing or "
+		    "contains bad number of samples.", filename);
 		goto errout;
+	}
+
+	wav->duration = ((double)(chunksz / sample_sz)) / wav->fmt.srate;
 
 	/* BSWAP the samples if necessary */
 	if (riff->bswap && wav->fmt.bps == 16) {
@@ -255,8 +289,11 @@ xraas_wav_load(const char *filename)
 	}
 
 	alGenBuffers(1, &wav->albuf);
-	if (wav->albuf == 0)
+	if ((err = alGetError()) != AL_NO_ERROR) {
+		logMsg("Error loading WAV file %s: cannot generate AL "
+		    "buffer (%d).", filename, err);
 		goto errout;
+	}
 	if (wav->fmt.bps == 16)
 		alBufferData(wav->albuf, wav->fmt.n_channels == 2 ?
 		    AL_FORMAT_STEREO16 : AL_FORMAT_MONO16,
@@ -265,6 +302,12 @@ xraas_wav_load(const char *filename)
 		alBufferData(wav->albuf, wav->fmt.n_channels == 2 ?
 		    AL_FORMAT_STEREO8 : AL_FORMAT_MONO8,
 		    chunkp, chunksz, wav->fmt.srate);
+
+	if ((err = alGetError()) != AL_NO_ERROR) {
+		logMsg("Error loading WAV file %s: cannot buffer data (%d).",
+		    filename, err);
+		goto errout;
+	}
 
 	riff_free_chunk(riff);
 	free(filebuf);
@@ -283,12 +326,83 @@ errout:
 	return (NULL);
 }
 
+/*
+ * Destroys a WAV file as returned by xraas_wav_load().
+ */
 void
 xraas_wav_free(wav_t *wav)
 {
 	if (wav != NULL) {
+		if (wav->alsrc != 0) {
+			alSourceStop(wav->alsrc);
+			alDeleteSources(1, &wav->alsrc);
+		}
 		if (wav->albuf != 0)
 			alDeleteBuffers(1, &wav->albuf);
 		free(wav);
 	}
+}
+
+static bool_t
+audio_init(void)
+{
+	ALCcontext *ctx = alcGetCurrentContext();
+
+	if (ctx == NULL) {
+		ALCdevice *dev = alcOpenDevice(NULL);
+
+		if (dev == NULL) {
+			logMsg("Cannot init audio system: device open "
+			    "failed (%d)", alGetError());
+			return (B_FALSE);
+		}
+		ctx = alcCreateContext(dev, NULL);
+		if (ctx == NULL) {
+			logMsg("Cannot init audio system: create context "
+			    "failed (%d)", alGetError());
+			alcCloseDevice(dev);
+			return (B_FALSE);
+		}
+		alcMakeContextCurrent(ctx);
+	}
+
+	return (B_TRUE);
+}
+
+void
+xraas_wav_play(wav_t *wav, double gain)
+{
+	ALuint err;
+
+	if (!audio_init)
+		return;
+
+	if (wav->alsrc == 0) {
+		ALfloat zeroes[3] = { 0.0, 0.0, 0.0 };
+
+		alGenSources(1, &wav->alsrc);
+		if ((err = alGetError()) != AL_NO_ERROR) {
+			logMsg("Can't play sound: alGenSources failed (%d).",
+			    err);
+			return;
+		}
+		alSourcei(wav->alsrc, AL_BUFFER, wav->albuf);
+		alSourcef(wav->alsrc, AL_PITCH, 1.0);
+		alSourcef(wav->alsrc, AL_GAIN, gain);
+		alSourcei(wav->alsrc, AL_LOOPING, 0);
+		alSourcefv(wav->alsrc, AL_POSITION, zeroes);
+		alSourcefv(wav->alsrc, AL_VELOCITY, zeroes);
+	}
+
+	alSourcePlay(wav->alsrc);
+	if ((err = alGetError()) != AL_NO_ERROR)
+		logMsg("Can't play sound: alSourcePlay failed (%d).", err);
+}
+
+void
+xraas_wav_stop(wav_t *wav)
+{
+	if (wav->alsrc == 0)
+		return;
+	alSourceStop(wav->alsrc);
 }

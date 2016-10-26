@@ -115,9 +115,6 @@ is_valid_ndb_freq(double freq_khz)
  *	*) Two-digit runway heading between 01 and 36. Headings less
  *	   than 10 are always prefixed by a '0'. "00" is NOT valid.
  *	*) An optional parallel runway discriminator, one of 'L', 'R' or 'C'.
- *	*) An optional true magnetic heading indicator 'T'. Runways
- *	   which use true headings must belong to an airport_t with
- *	   true_hdg set (indicated by passing the appropriate argument).
  */
 bool_t
 is_valid_rwy_ID(const char *rwy_ID)
@@ -125,18 +122,13 @@ is_valid_rwy_ID(const char *rwy_ID)
 	int hdg;
 	int len = strlen(rwy_ID);
 
-	if (len < 2 || len > 4 || !isdigit(rwy_ID[0]) || !isdigit(rwy_ID[1]))
+	if (len < 2 || len > 3 || !isdigit(rwy_ID[0]) || !isdigit(rwy_ID[1]))
 		return (B_FALSE);
 	hdg = atoi(rwy_ID);
 	if (hdg == 0 || hdg > 36)
 		return (B_FALSE);
 	if (len == 3) {
-		if (rwy_ID[2] != 'R' && rwy_ID[2] != 'L' &&
-		    rwy_ID[2] != 'C' &&  rwy_ID[2] != 'T')
-			return (B_FALSE);
-	} else if (len == 4) {
-		if ((rwy_ID[2] != 'R' && rwy_ID[2] != 'L' &&
-		    rwy_ID[2] != 'C') || rwy_ID[3] != 'T')
+		if (rwy_ID[2] != 'R' && rwy_ID[2] != 'L' && rwy_ID[2] != 'C')
 			return (B_FALSE);
 	}
 

@@ -33,6 +33,7 @@
 #include <XPLMPlanes.h>
 #include <XPLMProcessing.h>
 #include <XPLMUtilities.h>
+#include <XPLMPlugin.h>
 
 #include "avl.h"
 #include "conf.h"
@@ -43,6 +44,7 @@
 #include "math.h"
 #include "perf.h"
 #include "types.h"
+#include "wav.h"
 
 #define	XRAAS2_VERSION			"2.0"
 #define	XRAAS2_PLUGIN_NAME		"X-RAAS " XRAAS2_VERSION
@@ -265,6 +267,99 @@ typedef struct rwy_key_s {
 	int		value;
 } rwy_key_t;
 
+typedef struct msg {
+	const char *name;
+	const char *text;
+	wav_t *wav;
+} msg_t;
+
+typedef enum {
+	ZERO_MSG,
+	ONE_MSG,
+	TWO_MSG,
+	THREE_MSG,
+	FOUR_MSG,
+	FIVE_MSG,
+	SIX_MSG,
+	SEVEN_MSG,
+	EIGHT_MSG,
+	NINE_MSG,
+	THIRTY_MSG,
+	ALT_SET_MSG,
+	APCH_MSG,
+	AVAIL_MSG,
+	CAUTION_MSG,
+	CENTER_MSG,
+	FEET_MSG,
+	FLAPS_MSG,
+	HUNDRED_MSG,
+	LEFT_MSG,
+	LONG_LAND_MSG,
+	METERS_MSG,
+	ON_RWY_MSG,
+	ON_TWY_MSG,
+	RIGHT_MSG,
+	RMNG_MSG,
+	RWYS_MSG,
+	PAUSE_MSG,
+	SHORT_RWY_MSG,
+	THOUSAND_MSG,
+	TOO_FAST_MSG,
+	TOO_HIGH_MSG,
+	TWY_MSG,
+	UNSTABLE_MSG,
+	NUM_MSGS
+} msg_type_t;
+
+typedef struct {
+	msg_type_t	*msgs;
+	int		num_msgs;
+	int		cur_msg;
+	msg_prio_t	prio;
+	int64_t		started;
+
+	list_node_t	node;
+} ann_t;
+
+static msg_t voice_msgs[NUM_MSGS] = {
+	{ .name = "0", .text = "Zero, ", .wav = NULL },
+	{ .name = "1", .text = "One,", .wav = NULL },
+	{ .name = "2", .text = "Two,", .wav = NULL },
+	{ .name = "3", .text = "Three,", .wav = NULL },
+	{ .name = "4", .text = "Four,", .wav = NULL },
+	{ .name = "5", .text = "Five,", .wav = NULL },
+	{ .name = "6", .text = "Six,", .wav = NULL },
+	{ .name = "7", .text = "Seven,", .wav = NULL },
+	{ .name = "8", .text = "Eight,", .wav = NULL },
+	{ .name = "9", .text = "Nine,", .wav = NULL },
+	{ .name = "30", .text = "Thirty,", .wav = NULL },
+	{ .name = "alt_set", .text = "Altimeter setting,", .wav = NULL },
+	{ .name = "apch", .text = "Approaching, ", .wav = NULL },
+	{ .name = "avail", .text = "Available, ", .wav = NULL },
+	{ .name = "caution", .text = "Caution!", .wav = NULL },
+	{ .name = "center", .text = "Center, ", .wav = NULL },
+	{ .name = "feet", .text = "Feet, ", .wav = NULL },
+	{ .name = "flaps", .text = "Flaps!", .wav = NULL },
+	{ .name = "hundred", .text = "Hundred, ", .wav = NULL },
+	{ .name = "left", .text = "Left, ", .wav = NULL },
+	{ .name = "long_land", .text = "Long landing! ", .wav = NULL },
+	{ .name = "meters", .text = "Meters, ", .wav = NULL },
+	{ .name = "on_rwy", .text = "On runway, ", .wav = NULL },
+	{ .name = "on_twy", .text = "On taxiway, ", .wav = NULL },
+	{ .name = "right", .text = "Right, ", .wav = NULL },
+	{ .name = "rmng", .text = "Remaining, ", .wav = NULL },
+	{ .name = "rwys", .text = "Runways, ", .wav = NULL },
+	{ .name = "pause", .text = " , , ,", .wav = NULL },
+	{ .name = "short_rwy", .text = "Short runway! ", .wav = NULL },
+	{ .name = "thousand", .text = "Thousand, ", .wav = NULL },
+	{ .name = "too_fast", .text = "Too fast! ", .wav = NULL },
+	{ .name = "too_high", .text = "Too high! ", .wav = NULL },
+	{ .name = "twy", .text = "Taxiway! ", .wav = NULL },
+	{ .name = "unstable", .text = "Unstable! ", .wav = NULL }
+};
+
+static list_t playback_queue;
+
 static bool_t enabled;
 static int min_engines;				/* count */
 static int min_mtow;				/* kg */
@@ -369,6 +464,7 @@ static uint64_t last_units_call = 0;
 
 static char xpdir[512] = { 0 };
 static char xpprefsdir[512] = { 0 };
+static char plugindir[512] = { 0 };
 static char acf_path[512] = { 0 };
 static char acf_filename[512] = { 0 };
 
@@ -515,16 +611,11 @@ free_strlist(char **comps, size_t len)
 }
 
 static void
-expand_strlist(char ***strlist, size_t *len)
+append_msglist(msg_type_t **msglist, size_t *len, msg_type_t msg)
 {
-	*strlist = realloc(*strlist, ++(*len) * sizeof (char *));
-}
-
-static void
-append_strlist(char ***strlist, size_t *len, char *str)
-{
-	expand_strlist(strlist, len);
-	(*strlist)[(*len) - 1] = str;
+	VERIFY(msg < NUM_MSGS);
+	*msglist = realloc(*msglist, ++(*len) * sizeof (msg_type_t));
+	(*msglist)[(*len) - 1] = msg;
 }
 
 static char *
@@ -705,11 +796,36 @@ conv_per_min(double x)
 }
 
 static void
-play_msg(char **msg, size_t msg_len, msg_prio_t msg_prio)
+play_msg(msg_type_t *msg, size_t msg_len, msg_prio_t prio)
 {
-	/* TODO: implement audio */
-	free_strlist(msg, msg_len);
-	UNUSED(msg_prio);
+	ann_t *ann;
+
+top:
+	ann = list_head(&playback_queue);
+	if (ann != NULL) {
+		if (ann->prio > prio) {
+			/* current message overrides us, be quiet */
+			free(msg);
+			return;
+		}
+		if (ann->prio < prio) {
+			/* we override the queue head, remove it and retry */
+			list_remove(&playback_queue, ann);
+			free(ann->msgs);
+			free(ann);
+			goto top;
+		}
+	}
+	/*
+	 * At this point the queue only contains messages of equal priotity
+	 * to our own, queue up at the end.
+	 */
+	ann = calloc(sizeof (*ann), 1);
+	ann->msgs = msg;
+	ann->num_msgs = msg_len;
+	ann->prio = prio;
+	ann->cur_msg = -1;
+	list_insert_tail(&playback_queue, ann);
 }
 
 static void
@@ -1841,20 +1957,20 @@ closest_rwy_end(vect2_t pos, const runway_t *rwy)
  * play_msg for announcing whether the runway is left, center or right.
  * If no suffix is present, returns NULL.
  */
-static const char *
+static msg_type_t
 rwy_lcr_msg(const char *str)
 {
 	ASSERT(str != NULL);
-	if (strlen(str) < 3)
-		return (NULL);
+	ASSERT(strlen(str) >= 3);
+
 	switch (str[2]) {
 	case 'L':
-		return ("left");
+		return (LEFT_MSG);
 	case 'R':
-		return ("right");
+		return (RIGHT_MSG);
 	default:
 		ASSERT(str[2] == 'C');
-		return ("center");
+		return (CENTER_MSG);
 	}
 }
 
@@ -1863,7 +1979,7 @@ rwy_lcr_msg(const char *str)
  * to speak it out loud.
  */
 static void
-rwy_id_to_msg(const char *rwy_id, char ***msg, size_t *len)
+rwy_id_to_msg(const char *rwy_id, msg_type_t **msg, size_t *len)
 {
 	ASSERT(rwy_id != NULL);
 	ASSERT(msg != NULL);
@@ -1871,25 +1987,29 @@ rwy_id_to_msg(const char *rwy_id, char ***msg, size_t *len)
 	ASSERT(strlen(rwy_id) >= 2);
 
 	char first_digit = rwy_id[0];
-	const char *lcr = rwy_lcr_msg(rwy_id);
+
+	if (!is_valid_rwy_ID(rwy_id)) {
+		logMsg("Warning: invalid runway ID encountered (%s)", rwy_id);
+		return;
+	}
 
 	if (first_digit != '0' || !us_runway_numbers)
-		append_strlist(msg, len, m_sprintf("%c", first_digit));
-	append_strlist(msg, len, m_sprintf("%c", rwy_id[1]));
-	if (lcr != NULL)
-		append_strlist(msg, len, strdup(lcr));
+		append_msglist(msg, len, first_digit - '0');
+	append_msglist(msg, len, rwy_id[1] - '0');
+	if (strlen(rwy_id) >= 3)
+		append_msglist(msg, len, rwy_lcr_msg(rwy_id));
 }
 
 /*
  * Converts a thousands value to the proper single-digit pronunciation
  */
 static void
-thousands_msg(char ***msg, size_t *len, unsigned thousands)
+thousands_msg(msg_type_t **msg, size_t *len, unsigned thousands)
 {
 	ASSERT(thousands < 100);
 	if (thousands >= 10)
-		append_strlist(msg, len, m_sprintf("%d", thousands / 10));
-	append_strlist(msg, len, m_sprintf("%d", thousands % 10));
+		append_msglist(msg, len, thousands / 10);
+	append_msglist(msg, len, thousands % 10);
 }
 
 /*
@@ -1906,7 +2026,7 @@ thousands_msg(char ***msg, size_t *len, unsigned thousands)
  * UNITS_APPEND_INTVAL seconds.
  */
 static void
-dist_to_msg(double dist, char ***msg, size_t *len, bool_t div_by_100)
+dist_to_msg(double dist, msg_type_t **msg, size_t *len, bool_t div_by_100)
 {
 	uint64_t now;
 
@@ -1918,15 +2038,15 @@ dist_to_msg(double dist, char ***msg, size_t *len, bool_t div_by_100)
 			double dist_ft = MET2FEET(dist);
 			if (dist_ft >= 1000) {
 				thousands_msg(msg, len, dist_ft / 1000);
-				append_strlist(msg, len, "thousand");
+				append_msglist(msg, len, THOUSAND_MSG);
 			} else if (dist_ft >= 500) {
-				append_strlist(msg, len, strdup("5"));
-				append_strlist(msg, len, strdup("hundred"));
+				append_msglist(msg, len, FIVE_MSG);
+				append_msglist(msg, len, HUNDRED_MSG);
 			} else if (dist_ft >= 100) {
-				append_strlist(msg, len, strdup("1"));
-				append_strlist(msg, len, strdup("hundred"));
+				append_msglist(msg, len, ONE_MSG);
+				append_msglist(msg, len, HUNDRED_MSG);
 			} else {
-				append_strlist(msg, len, strdup("0"));
+				append_msglist(msg, len, ZERO_MSG);
 			}
 		} else {
 			int dist_300incr = ((int)(dist / 300)) * 300;
@@ -1935,28 +2055,25 @@ dist_to_msg(double dist, char ***msg, size_t *len, bool_t div_by_100)
 
 			if (dist_thousands > 0 && dist_hundreds > 0) {
 				thousands_msg(msg, len, dist_thousands);
-				append_strlist(msg, len, strdup("thousand"));
-				append_strlist(msg, len,
-				    m_sprintf("%d", dist_hundreds / 100));
-				append_strlist(msg, len, strdup("hundred"));
+				append_msglist(msg, len, THOUSAND_MSG);
+				append_msglist(msg, len, dist_hundreds / 100);
+				append_msglist(msg, len, HUNDRED_MSG);
 			} else if (dist_thousands > 0) {
 				thousands_msg(msg, len, dist_thousands);
-				append_strlist(msg, len, strdup("thousand"));
+				append_msglist(msg, len, THOUSAND_MSG);
 			} else if (dist >= 100) {
 				if (dist_hundreds > 0) {
-					append_strlist(msg, len, m_sprintf("%d",
-					    dist_hundreds / 100));
-					append_strlist(msg, len,
-					    strdup("hundred"));
+					append_msglist(msg, len,
+					    dist_hundreds / 100);
+					append_msglist(msg, len, HUNDRED_MSG);
 				} else {
-					append_strlist(msg, len, strdup("1"));
-					append_strlist(msg, len,
-					    strdup("hundred"));
+					append_msglist(msg, len, ONE_MSG);
+					append_msglist(msg, len, HUNDRED_MSG);
 				}
 			} else if (dist >= 30) {
-				append_strlist(msg, len, strdup("30"));
+				append_msglist(msg, len, THIRTY_MSG);
 			} else {
-				append_strlist(msg, len, strdup("0"));
+				append_msglist(msg, len, ZERO_MSG);
 			}
 		}
 	} else {
@@ -1972,14 +2089,14 @@ dist_to_msg(double dist, char ***msg, size_t *len, bool_t div_by_100)
 		}
 		if (thousands != 0) {
 			thousands_msg(msg, len, thousands);
-			append_strlist(msg, len, strdup("thousand"));
+			append_msglist(msg, len, THOUSAND_MSG);
 		}
 		if (hundreds != 0) {
-			append_strlist(msg, len, m_sprintf("%d", hundreds));
-			append_strlist(msg, len, strdup("hundred"));
+			append_msglist(msg, len, hundreds);
+			append_msglist(msg, len, HUNDRED_MSG);
 		}
 		if (thousands == 0 && hundreds == 0)
-			append_strlist(msg, len, strdup("0"));
+			append_msglist(msg, len, ZERO_MSG);
 	}
 
 	/* Optionally append units if it is time to do so */
@@ -1987,9 +2104,9 @@ dist_to_msg(double dist, char ***msg, size_t *len, bool_t div_by_100)
 	if (now - last_units_call > SEC2USEC(UNITS_APPEND_INTVAL) &&
 	    speak_units) {
 		if (use_imperial)
-			append_strlist(msg, len, strdup("feet"));
+			append_msglist(msg, len, FEET_MSG);
 		else
-			append_strlist(msg, len, strdup("meters"));
+			append_msglist(msg, len, METERS_MSG);
 	}
 	last_units_call = now;
 }
@@ -2094,7 +2211,7 @@ do_approaching_rwy(const airport_t *arpt, const runway_t *rwy,
 		return;
 
 	if (!on_ground || XPLMGetDatad(drs.gs) < SPEED_THRESH) {
-		char **msg = NULL;
+		msg_type_t *msg = NULL;
 		size_t msg_len = 0;
 		msg_prio_t msg_prio;
 		bool_t annunciated_rwys = B_TRUE;
@@ -2154,14 +2271,14 @@ do_approaching_rwy(const airport_t *arpt, const runway_t *rwy,
 			double dist_ND = NAN;
 			nd_alert_level_t level = ND_ALERT_ROUTINE;
 
-			append_strlist(&msg, &msg_len, strdup("apch"));
+			append_msglist(&msg, &msg_len, APCH_MSG);
 			rwy_id_to_msg(rwy_end->id, &msg, &msg_len);
 			msg_prio = MSG_PRIO_LOW;
 
 			if (!on_ground && rwy->length < min_landing_dist) {
 				dist_to_msg(rwy->length, &msg, &msg_len,
 				    B_TRUE);
-				append_strlist(&msg, &msg_len, strdup("avail"));
+				append_msglist(&msg, &msg_len, AVAIL_MSG);
 				msg_prio = MSG_PRIO_HIGH;
 				dist_ND = rwy->length;
 				level = ND_ALERT_NONROUTINE;
@@ -2246,7 +2363,7 @@ static void
 perform_on_rwy_ann(const char *rwy_id, vect2_t pos_v, vect2_t opp_thr_v,
     bool_t no_flap_check, bool_t non_routine)
 {
-	char **msg = NULL;
+	msg_type_t *msg = NULL;
 	size_t msg_len = 0;
 	double dist = 10000000, dist_ND = NAN;
 	double flaprqst = XPLMGetDatad(drs.flaprqst);
@@ -2255,7 +2372,7 @@ perform_on_rwy_ann(const char *rwy_id, vect2_t pos_v, vect2_t opp_thr_v,
 	    ND_ALERT_ROUTINE);
 
 	ASSERT(rwy_id != NULL);
-	append_strlist(&msg, &msg_len, strdup("on_rwy"));
+	append_msglist(&msg, &msg_len, ON_RWY_MSG);
 
 	if (!IS_NULL_VECT(pos_v) && !IS_NULL_VECT(opp_thr_v))
 		dist = vect2_abs(vect2_sub(opp_thr_v, pos_v));
@@ -2265,13 +2382,13 @@ perform_on_rwy_ann(const char *rwy_id, vect2_t pos_v, vect2_t opp_thr_v,
 		dist_to_msg(dist, &msg, &msg_len, B_TRUE);
 		dist_ND = dist;
 		level = ND_ALERT_NONROUTINE;
-		append_strlist(&msg, &msg_len, strdup("rmng"));
+		append_msglist(&msg, &msg_len, RMNG_MSG);
 	}
 
 	if ((flaprqst < min_takeoff_flap || flaprqst > max_takeoff_flap) &&
 	    !landing && !gpws_flaps_ovrd() && !no_flap_check) {
-		append_strlist(&msg, &msg_len, strdup("flaps"));
-		append_strlist(&msg, &msg_len, strdup("flaps"));
+		append_msglist(&msg, &msg_len, FLAPS_MSG);
+		append_msglist(&msg, &msg_len, FLAPS_MSG);
 		allow_on_rwy_ND_alert = B_FALSE;
 		ND_alert(ND_ALERT_FLAPS, ND_ALERT_CAUTION, NULL, NAN);
 	}
@@ -2350,11 +2467,11 @@ takeoff_rwy_dist_check(vect2_t opp_thr_v, vect2_t pos_v)
 
 	double dist = vect2_abs(vect2_sub(opp_thr_v, pos_v));
 	if (dist < min_takeoff_dist) {
-		char **msg = NULL;
+		msg_type_t *msg = NULL;
 		size_t msg_len = 0;
-		append_strlist(&msg, &msg_len, strdup("caution"));
-		append_strlist(&msg, &msg_len, strdup("short_rwy"));
-		append_strlist(&msg, &msg_len, strdup("short_rwy"));
+		append_msglist(&msg, &msg_len, CAUTION_MSG);
+		append_msglist(&msg, &msg_len, SHORT_RWY_MSG);
+		append_msglist(&msg, &msg_len, SHORT_RWY_MSG);
 		play_msg(msg, msg_len, MSG_PRIO_HIGH);
 		ND_alert(ND_ALERT_SHORT_RWY, ND_ALERT_CAUTION, NULL, NAN);
 	}
@@ -2362,8 +2479,7 @@ takeoff_rwy_dist_check(vect2_t opp_thr_v, vect2_t pos_v)
 }
 
 static void
-perform_rwy_dist_remaining_callouts(vect2_t opp_thr_v, vect2_t pos_v,
-    char **prepend, size_t prepend_len)
+perform_rwy_dist_remaining_callouts(vect2_t opp_thr_v, vect2_t pos_v)
 {
 	ASSERT(!IS_NULL_VECT(opp_thr_v));
 	ASSERT(!IS_NULL_VECT(pos_v));
@@ -2371,7 +2487,7 @@ perform_rwy_dist_remaining_callouts(vect2_t opp_thr_v, vect2_t pos_v,
 	double dist = vect2_abs(vect2_sub(opp_thr_v, pos_v));
 	accel_stop_dist_t *the_asd = NULL;
 	double maxdelta = 1000000;
-	char **msg = NULL;
+	msg_type_t *msg = NULL;
 	size_t msg_len = 0;
 
 	for (int i = 0; !isnan(accel_stop_distances[i].min); i++) {
@@ -2380,8 +2496,7 @@ perform_rwy_dist_remaining_callouts(vect2_t opp_thr_v, vect2_t pos_v,
 			the_asd = asd;
 			break;
 		}
-		if (prepend != NULL && dist > asd->min &&
-		    dist - asd->min < maxdelta) {
+		if (dist > asd->min && dist - asd->min < maxdelta) {
 			the_asd = asd;
 			maxdelta = dist - asd->min;
 		}
@@ -2392,14 +2507,9 @@ perform_rwy_dist_remaining_callouts(vect2_t opp_thr_v, vect2_t pos_v,
 	if (the_asd == NULL || the_asd->ann)
 		return;
 
-	if (prepend != NULL) {
-		msg = prepend;
-		msg_len = prepend_len;
-	}
-
 	the_asd->ann = B_TRUE;
 	dist_to_msg(dist, &msg, &msg_len, B_FALSE);
-	append_strlist(&msg, &msg_len, strdup("rmng"));
+	append_msglist(&msg, &msg_len, RMNG_MSG);
 	play_msg(msg, msg_len, MSG_PRIO_MED);
 }
 
@@ -2460,8 +2570,7 @@ stop_check(const runway_t *rwy, int end, double hdg, vect2_t pos_v)
 		 */
 		if (dist < IMMEDIATE_STOP_DIST && rhdg < HDG_ALIGN_THRESH &&
 		    gs > SLOW_ROLL_THRESH)
-			perform_rwy_dist_remaining_callouts(opp_thr_v, pos_v,
-			    NULL, 0);
+			perform_rwy_dist_remaining_callouts(opp_thr_v, pos_v);
 		else
 			stop_check_reset(arpt_id, rwy_end->id);
 		return;
@@ -2493,12 +2602,12 @@ stop_check(const runway_t *rwy, int end, double hdg, vect2_t pos_v)
 			    MIN(rwy->length, min_landing_dist));
 			if (dist < dist_lim) {
 				if (!long_landing_ann) {
-					char **msg = NULL;
+					msg_type_t *msg = NULL;
 					size_t msg_len = 0;
-					append_strlist(&msg, &msg_len,
-					    strdup("long_land"));
-					append_strlist(&msg, &msg_len,
-					    strdup("long_land"));
+					append_msglist(&msg, &msg_len,
+					    LONG_LAND_MSG);
+					append_msglist(&msg, &msg_len,
+					    LONG_LAND_MSG);
 					play_msg(msg, msg_len, MSG_PRIO_HIGH);
 					dbg_log("ann_state", 1,
 					    "long_landing_ann = true");
@@ -2507,7 +2616,7 @@ stop_check(const runway_t *rwy, int end, double hdg, vect2_t pos_v)
 					    ND_ALERT_CAUTION, NULL, NAN);
 				}
 				perform_rwy_dist_remaining_callouts(opp_thr_v,
-				    pos_v, NULL, 0);
+				    pos_v);
 			}
 		}
 		return;
@@ -2544,7 +2653,7 @@ stop_check(const runway_t *rwy, int end, double hdg, vect2_t pos_v)
 	    (!landing && dist < min_rotation_dist &&
 	    XPLMGetDatad(drs.rad_alt) < RADALT_GRD_THRESH &&
 	    rpitch < min_rotation_angle))
-		perform_rwy_dist_remaining_callouts(opp_thr_v, pos_v, NULL, 0);
+		perform_rwy_dist_remaining_callouts(opp_thr_v, pos_v);
 }
 
 static bool_t
@@ -2625,13 +2734,13 @@ ground_on_runway_aligned(void)
 	    ((!landing && XPLMGetDatad(drs.gs) >= SPEED_THRESH) ||
 	    (landing && XPLMGetDatad(drs.gs) >= HIGH_SPEED_THRESH))) {
 		if (!on_twy_ann) {
-			char **msg = NULL;
+			msg_type_t *msg = NULL;
 			size_t msg_len = 0;
 
 			on_twy_ann = B_TRUE;
-			append_strlist(&msg, &msg_len, strdup("caution"));
-			append_strlist(&msg, &msg_len, strdup("on_twy"));
-			append_strlist(&msg, &msg_len, strdup("on_twy"));
+			append_msglist(&msg, &msg_len, CAUTION_MSG);
+			append_msglist(&msg, &msg_len, ON_TWY_MSG);
+			append_msglist(&msg, &msg_len, ON_TWY_MSG);
 			play_msg(msg, msg_len, MSG_PRIO_HIGH);
 			ND_alert(ND_ALERT_ON, ND_ALERT_CAUTION, NULL, NAN);
 		}
@@ -2827,9 +2936,9 @@ apch_spd_limit(double height_abv_thr)
 static bool_t
 apch_config_chk(const char *arpt_id, const char *rwy_id, double height_abv_thr,
     double gpa_act, double rwy_gpa, double win_ceil, double win_floor,
-    char ***msg, size_t *msg_len, avl_tree_t *flap_ann_table, avl_tree_t *gpa_ann_table,
-    avl_tree_t *spd_ann_table, bool_t critical, bool_t add_pause,
-    double dist_from_thr, bool_t check_gear)
+    msg_type_t **msg, size_t *msg_len, avl_tree_t *flap_ann_table,
+    avl_tree_t *gpa_ann_table, avl_tree_t *spd_ann_table, bool_t critical,
+    bool_t add_pause, double dist_from_thr, bool_t check_gear)
 {
 	ASSERT(arpt_id != NULL);
 	ASSERT(rwy_id != NULL);
@@ -2854,20 +2963,18 @@ apch_config_chk(const char *arpt_id, const char *rwy_id, double height_abv_thr,
 				    "FLAPS: flaps ovrd active");
 			} else {
 				if (!critical) {
-					append_strlist(msg, msg_len,
-					    strdup("flaps"));
+					append_msglist(msg, msg_len, FLAPS_MSG);
 					if (add_pause)
-						append_strlist(msg, msg_len,
-						    strdup("flaps"));
-					append_strlist(msg, msg_len,
-					    strdup("flaps"));
+						append_msglist(msg, msg_len,
+						    PAUSE_MSG);
+					append_msglist(msg, msg_len, FLAPS_MSG);
 					ND_alert(ND_ALERT_FLAPS,
 					    ND_ALERT_CAUTION, NULL, NAN);
 				} else {
-					append_strlist(msg, msg_len,
-					    strdup("unstable"));
-					append_strlist(msg, msg_len,
-					    strdup("unstable"));
+					append_msglist(msg, msg_len,
+					    UNSTABLE_MSG);
+					append_msglist(msg, msg_len,
+					    UNSTABLE_MSG);
 					ND_alert(ND_ALERT_UNSTABLE,
 					    ND_ALERT_CAUTION, NULL, NAN);
 				}
@@ -2886,20 +2993,20 @@ apch_config_chk(const char *arpt_id, const char *rwy_id, double height_abv_thr,
 				    "TOO HIGH: terr ovrd active");
 			} else {
 				if (!critical) {
-					append_strlist(msg, msg_len,
-					    strdup("too_high"));
+					append_msglist(msg, msg_len,
+					    TOO_HIGH_MSG);
 					if (add_pause)
-						append_strlist(msg, msg_len,
-						    strdup("pause"));
-					append_strlist(msg, msg_len,
-					    strdup("too_high"));
+						append_msglist(msg, msg_len,
+						    PAUSE_MSG);
+					append_msglist(msg, msg_len,
+					    TOO_HIGH_MSG);
 					ND_alert(ND_ALERT_TOO_HIGH,
 					    ND_ALERT_CAUTION, NULL, NAN);
 				} else {
-					append_strlist(msg, msg_len,
-					    strdup("unstable"));
-					append_strlist(msg, msg_len,
-					    strdup("unstable"));
+					append_msglist(msg, msg_len,
+					    UNSTABLE_MSG);
+					append_msglist(msg, msg_len,
+					    UNSTABLE_MSG);
 					ND_alert(ND_ALERT_UNSTABLE,
 					    ND_ALERT_CAUTION, NULL, NAN);
 				}
@@ -2921,20 +3028,20 @@ apch_config_chk(const char *arpt_id, const char *rwy_id, double height_abv_thr,
 				    "TOO FAST: flaps ovrd active");
 			} else {
 				if (!critical) {
-					append_strlist(msg, msg_len,
-					    strdup("too_fast"));
+					append_msglist(msg, msg_len,
+					    TOO_FAST_MSG);
 					if (add_pause)
-						append_strlist(msg, msg_len,
-						    strdup("pause"));
-					append_strlist(msg, msg_len,
-					    strdup("too_fast"));
+						append_msglist(msg, msg_len,
+						    PAUSE_MSG);
+					append_msglist(msg, msg_len,
+					    TOO_FAST_MSG);
 					ND_alert(ND_ALERT_TOO_FAST,
 					    ND_ALERT_CAUTION, NULL, NAN);
 				} else {
-					append_strlist(msg, msg_len,
-					    strdup("unstable"));
-					append_strlist(msg, msg_len,
-					    strdup("unstable"));
+					append_msglist(msg, msg_len,
+					    UNSTABLE_MSG);
+					append_msglist(msg, msg_len,
+					    UNSTABLE_MSG);
 					ND_alert(ND_ALERT_UNSTABLE,
 					    ND_ALERT_CAUTION, NULL, NAN);
 				}
@@ -2963,7 +3070,7 @@ air_runway_approach_arpt_rwy(const airport_t *arpt, const runway_t *rwy,
 	bool_t in_prox_bbox = vect2_in_poly(pos_v, rwy_end->apch_bbox);
 
 	if (in_prox_bbox && fabs(rel_hdg(hdg, rwy_hdg)) < HDG_ALIGN_THRESH) {
-		char **msg = NULL;
+		msg_type_t *msg = NULL;
 		size_t msg_len = 0;
 		msg_prio_t msg_prio = MSG_PRIO_MED;
 		vect2_t thr_v = rwy_end->thr_v;
@@ -3016,9 +3123,9 @@ air_runway_approach_arpt_rwy(const airport_t *arpt, const runway_t *rwy,
 		    alt - telev > SHORT_RWY_APCH_ALT_MIN &&
 		    rwy_end->land_len < min_landing_dist &&
 		    !air_apch_short_rwy_ann) {
-			append_strlist(&msg, &msg_len, strdup("caution"));
-			append_strlist(&msg, &msg_len, strdup("short_rwy"));
-			append_strlist(&msg, &msg_len, strdup("short_rwy"));
+			append_msglist(&msg, &msg_len, CAUTION_MSG);
+			append_msglist(&msg, &msg_len, SHORT_RWY_MSG);
+			append_msglist(&msg, &msg_len, SHORT_RWY_MSG);
 			msg_prio = MSG_PRIO_HIGH;
 			air_apch_short_rwy_ann = B_TRUE;
 			ND_alert(ND_ALERT_SHORT_RWY, ND_ALERT_CAUTION,
@@ -3118,15 +3225,13 @@ air_runway_approach(void)
 			/* only annunciate if we're above the minimum height */
 			if (XPLMGetDatad(drs.rad_alt) >= OFF_RWY_HEIGHT_MIN &&
 			    !off_rwy_ann && !gpws_terr_ovrd()) {
-				char **msg = NULL;
+				msg_type_t *msg = NULL;
 				size_t msg_len = 0;
 
-				append_strlist(&msg, &msg_len,
-				    strdup("caution"));
-				append_strlist(&msg, &msg_len, strdup("twy"));
-				append_strlist(&msg, &msg_len,
-				    strdup("caution"));
-				append_strlist(&msg, &msg_len, strdup("twy"));
+				append_msglist(&msg, &msg_len, CAUTION_MSG);
+				append_msglist(&msg, &msg_len, TWY_MSG);
+				append_msglist(&msg, &msg_len, CAUTION_MSG);
+				append_msglist(&msg, &msg_len, TWY_MSG);
 				play_msg(msg, msg_len, MSG_PRIO_HIGH);
 				ND_alert(ND_ALERT_TWY, ND_ALERT_CAUTION,
 				    NULL, NAN);
@@ -3307,10 +3412,9 @@ altimeter_setting(void)
 			    d_qnh > ALTIMETER_SETTING_QNH_ERR_LIMIT ||
 			    /* Set baro is out of bounds for QFE */
 			    d_qfe > ALTM_SETTING_QFE_ERR_LIMIT) {
-				char **msg = NULL;
+				msg_type_t *msg = NULL;
 				size_t msg_len = 0;
-				append_strlist(&msg, &msg_len,
-				    strdup("alt_set"));
+				append_msglist(&msg, &msg_len, ALT_SET_MSG);
 				play_msg(msg, msg_len, MSG_PRIO_LOW);
 				ND_alert(ND_ALERT_ALTM_SETTING,
 				    ND_ALERT_CAUTION, NULL, NAN);
@@ -3322,10 +3426,9 @@ altimeter_setting(void)
 			    STD_BARO_REF);
 			dbg_log("altimeter", 1, "fl check; d_ref: %.1f", d_ref);
 			if (d_ref > ALTM_SETTING_BARO_ERR_LIMIT) {
-				char **msg = NULL;
+				msg_type_t *msg = NULL;
 				size_t msg_len = 0;
-				append_strlist(&msg, &msg_len,
-				    strdup("alt_set"));
+				append_msglist(&msg, &msg_len, ALT_SET_MSG);
 				play_msg(msg, msg_len, MSG_PRIO_LOW);
 				ND_alert(ND_ALERT_ALTM_SETTING,
 				    ND_ALERT_CAUTION, NULL, NAN);
@@ -3552,6 +3655,86 @@ log_init_msg(bool_t display, int timeout, int man_sect_number,
 	}
 }
 
+static float
+snd_sched_cb(float elapsed_since_last_call, float elapsed_since_last_floop,
+    int counter, void *refcon)
+{
+	int64_t now;
+	ann_t *ann;
+
+	UNUSED(elapsed_since_last_call);
+	UNUSED(elapsed_since_last_floop);
+	UNUSED(counter);
+	UNUSED(refcon);
+
+	ann = list_head(&playback_queue);
+	if (ann == NULL)
+		return (-1.0);
+	now = microclock();
+
+	ASSERT(ann->cur_msg < ann->num_msgs);
+	if (ann->cur_msg == -1 ||
+	    now - ann->started > voice_msgs[ann->cur_msg].wav->duration) {
+		if (ann->cur_msg >= 0)
+			xraas_wav_stop(voice_msgs[ann->cur_msg].wav);
+		ann->cur_msg++;
+		if (ann->cur_msg < ann->num_msgs) {
+			ann->started = now;
+			xraas_wav_play(voice_msgs[ann->cur_msg].wav,
+			    voice_volume);
+		} else {
+			list_remove(&playback_queue, ann);
+			free(ann->msgs);
+			free(ann);
+		}
+	}
+
+	return (-1.0);
+}
+
+static bool_t
+snd_sys_init(void)
+{
+	char *gender_dir = (voice_female ? "female" : "male");
+
+	if (use_tts)
+		return (B_TRUE);
+
+	for (msg_type_t msg = 0; msg < NUM_MSGS; msg++) {
+		char fname[32];
+		char *pathname;
+
+		ASSERT(voice_msgs[msg].wav == NULL);
+		snprintf(fname, sizeof (fname), "%s.wav", voice_msgs[msg].name);
+		pathname = mkpathname(plugindir, "msgs", gender_dir, fname,
+		    NULL);
+		voice_msgs[msg].wav = xraas_wav_load(pathname);
+		free(pathname);
+		if (voice_msgs[msg].wav == NULL)
+			return (B_FALSE);
+	}
+
+	list_create(&playback_queue, sizeof (ann_t), offsetof(ann_t, node));
+	XPLMRegisterFlightLoopCallback(snd_sched_cb, -1.0, NULL);
+
+	return (B_TRUE);
+}
+
+static void
+snd_sys_fini(void)
+{
+	if (use_tts)
+		return;
+
+	XPLMUnregisterFlightLoopCallback(snd_sched_cb, NULL);
+	list_destroy(&playback_queue);
+
+	for (msg_type_t msg = 0; msg < NUM_MSGS; msg++) {
+		xraas_wav_free(voice_msgs[msg].wav);
+		voice_msgs[msg].wav = NULL;
+	}
+}
+
 /*
  * Check if the aircraft is a helicopter (or at least says it flies like one).
  */
@@ -3691,8 +3874,7 @@ load_config(bool_t global_cfg)
 	if (global_cfg)
 		cfgname = mkpathname(acf_path, "X-RAAS.cfg", NULL);
 	else
-		cfgname = mkpathname(xpdir, "Resources", "plugins", "X-RAAS",
-		    "X-RAAS.cfg", NULL);
+		cfgname = mkpathname(plugindir, "X-RAAS.cfg", NULL);
 
 	cfg_f = fopen(cfgname, "r");
 	if (cfg_f != NULL) {
@@ -3711,8 +3893,8 @@ load_config(bool_t global_cfg)
 			return (B_FALSE);
 		}
 		process_conf(conf);
-		fclose(cfg_f);
 		xraas_free_conf(conf);
+		fclose(cfg_f);
 	}
 	free(cfgname);
 	return (B_TRUE);
@@ -3747,6 +3929,7 @@ xraas_init(void)
 		return;
 
 	raas_dr_reset();
+	snd_sys_init();
 
 	if (chk_acf_is_helo() && !allow_helos)
 		return;
@@ -3805,6 +3988,8 @@ xraas_fini(void)
 	if (!enabled)
 		return;
 
+	snd_sys_fini();
+
 	if (bus_loaded != -1) {
 		float bus_load;
 		XPLMGetDatavf(drs.plug_bus_load, &bus_load, bus_loaded, 1);
@@ -3847,18 +4032,37 @@ xraas_fini(void)
 		init_msg = NULL;
 	}
 
+	for (ann_t *ann = list_head(&playback_queue); ann != NULL;
+	    ann = list_head(&playback_queue)) {
+		list_remove(&playback_queue, ann);
+		free(ann->msgs);
+		free(ann);
+	}
+
 	XPLMUnregisterFlightLoopCallback(raas_exec_cb, NULL);
 }
 
 PLUGIN_API int
 XPluginStart(char *outName, char *outSig, char *outDesc)
 {
+	char *p;
+
 	strcpy(outName, XRAAS2_PLUGIN_NAME);
 	strcpy(outSig, XRAAS2_PLUGIN_SIG);
 	strcpy(outDesc, XRAAS2_PLUGIN_DESC);
 
 	XPLMGetSystemPath(xpdir);
 	XPLMGetPrefsPath(xpprefsdir);
+
+	XPLMGetPluginInfo(XPLMGetMyID(), NULL, plugindir, NULL, NULL);
+	/* cut off the trailing path component (our filename) */
+	if ((p = strrchr(plugindir, DIRSEP)) != NULL)
+		*p = '\0';
+	/* cut off an optional '64' trailing component */
+	if ((p = strrchr(plugindir, DIRSEP)) != NULL) {
+		if (strcmp(p + 1, "64") == 0)
+			*p = '\0';
+	}
 
 	return (1);
 }

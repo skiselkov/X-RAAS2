@@ -46,11 +46,15 @@ typedef struct wav_fmt_hdr {
 
 typedef struct wav_s {
 	wav_fmt_hdr_t	fmt;
+	double		duration;	/* in seconds */
 	ALuint		albuf;
+	ALuint		alsrc;
 } wav_t;
 
 wav_t *xraas_wav_load(const char *filename);
 void xraas_wav_free(wav_t *wav);
+void xraas_wav_play(wav_t *wav, double gain);
+void xraas_wav_stop(wav_t *wav);
 
 #ifdef	__cplusplus
 }
