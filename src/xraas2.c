@@ -38,7 +38,6 @@
 #include "conf.h"
 #include "geom.h"
 #include "helpers.h"
-#include "htbl.h"
 #include "list.h"
 #include "log.h"
 #include "math.h"
@@ -261,6 +260,11 @@ typedef struct tile_s {
 	avl_node_t	node;
 } tile_t;
 
+typedef struct rwy_key_s {
+	char		key[RWY_ID_KEY_SZ];
+	int		value;
+} rwy_key_t;
+
 static bool_t enabled;
 static int min_engines;				/* count */
 static int min_mtow;				/* kg */
@@ -286,14 +290,14 @@ static double min_takeoff_flap;			/* ratio, 0-1 */
 static double max_takeoff_flap;			/* ratio, 0-1 */
 
 static bool_t nd_alerts_enabled;
-static int nd_alert_filter;
+static int nd_alert_filter;			/* nd_alert_level_t */
 static bool_t nd_alert_overlay_enabled;
 static bool_t nd_alert_overlay_force;
 static int nd_alert_timeout;			/* seconds */
 
 static int on_rwy_warn_initial;			/* seconds */
 static int on_rwy_warn_repeat;			/* seconds */
-static int on_rwy_warn_max_n;
+static int on_rwy_warn_max_n;			/* count */
 
 static bool_t too_high_enabled;
 static bool_t too_fast_enabled;
@@ -315,21 +319,21 @@ static double long_land_lim_fract;		/* fraction, 0-1 */
 //static bool_t debug_graphical = B_FALSE;
 //static int debug_graphical_bg = 0;
 
-static htbl_t on_rwy_ann;
-static htbl_t apch_rwy_ann;
+static avl_tree_t on_rwy_ann;
+static avl_tree_t apch_rwy_ann;
 static bool_t apch_rwys_ann = B_FALSE;     /* when multiple met the criteria */
-static htbl_t air_apch_rwy_ann ;
+static avl_tree_t air_apch_rwy_ann ;
 static bool_t air_apch_rwys_ann = B_FALSE; /* when multiple met the criteria */
 static bool_t air_apch_short_rwy_ann = B_FALSE;
-static htbl_t air_apch_flap1_ann;
-static htbl_t air_apch_flap2_ann;
-static htbl_t air_apch_flap3_ann;
-static htbl_t air_apch_gpa1_ann;
-static htbl_t air_apch_gpa2_ann;
-static htbl_t air_apch_gpa3_ann;
-static htbl_t air_apch_spd1_ann;
-static htbl_t air_apch_spd2_ann;
-static htbl_t air_apch_spd3_ann;
+static avl_tree_t air_apch_flap1_ann;
+static avl_tree_t air_apch_flap2_ann;
+static avl_tree_t air_apch_flap3_ann;
+static avl_tree_t air_apch_gpa1_ann;
+static avl_tree_t air_apch_gpa2_ann;
+static avl_tree_t air_apch_gpa3_ann;
+static avl_tree_t air_apch_spd1_ann;
+static avl_tree_t air_apch_spd2_ann;
+static avl_tree_t air_apch_spd3_ann;
 static bool_t on_twy_ann = B_FALSE;
 static bool_t long_landing_ann = B_FALSE;
 static bool_t short_rwy_takeoff_chk = B_FALSE;
@@ -338,7 +342,7 @@ static int on_rwy_warnings = 0;
 static bool_t off_rwy_ann = B_FALSE;
 static char rejected_takeoff[8] = { 0 };
 
-static htbl_t accel_stop_max_spd;
+static avl_tree_t accel_stop_max_spd;
 static int accel_stop_ann_initial = 0;
 static bool_t departed = B_FALSE;
 static bool_t arriving = B_FALSE;
@@ -1990,19 +1994,90 @@ dist_to_msg(double dist, char ***msg, size_t *len, bool_t div_by_100)
 	last_units_call = now;
 }
 
-static void
-rwy_id_key(const char *arpt_icao, const char *rwy_id, char key[RWY_ID_KEY_SZ])
+static int
+rwy_id_key_compar(const void *a, const void *b)
 {
-	ASSERT(strlen(arpt_icao) <= 4);
-	ASSERT(strlen(rwy_id) <= 4);
-	snprintf(key, 16, "%s/%s", arpt_icao, rwy_id);
+	const rwy_key_t *ka = a, *kb = b;
+	int res = strcmp(ka->key, kb->key);
+	if (res < 0)
+		return (-1);
+	else if (res == 0)
+		return (0);
+	else
+		return (1);
+}
+
+static void
+rwy_key_tbl_create(avl_tree_t *tree)
+{
+	avl_create(tree, rwy_id_key_compar, sizeof (rwy_key_t),
+	    offsetof(rwy_key_t, key));
+}
+
+static void
+rwy_key_tbl_destroy(avl_tree_t *tree)
+{
+	void *cookie;
+	rwy_key_t *key;
+
+	while ((key = avl_destroy_nodes(tree, &cookie)) != NULL)
+		free(key);
+	avl_destroy(tree);
+}
+
+static void
+rwy_key_tbl_empty(avl_tree_t *tree)
+{
+	for (rwy_key_t *key; (key = avl_first(tree)) != NULL;) {
+		avl_remove(tree, key);
+		free(key);
+	}
+}
+
+static void
+rwy_key_tbl_remove(avl_tree_t *tree, const char *arpt_id, const char *rwy_id)
+{
+	rwy_key_t srch, *key;
+
+	snprintf(srch.key, sizeof (srch.key), "%s/%s", arpt_id, rwy_id);
+	if ((key = avl_find(tree, &srch, NULL)) != NULL) {
+		avl_remove(tree, key);
+		free(key);
+	}
+}
+
+static void
+rwy_key_tbl_set(avl_tree_t *tree, const char *arpt_id, const char *rwy_id,
+    int value)
+{
+	rwy_key_t srch, *key;
+	avl_index_t where;
+
+	snprintf(srch.key, sizeof (srch.key), "%s/%s", arpt_id, rwy_id);
+	if ((key = avl_find(tree, &srch, &where)) == NULL) {
+		key = calloc(sizeof (*key), 1);
+		snprintf(key->key, sizeof (key->key), "%s/%s", arpt_id, rwy_id);
+		avl_insert(tree, key, where);
+	}
+	key->value = value;
+}
+
+static int
+rwy_key_tbl_get(avl_tree_t *tree, const char *arpt_id, const char *rwy_id)
+{
+	rwy_key_t srch, *key;
+	avl_index_t where;
+
+	snprintf(srch.key, sizeof (srch.key), "%s/%s", arpt_id, rwy_id);
+	if ((key = avl_find(tree, &srch, &where)) == NULL)
+		return (0);
+	return (key->value);
 }
 
 static void
 do_approaching_rwy(const airport_t *arpt, const runway_t *rwy,
     int end, bool_t on_ground)
 {
-	char key[RWY_ID_KEY_SZ];
 	const runway_end_t *rwy_end;
 
 	ASSERT(arpt != NULL);
@@ -2010,11 +2085,12 @@ do_approaching_rwy(const airport_t *arpt, const runway_t *rwy,
 	ASSERT(end == 0 || end == 1);
 
 	rwy_end = &rwy->ends[end];
-	rwy_id_key(arpt->icao, rwy_end->id, key);
 
-	if ((on_ground && (htbl_lookup(&apch_rwy_ann, key) != NULL ||
-	    htbl_lookup(&on_rwy_ann, key) != NULL)) ||
-	    (!on_ground && htbl_lookup(&air_apch_rwy_ann, key) != NULL))
+	if ((on_ground && (rwy_key_tbl_get(&apch_rwy_ann, arpt->icao,
+	    rwy_end->id) != 0 ||
+	    rwy_key_tbl_get(&on_rwy_ann, arpt->icao, rwy_end->id) != 0)) ||
+	    (!on_ground && rwy_key_tbl_get(&air_apch_rwy_ann, arpt->icao,
+	    rwy_end->id) != 0))
 		return;
 
 	if (!on_ground || XPLMGetDatad(drs.gs) < SPEED_THRESH) {
@@ -2028,20 +2104,21 @@ do_approaching_rwy(const airport_t *arpt, const runway_t *rwy,
 			return;
 
 		/* Multiple runways being approached? */
-		if ((on_ground && htbl_count(&apch_rwy_ann) != 0) ||
-		    (!on_ground && htbl_count(&air_apch_rwy_ann) != 0)) {
+		if ((on_ground && avl_numnodes(&apch_rwy_ann) != 0) ||
+		    (!on_ground && avl_numnodes(&air_apch_rwy_ann) != 0)) {
 			if (on_ground)
 				/*
 				 * On the ground we don't want to re-annunciate
 				 * "approaching" once the runway is resolved.
 				 */
-				htbl_set(&apch_rwy_ann, key, (void *)B_TRUE);
+				rwy_key_tbl_set(&apch_rwy_ann, arpt->icao,
+				    rwy_end->id, B_TRUE);
 			else
 				/*
 				 * In the air, we DO want to re-annunciate
 				 * "approaching" once the runway is resolved
 				 */
-				htbl_empty(&air_apch_rwy_ann, NULL, NULL);
+				rwy_key_tbl_empty(&air_apch_rwy_ann);
 			/*
 			 * If the "approaching ..." annunciation for the
 			 * previous runway is still playing, try to modify
@@ -2060,18 +2137,20 @@ do_approaching_rwy(const airport_t *arpt, const runway_t *rwy,
 			end
 #endif
 			if (on_ground)
-				htbl_set(&apch_rwy_ann, key, (void *)B_TRUE);
+				rwy_key_tbl_set(&apch_rwy_ann, arpt->icao,
+				    rwy_end->id, B_TRUE);
 			else
-				htbl_set(&air_apch_rwy_ann, key,
-				    (void *)B_TRUE);
+				rwy_key_tbl_set(&air_apch_rwy_ann, arpt->icao,
+				    rwy_end->id, B_TRUE);
 
 			if (annunciated_rwys)
 				return;
 		}
 
-		if ((on_ground && htbl_lookup(&apch_rwy_ann, key) == NULL) ||
-		    (!on_ground && htbl_lookup(&air_apch_rwy_ann, key) ==
-		    NULL) || !annunciated_rwys) {
+		if ((on_ground && rwy_key_tbl_get(&apch_rwy_ann, arpt->icao,
+		    rwy_end->id) == 0) || (!on_ground && rwy_key_tbl_get(
+		    &air_apch_rwy_ann, arpt->icao, rwy_end->id) == 0) ||
+		    !annunciated_rwys) {
 			double dist_ND = NAN;
 			nd_alert_level_t level = ND_ALERT_ROUTINE;
 
@@ -2094,9 +2173,10 @@ do_approaching_rwy(const airport_t *arpt, const runway_t *rwy,
 	}
 
 	if (on_ground)
-		htbl_set(&apch_rwy_ann, key, (void *)B_TRUE);
+		rwy_key_tbl_set(&apch_rwy_ann, arpt->icao, rwy_end->id, B_TRUE);
 	else
-		htbl_set(&air_apch_rwy_ann, key, (void *)B_TRUE);
+		rwy_key_tbl_set(&air_apch_rwy_ann, arpt->icao, rwy_end->id,
+		    B_TRUE);
 }
 
 static bool_t
@@ -2112,11 +2192,8 @@ ground_runway_approach_arpt_rwy(const airport_t *arpt, const runway_t *rwy,
 		    B_TRUE);
 		return (B_TRUE);
 	} else {
-		char key[RWY_ID_KEY_SZ];
-		rwy_id_key(arpt->icao, rwy->ends[0].id, key);
-		htbl_remove(&apch_rwy_ann, key, B_TRUE);
-		rwy_id_key(arpt->icao, rwy->ends[1].id, key);
-		htbl_remove(&apch_rwy_ann, key, B_TRUE);
+		rwy_key_tbl_remove(&apch_rwy_ann, arpt->icao, rwy->ends[0].id);
+		rwy_key_tbl_remove(&apch_rwy_ann, arpt->icao, rwy->ends[1].id);
 		return (B_FALSE);
 	}
 }
@@ -2210,11 +2287,9 @@ on_rwy_check(const char *arpt_id, const char *rwy_id, double hdg,
 {
 	int64_t now = microclock();
 	double rhdg = fabs(rel_hdg(hdg, rwy_hdg));
-	char key[RWY_ID_KEY_SZ];
 
 	ASSERT(arpt_id != NULL);
 	ASSERT(rwy_id != NULL);
-	rwy_id_key(arpt_id, rwy_id, key);
 
 	/*
 	 * If we are not at all on the appropriate runway heading, don't
@@ -2222,10 +2297,7 @@ on_rwy_check(const char *arpt_id, const char *rwy_id, double hdg,
 	 */
 	if (rhdg >= 90) {
 		/* reset the annunciation if the aircraft turns around fully */
-		if (htbl_lookup(&on_rwy_ann, key) != NULL) {
-			dbg_log("ann_state", 1, "on_rwy_ann[%s] = 0", key);
-			htbl_remove(&on_rwy_ann, key, B_FALSE);
-		}
+		rwy_key_tbl_remove(&on_rwy_ann, arpt_id, rwy_id);
 		return;
 	}
 
@@ -2245,26 +2317,22 @@ on_rwy_check(const char *arpt_id, const char *rwy_id, double hdg,
 	if (rhdg > HDG_ALIGN_THRESH)
 		return;
 
-	if (htbl_lookup(&on_rwy_ann, key) != NULL) {
+	if (rwy_key_tbl_get(&on_rwy_ann, arpt_id, rwy_id) != 0) {
 		if (XPLMGetDatad(drs.gs) < SPEED_THRESH)
 			perform_on_rwy_ann(rwy_id, pos_v, opp_thr_v,
 			    strcmp(rejected_takeoff, "") != 0, B_FALSE);
-		dbg_log("ann_state", 1, "on_rwy_ann[%s] = 1", key);
-		htbl_set(&on_rwy_ann, key, (void *)B_TRUE);
+		rwy_key_tbl_set(&on_rwy_ann, arpt_id, rwy_id, B_TRUE);
 	}
 }
 
 static void
 stop_check_reset(const char *arpt_id, const char *rwy_id)
 {
-	char key[RWY_ID_KEY_SZ];
-
 	ASSERT(arpt_id != NULL);
 	ASSERT(rwy_id != NULL);
-	rwy_id_key(arpt_id, rwy_id, key);
 
-	if (htbl_lookup(&accel_stop_max_spd, key) != NULL) {
-		htbl_remove(&accel_stop_max_spd, key, B_FALSE);
+	if (rwy_key_tbl_get(&accel_stop_max_spd, arpt_id, rwy_id) != 0) {
+		rwy_key_tbl_remove(&accel_stop_max_spd, arpt_id, rwy_id);
 		accel_stop_ann_initial = 0;
 		for (int i = 0; !isnan(accel_stop_distances[i].min); i++)
 			accel_stop_distances[i].ann = B_FALSE;
@@ -2384,7 +2452,6 @@ stop_check(const runway_t *rwy, int end, double hdg, vect2_t pos_v)
 	long maxspd;
 	double dist = vect2_abs(vect2_sub(opp_thr_v, pos_v));
 	double rhdg = fabs(rel_hdg(hdg, rwy_end->hdg));
-	char key[RWY_ID_KEY_SZ];
 
 	if (gs < SPEED_THRESH) {
 		/*
@@ -2449,10 +2516,9 @@ stop_check(const runway_t *rwy, int end, double hdg, vect2_t pos_v)
 	if (!arriving)
 		takeoff_rwy_dist_check(opp_thr_v, pos_v);
 
-	rwy_id_key(arpt_id, rwy_end->id, key);
-	maxspd = (int)htbl_lookup(&accel_stop_max_spd, key);
+	maxspd = rwy_key_tbl_get(&accel_stop_max_spd, arpt_id, rwy_end->id);
 	if (gs > maxspd) {
-		htbl_set(&accel_stop_max_spd, key, (void *)gs);
+		rwy_key_tbl_set(&accel_stop_max_spd, arpt_id, rwy_end->id, gs);
 		maxspd = gs;
 	}
 	if (!landing && gs < maxspd - ACCEL_STOP_SPD_THRESH)
@@ -2505,21 +2571,10 @@ ground_on_runway_aligned_arpt(const airport_t *arpt)
 			on_rwy_check(arpt_id, rwy->ends[1].id, hdg,
 			    rwy->ends[1].hdg, pos_v, rwy->ends[1].dthr_v);
 		} else {
-			char key1[16], key2[16];
-
-			rwy_id_key(arpt_id, rwy->ends[0].id, key1);
-			rwy_id_key(arpt_id, rwy->ends[1].id, key2);
-
-			if (htbl_lookup(&on_rwy_ann, key1) != NULL) {
-				dbg_log("ann_state", 1,
-				    "on_rwy_ann[%s] = nil", key1);
-				htbl_remove(&on_rwy_ann, key1, B_FALSE);
-			}
-			if (htbl_lookup(&on_rwy_ann, key2) != NULL) {
-				dbg_log("ann_state", 1,
-				    "on_rwy_ann[%s] = nil", key2);
-				htbl_remove(&on_rwy_ann, key2, B_FALSE);
-			}
+			rwy_key_tbl_remove(&on_rwy_ann, arpt_id,
+			    rwy->ends[0].id);
+			rwy_key_tbl_remove(&on_rwy_ann, arpt_id,
+			    rwy->ends[1].id);
 			if (strcmp(rejected_takeoff, rwy->ends[0].id) == 0 ||
 			    strcmp(rejected_takeoff, rwy->ends[1].id) == 0) {
 				dbg_log("ann_state", 1,
@@ -2772,8 +2827,8 @@ apch_spd_limit(double height_abv_thr)
 static bool_t
 apch_config_chk(const char *arpt_id, const char *rwy_id, double height_abv_thr,
     double gpa_act, double rwy_gpa, double win_ceil, double win_floor,
-    char ***msg, size_t *msg_len, htbl_t *flap_ann_table, htbl_t *gpa_ann_table,
-    htbl_t *spd_ann_table, bool_t critical, bool_t add_pause,
+    char ***msg, size_t *msg_len, avl_tree_t *flap_ann_table, avl_tree_t *gpa_ann_table,
+    avl_tree_t *spd_ann_table, bool_t critical, bool_t add_pause,
     double dist_from_thr, bool_t check_gear)
 {
 	ASSERT(arpt_id != NULL);
@@ -2781,9 +2836,6 @@ apch_config_chk(const char *arpt_id, const char *rwy_id, double height_abv_thr,
 
 	double clb_rate = conv_per_min(MET2FEET(XPLMGetDatad(drs.elev) -
 	    last_elev));
-	char key[RWY_ID_KEY_SZ];
-
-	rwy_id_key(arpt_id, rwy_id, key);
 
 	if (height_abv_thr < win_ceil && height_abv_thr > win_floor &&
 	    (!gear_is_up() || !check_gear) &&
@@ -2792,7 +2844,7 @@ apch_config_chk(const char *arpt_id, const char *rwy_id, double height_abv_thr,
 		    win_ceil, win_floor);
 		dbg_log("apch_config_chk", 2, "gpa_act = %.02f rwy_gpa = %.02f",
 		    gpa_act, rwy_gpa);
-		if (htbl_lookup(flap_ann_table, key) == NULL &&
+		if (rwy_key_tbl_get(flap_ann_table, arpt_id, rwy_id) == 0 &&
 		    XPLMGetDatad(drs.flaprqst) < min_landing_flap) {
 			dbg_log("apch_config_chk", 1, "FLAPS: flaprqst = %f "
 			    "min_flap = %f", XPLMGetDatad(drs.flaprqst),
@@ -2820,10 +2872,11 @@ apch_config_chk(const char *arpt_id, const char *rwy_id, double height_abv_thr,
 					    ND_ALERT_CAUTION, NULL, NAN);
 				}
 			}
-			htbl_set(flap_ann_table, key, (void *)B_TRUE);
+			rwy_key_tbl_set(flap_ann_table, arpt_id, rwy_id,
+			    B_TRUE);
 			return (B_TRUE);
-		} else if (htbl_lookup(gpa_ann_table, key) == NULL &&
-		    rwy_gpa != 0 &&
+		} else if (rwy_key_tbl_get(gpa_ann_table, arpt_id, rwy_id) ==
+		    0 && rwy_gpa != 0 &&
 		    gpa_act > gpa_limit(rwy_gpa, dist_from_thr)) {
 			dbg_log("apch_config_chk", 1, "TOO HIGH: "
 			    "gpa_act = %.02f gpa_limit = %.02f",
@@ -2851,10 +2904,10 @@ apch_config_chk(const char *arpt_id, const char *rwy_id, double height_abv_thr,
 					    ND_ALERT_CAUTION, NULL, NAN);
 				}
 			}
-			htbl_set(gpa_ann_table, key, (void *)B_TRUE);
+			rwy_key_tbl_set(gpa_ann_table, arpt_id, rwy_id, B_TRUE);
 			return (B_TRUE);
-		} else if (htbl_lookup(spd_ann_table, key) == NULL &&
-		    too_fast_enabled && XPLMGetDatad(drs.airspeed) >
+		} else if (rwy_key_tbl_get(spd_ann_table, arpt_id, rwy_id) ==
+		    0 && too_fast_enabled && XPLMGetDatad(drs.airspeed) >
 		    apch_spd_limit(height_abv_thr)) {
 			dbg_log("apch_config_chk", 1, "TOO FAST: "
 			    "airspeed = %.0f apch_spd_limit = %.0f",
@@ -2886,7 +2939,7 @@ apch_config_chk(const char *arpt_id, const char *rwy_id, double height_abv_thr,
 					    ND_ALERT_CAUTION, NULL, NAN);
 				}
 			}
-			htbl_set(spd_ann_table, key, (void *)B_TRUE);
+			rwy_key_tbl_set(spd_ann_table, arpt_id, rwy_id, B_TRUE);
 			return (B_TRUE);
 		}
 	}
@@ -2908,9 +2961,6 @@ air_runway_approach_arpt_rwy(const airport_t *arpt, const runway_t *rwy,
 	double elev = arpt->refpt.elev;
 	double rwy_hdg = rwy_end->hdg;
 	bool_t in_prox_bbox = vect2_in_poly(pos_v, rwy_end->apch_bbox);
-	char key[RWY_ID_KEY_SZ];
-
-	rwy_id_key(arpt_id, rwy_id, key);
 
 	if (in_prox_bbox && fabs(rel_hdg(hdg, rwy_hdg)) < HDG_ALIGN_THRESH) {
 		char **msg = NULL;
@@ -2951,14 +3001,15 @@ air_runway_approach_arpt_rwy(const airport_t *arpt, const runway_t *rwy,
 
 		/* If we are below 700 ft AFE and we haven't annunciated yet */
 		if (alt - telev < RWY_APCH_ALT_MAX &&
-		    htbl_lookup(&air_apch_rwy_ann, key) == NULL &&
+		    rwy_key_tbl_get(&air_apch_rwy_ann, arpt_id, rwy_id) == 0 &&
 		    !number_in_rngs(XPLMGetDatad(drs.rad_alt),
 		    RWY_APCH_SUPP_WINDOWS, NUM_RWY_APCH_SUPP_WINDOWS)) {
 			/* Don't annunciate if we are too low */
 			if (alt - telev > RWY_APCH_ALT_MIN)
 				do_approaching_rwy(arpt, rwy,
 				    closest_rwy_end(pos_v, rwy), B_FALSE);
-			htbl_set(&air_apch_rwy_ann, key, (void *)B_TRUE);
+			rwy_key_tbl_set(&air_apch_rwy_ann, arpt_id, rwy_id,
+			    B_TRUE);
 		}
 
 		if (alt - telev < SHORT_RWY_APCH_ALT_MAX &&
@@ -2978,31 +3029,26 @@ air_runway_approach_arpt_rwy(const airport_t *arpt, const runway_t *rwy,
 			play_msg(msg, msg_len, msg_prio);
 
 		return (B_TRUE);
-	} else if (htbl_lookup(&air_apch_rwy_ann, key) != NULL &&
-	    !in_prox_bbox) {
-		htbl_remove(&air_apch_rwy_ann, key, B_FALSE);
+	} else if (!in_prox_bbox) {
+		rwy_key_tbl_remove(&air_apch_rwy_ann, arpt_id, rwy_id);
 	}
 
 	return (B_FALSE);
 }
 
 static void
-reset_airport_approach_table(htbl_t *tbl, const airport_t *arpt)
+reset_airport_approach_table(avl_tree_t *tbl, const airport_t *arpt)
 {
 	ASSERT(tbl != NULL);
 	ASSERT(arpt_id != NULL);
 
-	if (htbl_count(tbl) == 0)
+	if (avl_numnodes(tbl) == 0)
 		return;
 
 	for (const runway_t *rwy = list_head(&arpt->rwys); rwy != NULL;
 	    rwy = list_next(&arpt->rwys, rwy)) {
-		char key[RWY_ID_KEY_SZ];
-
-		rwy_id_key(arpt->icao, rwy->ends[0].id, key);
-		htbl_remove(tbl, key, B_TRUE);
-		rwy_id_key(arpt->icao, rwy->ends[1].id, key);
-		htbl_remove(tbl, key, B_TRUE);
+		rwy_key_tbl_remove(tbl, arpt->icao, rwy->ends[0].id);
+		rwy_key_tbl_remove(tbl, arpt->icao, rwy->ends[1].id);
 	}
 }
 
@@ -3730,22 +3776,19 @@ xraas_init(void)
 	avl_create(&airport_geo_tree, airport_geo_tree_compar,
 	    sizeof (tile_t), offsetof(tile_t, node));
 
-#define	CREATE_RWY_TABLE(x)	\
-	htbl_create((x), RUNWAY_TABLE_SZ, RWY_ID_KEY_SZ, B_FALSE)
-	CREATE_RWY_TABLE(&accel_stop_max_spd);
-	CREATE_RWY_TABLE(&on_rwy_ann);
-	CREATE_RWY_TABLE(&apch_rwy_ann);
-	CREATE_RWY_TABLE(&air_apch_rwy_ann);
-	CREATE_RWY_TABLE(&air_apch_flap1_ann);
-	CREATE_RWY_TABLE(&air_apch_flap2_ann);
-	CREATE_RWY_TABLE(&air_apch_flap3_ann);
-	CREATE_RWY_TABLE(&air_apch_gpa1_ann);
-	CREATE_RWY_TABLE(&air_apch_gpa2_ann);
-	CREATE_RWY_TABLE(&air_apch_gpa3_ann);
-	CREATE_RWY_TABLE(&air_apch_spd1_ann);
-	CREATE_RWY_TABLE(&air_apch_spd2_ann);
-	CREATE_RWY_TABLE(&air_apch_spd3_ann);
-#undef	CREATE_RWY_TABLE
+	rwy_key_tbl_create(&accel_stop_max_spd);
+	rwy_key_tbl_create(&on_rwy_ann);
+	rwy_key_tbl_create(&apch_rwy_ann);
+	rwy_key_tbl_create(&air_apch_rwy_ann);
+	rwy_key_tbl_create(&air_apch_flap1_ann);
+	rwy_key_tbl_create(&air_apch_flap2_ann);
+	rwy_key_tbl_create(&air_apch_flap3_ann);
+	rwy_key_tbl_create(&air_apch_gpa1_ann);
+	rwy_key_tbl_create(&air_apch_gpa2_ann);
+	rwy_key_tbl_create(&air_apch_gpa3_ann);
+	rwy_key_tbl_create(&air_apch_spd1_ann);
+	rwy_key_tbl_create(&air_apch_spd2_ann);
+	rwy_key_tbl_create(&air_apch_spd3_ann);
 
 	if (!recreate_apt_dat_cache())
 		return;
@@ -3785,25 +3828,19 @@ xraas_fini(void)
 		free_tile(tile);
 	avl_destroy(&airport_geo_tree);
 
-#define	DESTROY_SIMPLE_TABLE(x) \
-	do { \
-		htbl_empty((x), NULL, NULL); \
-		htbl_destroy((x)); \
-	} while (0)
-	DESTROY_SIMPLE_TABLE(&accel_stop_max_spd);
-	DESTROY_SIMPLE_TABLE(&on_rwy_ann);
-	DESTROY_SIMPLE_TABLE(&apch_rwy_ann);
-	DESTROY_SIMPLE_TABLE(&air_apch_rwy_ann);
-	DESTROY_SIMPLE_TABLE(&air_apch_flap1_ann);
-	DESTROY_SIMPLE_TABLE(&air_apch_flap2_ann);
-	DESTROY_SIMPLE_TABLE(&air_apch_flap3_ann);
-	DESTROY_SIMPLE_TABLE(&air_apch_gpa1_ann);
-	DESTROY_SIMPLE_TABLE(&air_apch_gpa2_ann);
-	DESTROY_SIMPLE_TABLE(&air_apch_gpa3_ann);
-	DESTROY_SIMPLE_TABLE(&air_apch_spd1_ann);
-	DESTROY_SIMPLE_TABLE(&air_apch_spd2_ann);
-	DESTROY_SIMPLE_TABLE(&air_apch_spd3_ann);
-#undef	DESTROY_SIMPLE_TABLE
+	rwy_key_tbl_destroy(&accel_stop_max_spd);
+	rwy_key_tbl_destroy(&on_rwy_ann);
+	rwy_key_tbl_destroy(&apch_rwy_ann);
+	rwy_key_tbl_destroy(&air_apch_rwy_ann);
+	rwy_key_tbl_destroy(&air_apch_flap1_ann);
+	rwy_key_tbl_destroy(&air_apch_flap2_ann);
+	rwy_key_tbl_destroy(&air_apch_flap3_ann);
+	rwy_key_tbl_destroy(&air_apch_gpa1_ann);
+	rwy_key_tbl_destroy(&air_apch_gpa2_ann);
+	rwy_key_tbl_destroy(&air_apch_gpa3_ann);
+	rwy_key_tbl_destroy(&air_apch_spd1_ann);
+	rwy_key_tbl_destroy(&air_apch_spd2_ann);
+	rwy_key_tbl_destroy(&air_apch_spd3_ann);
 
 	if (init_msg != NULL) {
 		free(init_msg);

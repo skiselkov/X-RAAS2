@@ -1,10 +1,9 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(plugin C)
 
-SET(SRC xraas2.c geom.c math.c helpers.c perf.c log.c htbl.c list.c avl.c
-    conf.c)
-SET(HDR geom.h math.h types.h helpers.h perf.h log.h htbl.h list.h avl.h
-    avl_impl.h conf.h)
+SET(SRC xraas2.c geom.c math.c helpers.c perf.c log.c list.c avl.c conf.c)
+SET(HDR geom.h math.h types.h helpers.h perf.h log.h list.h avl.h avl_impl.h
+    conf.h)
 
 SET(ALL_SRC ${SRC} ${HDR})
 LIST(SORT ALL_SRC)
