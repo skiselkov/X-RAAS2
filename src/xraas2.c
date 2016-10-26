@@ -800,6 +800,19 @@ play_msg(msg_type_t *msg, size_t msg_len, msg_prio_t prio)
 {
 	ann_t *ann;
 
+	if (use_tts) {
+		char *buf;
+		size_t buflen = 0;
+		for (size_t i = 0; i < msg_len; i++)
+			buflen += strlen(voice_msgs[msg[i]].text);
+		buf = malloc(buflen + 1);
+		for (size_t i = 0; i < msg_len; i++)
+			strcat(buf, voice_msgs[msg[i]].text);
+		XPLMSpeakString(buf);
+		free(buf);
+		return;
+	}
+
 top:
 	ann = list_head(&playback_queue);
 	if (ann != NULL) {
