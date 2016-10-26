@@ -28,20 +28,22 @@
 #include <sys/stat.h>
 #endif	/* !IBM */
 
-#include <XPLMProcessing.h>
 #include <XPLMDataAccess.h>
 #include <XPLMNavigation.h>
+#include <XPLMPlanes.h>
+#include <XPLMProcessing.h>
 #include <XPLMUtilities.h>
 
 #include "avl.h"
-#include "math.h"
+#include "conf.h"
+#include "geom.h"
+#include "helpers.h"
 #include "htbl.h"
 #include "list.h"
-#include "types.h"
-#include "helpers.h"
 #include "log.h"
-#include "geom.h"
+#include "math.h"
 #include "perf.h"
+#include "types.h"
 
 #define	XRAAS2_VERSION			"2.0"
 #define	XRAAS2_PLUGIN_NAME		"X-RAAS " XRAAS2_VERSION
@@ -259,56 +261,56 @@ typedef struct tile_s {
 	avl_node_t	node;
 } tile_t;
 
-static bool_t enabled = B_TRUE;
-static int min_engines = 2;			/* count */
-static int min_MTOW = 5700;			/* kg */
-static bool_t allow_helos = B_FALSE;
-static bool_t auto_disable_notify = B_TRUE;
-//static bool_t startup_notify = B_TRUE;
-static bool_t override_electrical = B_FALSE;
-static bool_t override_replay = B_FALSE;
-//static bool_t use_TTS = B_FALSE;
-static bool_t speak_units = B_TRUE;
+static bool_t enabled;
+static int min_engines;				/* count */
+static int min_mtow;				/* kg */
+static bool_t allow_helos;
+static bool_t auto_disable_notify;
+static bool_t startup_notify;
+static bool_t override_electrical;
+static bool_t override_replay;
+static bool_t use_tts;
+static bool_t speak_units;
 
-static bool_t use_imperial = B_TRUE;
-static int min_takeoff_dist = 1000;		/* meters */
-static int min_landing_dist = 800;			/* meters */
-static int min_rotation_dist = 400;		/* meters */
-static int min_rotation_angle = 3;			/* degrees */
-static int stop_dist_cutoff = 1500;		/* meters */
-//static int voice_female = B_TRUE;
-//static double voice_volume = 1.0;
-//static int disable_ext_view = B_TRUE;
-static double min_landing_flap = 0.5;		/* ratio, 0-1 */
-static double min_takeoff_flap = 0.1;		/* ratio, 0-1 */
-static double max_takeoff_flap = 0.75;		/* ratio, 0-1 */
+static bool_t use_imperial;
+static int min_takeoff_dist;			/* meters */
+static int min_landing_dist;			/* meters */
+static int min_rotation_dist;			/* meters */
+static double min_rotation_angle;		/* degrees */
+static int stop_dist_cutoff;			/* meters */
+static bool_t voice_female;
+static double voice_volume;
+static bool_t disable_ext_view;
+static double min_landing_flap;			/* ratio, 0-1 */
+static double min_takeoff_flap;			/* ratio, 0-1 */
+static double max_takeoff_flap;			/* ratio, 0-1 */
 
-//static bool_t ND_alerts_enabled = B_TRUE;
-enum nd_alert_level ND_alert_filter = ND_ALERT_ROUTINE;
-//static bool_t ND_alert_overlay_enabled = B_TRUE;
-//static bool_t ND_alert_overlay_force = B_FALSE;
-//static int ND_alert_timeout = 7;		/* seconds */
+static bool_t nd_alerts_enabled;
+static int nd_alert_filter;
+static bool_t nd_alert_overlay_enabled;
+static bool_t nd_alert_overlay_force;
+static int nd_alert_timeout;			/* seconds */
 
-static int on_rwy_warn_initial = 60;		/* seconds */
-static int on_rwy_warn_repeat = 120;		/* seconds */
-static int on_rwy_warn_max_n = 3;
+static int on_rwy_warn_initial;			/* seconds */
+static int on_rwy_warn_repeat;			/* seconds */
+static int on_rwy_warn_max_n;
 
-static bool_t too_high_enabled = B_TRUE;
-static bool_t too_fast_enabled = B_TRUE;
-static double gpa_limit_mult = 2;		/* multiplier */
-static double gpa_limit_max = 8;		/* degrees */
+static bool_t too_high_enabled;
+static bool_t too_fast_enabled;
+static double gpa_limit_mult;			/* multiplier */
+static double gpa_limit_max;			/* degrees */
 
 static const char *GPWS_priority_dataref = "sim/cockpit2/annunciators/GPWS";
 static const char *GPWS_inop_dataref = "sim/cockpit/warnings/annunciators/GPWS";
 
-static bool_t alt_setting_enabled = B_TRUE;
-static bool_t qnh_alt_enabled = B_TRUE;
-static bool_t qfe_alt_enabled = B_FALSE;
+static bool_t alt_setting_enabled;
+static bool_t qnh_alt_enabled;
+static bool_t qfe_alt_enabled;
 
-static bool_t US_runway_numbers = B_FALSE;
+static bool_t us_runway_numbers;
 
-static int long_land_lim_abs = 610;		/* meters, 2000 feet */
-static double long_land_lim_fract = 0.25;	/* fraction, 0-1 */
+static int long_land_lim_abs;			/* meters */
+static double long_land_lim_fract;		/* fraction, 0-1 */
 
 //static bool_t debug_graphical = B_FALSE;
 //static int debug_graphical_bg = 0;
@@ -363,6 +365,9 @@ static uint64_t last_units_call = 0;
 
 static char xpdir[512] = { 0 };
 static char xpprefsdir[512] = { 0 };
+static char acf_path[512] = { 0 };
+static char acf_filename[512] = { 0 };
+
 static list_t *cur_arpts = NULL;
 static avl_tree_t apt_dat;
 static avl_tree_t airport_geo_tree;
@@ -1864,7 +1869,7 @@ rwy_id_to_msg(const char *rwy_id, char ***msg, size_t *len)
 	char first_digit = rwy_id[0];
 	const char *lcr = rwy_lcr_msg(rwy_id);
 
-	if (first_digit != '0' || !US_runway_numbers)
+	if (first_digit != '0' || !us_runway_numbers)
 		append_strlist(msg, len, m_sprintf("%c", first_digit));
 	append_strlist(msg, len, m_sprintf("%c", rwy_id[1]));
 	if (lcr != NULL)
@@ -2468,7 +2473,8 @@ stop_check(const runway_t *rwy, int end, double hdg, vect2_t pos_v)
 	 *    rotation has not yet been initiated.
 	 */
 	if (strcmp(rejected_takeoff, rwy_end->id) == 0 ||
-	    (landing && dist < stop_dist_cutoff && !decel_check(dist)) ||
+	    (landing && dist < MAX(rwy->length / 2, stop_dist_cutoff) &&
+	    !decel_check(dist)) ||
 	    (!landing && dist < min_rotation_dist &&
 	    XPLMGetDatad(drs.rad_alt) < RADALT_GRD_THRESH &&
 	    rpitch < min_rotation_angle))
@@ -3532,9 +3538,164 @@ chk_acf_is_helo(void)
 }
 
 static void
+reset_config(void)
+{
+	enabled = B_TRUE;
+	allow_helos = B_FALSE;
+	min_engines = 2;
+	min_mtow = 5700;
+	auto_disable_notify = B_TRUE;
+	startup_notify = B_TRUE;
+	use_imperial = B_TRUE;
+	voice_female = B_TRUE;
+	voice_volume = 1.0;
+	use_tts = B_FALSE;
+	us_runway_numbers = B_FALSE;
+	min_takeoff_dist = 1000;
+	min_landing_dist = 800;
+	min_rotation_dist = 400;
+	min_rotation_angle = 3;
+	stop_dist_cutoff = 1600;
+	min_landing_flap = 0.5;
+	min_takeoff_flap = 0.1;
+	max_takeoff_flap = 0.75;
+	on_rwy_warn_initial = 60;
+	on_rwy_warn_repeat = 120;
+	on_rwy_warn_max_n = 3;
+	too_high_enabled = B_TRUE;
+	too_fast_enabled = B_TRUE;
+	gpa_limit_mult = 2;
+	gpa_limit_max = 8;
+	alt_setting_enabled = B_TRUE;
+	qnh_alt_enabled = B_TRUE;
+	qfe_alt_enabled = B_FALSE;
+	disable_ext_view = B_TRUE;
+	override_electrical = B_FALSE;
+	override_replay = B_FALSE;
+	speak_units = B_TRUE;
+	long_land_lim_abs = 610;	/* 2000 feet */
+	long_land_lim_fract = 0.25;
+	nd_alerts_enabled = B_TRUE;
+	nd_alert_filter = ND_ALERT_ROUTINE;
+	nd_alert_overlay_enabled = B_TRUE;
+	nd_alert_overlay_force = B_FALSE;
+	nd_alert_timeout = 7;
+}
+
+static void
+process_conf(conf_t *conf)
+{
+#define	GET_CONF(type, varname) \
+	(void) xraas_conf_get_ ## type(conf, "raas_" #varname, &varname)
+	GET_CONF(b, enabled);
+	GET_CONF(b, allow_helos);
+	GET_CONF(i, min_engines);
+	GET_CONF(i, min_mtow);
+	GET_CONF(b, auto_disable_notify);
+	GET_CONF(b, startup_notify);
+	GET_CONF(b, use_imperial);
+	GET_CONF(b, voice_female);
+	GET_CONF(d, voice_volume);
+	GET_CONF(b, use_tts);
+	GET_CONF(b, us_runway_numbers);
+	GET_CONF(i, min_takeoff_dist);
+	GET_CONF(i, min_landing_dist);
+	GET_CONF(i, min_rotation_dist);
+	GET_CONF(d, min_rotation_angle);
+	GET_CONF(i, stop_dist_cutoff);
+	GET_CONF(d, min_landing_flap);
+	GET_CONF(d, min_takeoff_flap);
+	GET_CONF(d, max_takeoff_flap);
+	GET_CONF(i, on_rwy_warn_initial);
+	GET_CONF(i, on_rwy_warn_repeat);
+	GET_CONF(i, on_rwy_warn_max_n);
+	GET_CONF(b, too_high_enabled);
+	GET_CONF(b, too_fast_enabled);
+	GET_CONF(d, gpa_limit_mult);
+	GET_CONF(d, gpa_limit_max);
+	GET_CONF(b, alt_setting_enabled);
+	GET_CONF(b, qnh_alt_enabled);
+	GET_CONF(b, qfe_alt_enabled);
+	GET_CONF(b, disable_ext_view);
+	GET_CONF(b, override_electrical);
+	GET_CONF(b, override_replay);
+	GET_CONF(b, speak_units);
+	GET_CONF(i, long_land_lim_abs);
+	GET_CONF(d, long_land_lim_fract);
+	GET_CONF(b, nd_alerts_enabled);
+	GET_CONF(i, nd_alert_filter);
+	GET_CONF(b, nd_alert_overlay_enabled);
+	GET_CONF(b, nd_alert_overlay_force);
+	GET_CONF(i, nd_alert_timeout);
+#undef	GET_CONF
+}
+
+/*
+ * Loads a config file at path `cfgname' if it exists. If the file doesn't
+ * exist, this function just returns true. If the config file contains errors,
+ * this function shows an init message and returns false, otherwise it returns
+ * true.
+ */
+static bool_t
+load_config(bool_t global_cfg)
+{
+	char *cfgname;
+	FILE *cfg_f;
+
+	if (global_cfg)
+		cfgname = mkpathname(acf_path, "X-RAAS.cfg", NULL);
+	else
+		cfgname = mkpathname(xpdir, "Resources", "plugins", "X-RAAS",
+		    "X-RAAS.cfg", NULL);
+
+	cfg_f = fopen(cfgname, "r");
+	if (cfg_f != NULL) {
+		conf_t *conf;
+		int errline;
+
+		dbg_log("config", 1, "loading config file: %s", cfgname);
+		if ((conf = xraas_parse_conf(cfg_f, &errline)) == NULL) {
+			log_init_msg(B_TRUE, INIT_ERR_MSG_TIMEOUT,
+			    5, "Configuration", "X-RAAS startup error: syntax "
+			    "error on line %d in config file:\n%s\n"
+			    "Please correct this and then hit Plugins "
+			    "-> Admin, Disable & Enable X-RAAS.", errline,
+			    cfgname);
+			fclose(cfg_f);
+			return (B_FALSE);
+		}
+		process_conf(conf);
+		fclose(cfg_f);
+		xraas_free_conf(conf);
+	}
+	free(cfgname);
+	return (B_TRUE);
+}
+
+/*
+ * Loads the global and aircraft-specific X-RAAS config files.
+ */
+static bool_t
+load_configs(void)
+{
+	/* order is important here, first load the global one */
+	reset_config();
+	if (!load_config(B_TRUE))
+		return (B_FALSE);
+	if (!load_config(B_FALSE))
+		return (B_FALSE);
+	return (B_TRUE);
+}
+
+static void
 xraas_init(void)
 {
+	/* these must go ahead of config parsing */
 	start_time = microclock();
+	XPLMGetNthAircraftModel(0, acf_filename, acf_path);
+
+	if (!load_configs)
+		return;
 
 	if (!enabled)
 		return;
@@ -3544,7 +3705,7 @@ xraas_init(void)
 	if (chk_acf_is_helo() && !allow_helos)
 		return;
 	if (XPLMGetDatai(drs.num_engines) < min_engines ||
-	    XPLMGetDatad(drs.mtow) < min_MTOW) {
+	    XPLMGetDatad(drs.mtow) < min_mtow) {
 		char icao[8];
 		memset(icao, 0, sizeof (icao));
 		XPLMGetDatab(drs.ICAO, icao, 0, sizeof (icao) - 1);
@@ -3554,7 +3715,7 @@ xraas_init(void)
 		    "X-RAAS configuration: minimum number of engines: %d; "
 		    "minimum MTOW: %d kg\n"
 		    "Your aircraft: (%s) number of engines: %d; "
-		    "MTOW: %.0f kg\n", min_engines, min_MTOW, icao,
+		    "MTOW: %.0f kg\n", min_engines, min_mtow, icao,
 		    XPLMGetDatai(drs.num_engines), XPLMGetDatad(drs.mtow));
 		return;
 	}
