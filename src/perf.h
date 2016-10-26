@@ -23,8 +23,8 @@
  * Copyright 2015 Saso Kiselkov. All rights reserved.
  */
 
-#ifndef	_OPENFMC_PERF_H_
-#define	_OPENFMC_PERF_H_
+#ifndef	_XRAAS_PERF_H_
+#define	_XRAAS_PERF_H_
 
 #include "geom.h"
 
@@ -100,4 +100,4 @@ double dyn_press(double ktas, double press, double oat);
 }
 #endif
 
-#endif	/* _OPENFMC_PERF_H_ */
+#endif	/* _XRAAS_PERF_H_ */

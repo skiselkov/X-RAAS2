@@ -1,9 +1,10 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(plugin C)
 
-SET(SRC xraas2.c geom.c math.c helpers.c perf.c log.c list.c avl.c conf.c)
+SET(SRC xraas2.c geom.c math.c helpers.c perf.c log.c list.c avl.c conf.c
+    wav.c)
 SET(HDR geom.h math.h types.h helpers.h perf.h log.h list.h avl.h avl_impl.h
-    conf.h)
+    conf.h wav.h)
 
 SET(ALL_SRC ${SRC} ${HDR})
 LIST(SORT ALL_SRC)
@@ -66,7 +67,12 @@ if(APPLE)
 	set(CMAKE_LIBRARY_PATH ${CMAKE_LIBRARY_PATH} ../SDK/Libraries/Mac/)
 	FIND_LIBRARY(XPLM_LIBRARY XPLM ../SDK/Libraries/Mac/)
 	FIND_LIBRARY(XPWIDGETS_LIBRARY XPWidgets ../SDK/Libraries/Mac/)
-	target_link_libraries(plugin ${XPLM_LIBRARY} ${XPWIDGETS_LIBRARY})
+	FIND_LIBRARY(OPENAL_LIBRARY OpenAL)
+	target_link_libraries(plugin ${XPLM_LIBRARY} ${XPWIDGETS_LIBRARY}
+	    ${OPENAL_LIBRARY})
+elseif(UNIX)
+	FIND_LIBRARY(OPENAL_LIBRARY OpenAL)
+	target_link_libraries(plugin ${OPENAL_LIBRARY})
 elseif(WIN32)
 	set(CMAKE_LIBRARY_PATH ${CMAKE_LIBRARY_PATH}
 	    "..\\SDK\\Libraries\\Win\\")
@@ -87,7 +93,7 @@ if(APPLE)
 	set(PLUGIN_OUTPUT_FILENAME "mac.xpl")
 	SET_TARGET_PROPERTIES(plugin PROPERTIES LINK_FLAGS
 	    "${CMAKE_SHARED_LINKER_FLAGS} -fPIC -fvisibility=hidden \
-	    -bundle -framework OpenGL -framework Cocoa")
+	    -bundle -framework OpenGL")
 elseif(UNIX)
 	set(PLUGIN_OUTPUT_FILENAME "lin.xpl")
 	SET_TARGET_PROPERTIES(plugin PROPERTIES LINK_FLAGS

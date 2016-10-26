@@ -7,7 +7,7 @@
  * with the License.
  *
  * You can obtain a copy of the license in the file COPYING
- * or http://www.opensolaris.org/os/licensing.
+ * or http://www.opensource.org/licenses/CDDL-1.0.
  * See the License for the specific language governing permissions
  * and limitations under the License.
  *
@@ -20,33 +20,40 @@
  * CDDL HEADER END
  */
 /*
- * Copyright 2003 Sun Microsystems, Inc.  All rights reserved.
- * Use is subject to license terms.
+ * Copyright 2016 Saso Kiselkov. All rights reserved.
  */
 
-#ifndef	_XRAAS_LIST_IMPL_H
-#define	_XRAAS_LIST_IMPL_H
+#ifndef	_XRAAS_WAV_H_
+#define	_XRAAS_WAV_H_
 
-#include <sys/types.h>
+#include <stdint.h>
+#include <OpenAL/al.h>
 
 #ifdef	__cplusplus
 extern "C" {
 #endif
 
-struct list_node {
-	struct list_node *list_next;
-	struct list_node *list_prev;
-};
+typedef struct riff_chunk riff_chunk_t;
 
-struct list {
-	size_t	list_size;
-	size_t	list_offset;
-	size_t	list_count;
-	struct list_node list_head;
-};
+typedef struct wav_fmt_hdr {
+	uint16_t	datafmt;	/* PCM = 1 */
+	uint16_t	n_channels;
+	uint32_t	srate;		/* sample rate in Hz */
+	uint32_t	byte_rate;	/* (srate * bps * #channels) / 8 */
+	uint16_t	padding;	/* unused */
+	uint16_t	bps;		/* bits per sample */
+} wav_fmt_hdr_t;
+
+typedef struct wav_s {
+	wav_fmt_hdr_t	fmt;
+	ALuint		albuf;
+} wav_t;
+
+wav_t *xraas_wav_load(const char *filename);
+void xraas_wav_free(wav_t *wav);
 
 #ifdef	__cplusplus
 }
 #endif
 
-#endif	/* _XRAAS_LIST_IMPL_H */
+#endif	/* _XRAAS_WAV_H_ */

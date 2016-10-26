@@ -23,8 +23,8 @@
  * Use is subject to license terms.
  */
 
-#ifndef	_OPENFMC_LIST_H
-#define	_OPENFMC_LIST_H
+#ifndef	_XRAAS_LIST_H
+#define	_XRAAS_LIST_H
 
 #include "list_impl.h"
 
@@ -63,4 +63,4 @@ size_t list_count(const list_t *);
 }
 #endif
 
-#endif	/* _OPENFMC_LIST_H */
+#endif	/* _XRAAS_LIST_H */

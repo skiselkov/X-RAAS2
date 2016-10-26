@@ -23,8 +23,8 @@
  * Copyright 2015 Saso Kiselkov. All rights reserved.
  */
 
-#ifndef	_OPENFMC_HELPERS_H_
-#define	_OPENFMC_HELPERS_H_
+#ifndef	_XRAAS_HELPERS_H_
+#define	_XRAAS_HELPERS_H_
 
 #include <stdarg.h>
 #include <assert.h>
@@ -45,26 +45,30 @@ extern "C" {
 #if	defined(__GNUC__) || defined(__clang__)
 #define	PRINTF_ATTR(x)	__attribute__ ((format (printf, x, x + 1)))
 #ifndef	BSWAP32
+#define	BSWAP16(x)	__builtin_bswap16((x))
 #define	BSWAP32(x)	__builtin_bswap32((x))
 #define	BSWAP64(x)	__builtin_bswap64((x))
 #endif	/* BSWAP32 */
 #else	/* __GNUC */
 #define	PRINTF_ATTR(x)
 #ifndef	BSWAP32
+#define	BSWAP16(x)	\
+	((((x) & 0xff00) >> 8) | \
+	(((x) & 0x00ff) << 8))
 #define	BSWAP32(x)	\
-	(((x) >> 24) | \
-	(((x) & 0x0000ff00) << 8) | \
+	((((x) & 0xff000000) >> 24) | \
 	(((x) & 0x00ff0000) >> 8) | \
-	((x) << 24))
+	(((x) & 0x0000ff00) << 8) | \
+	(((x) & 0x000000ff) << 24))
 #define	BSWAP64(x)	\
-	(((x) >> 56) | \
+	((((x) & 0x00000000000000ffllu) >> 56) | \
 	(((x) & 0x000000000000ff00llu) << 40) | \
 	(((x) & 0x0000000000ff0000llu) << 24) | \
 	(((x) & 0x00000000ff000000llu) << 8) | \
 	(((x) & 0x000000ff00000000llu) >> 8) | \
 	(((x) & 0x0000ff0000000000llu) >> 24) | \
 	(((x) & 0x00ff000000000000llu) >> 40) | \
-	((x) << 56))
+	(((x) & 0xff00000000000000llu) << 56))
 #endif	/* BSWAP32 */
 #endif	/* __GNUC */
 
@@ -215,4 +219,4 @@ wavg(double x, double y, double w)
 }
 #endif
 
-#endif	/* _OPENFMC_HELPERS_H_ */
+#endif	/* _XRAAS_HELPERS_H_ */
