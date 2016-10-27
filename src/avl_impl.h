@@ -36,6 +36,7 @@
  * this file.
  */
 
+#include <stdint.h>
 #include <sys/types.h>
 
 #ifdef	__cplusplus

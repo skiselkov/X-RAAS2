@@ -249,3 +249,10 @@ append_format(char **str, size_t *sz, const char *format, ...)
 	*sz += needed;
 	va_end(ap);
 }
+
+void
+my_strlcpy(char *restrict dest, const char *restrict src, size_t cap)
+{
+        dest[cap - 1] = '\0';
+        strncpy(dest, src, cap - 1);
+}

@@ -105,15 +105,15 @@ parse_conf(FILE *fp, int *errline)
 		strip_space(line);
 		strip_space(&sep[1]);
 
-		strlcpy(srch.key, line, sizeof (srch.key));
+		my_strlcpy(srch.key, line, sizeof (srch.key));
 		ck = avl_find(&conf->tree, &srch, &where);
 		if (ck == NULL) {
 			/* if the key didn't exist yet, create a new one */
 			ck = calloc(1, sizeof (*ck));
-			(void) strlcpy(ck->key, line, sizeof (ck->key));
+			my_strlcpy(ck->key, line, sizeof (ck->key));
 			avl_insert(&conf->tree, ck, where);
 		}
-		(void) strlcpy(ck->value, &sep[1], sizeof (ck->value));
+		my_strlcpy(ck->value, &sep[1], sizeof (ck->value));
 	}
 
 	free(line);
@@ -137,7 +137,7 @@ static conf_key_t *
 conf_find(const conf_t *conf, const char *key)
 {
 	conf_key_t srch;
-	strlcpy(srch.key, key, sizeof (srch.key));
+	my_strlcpy(srch.key, key, sizeof (srch.key));
 	return (avl_find(&conf->tree, &srch, NULL));
 }
 
@@ -173,7 +173,7 @@ conf_get_d(const conf_t *conf, const char *key, double *value)
 }
 
 bool_t
-conf_get_ll(const conf_t *conf, const char *key, long long *value)
+conf_get_ll(const conf_t *conf, const char *key, int64_t *value)
 {
 	const conf_key_t *ck = conf_find(conf, key);
 	if (ck == NULL)

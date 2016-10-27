@@ -26,6 +26,8 @@
 #ifndef	_XRAAS_RIFF_H_
 #define	_XRAAS_RIFF_H_
 
+#include <stdint.h>
+
 #include "types.h"
 
 #ifdef	__cplusplus

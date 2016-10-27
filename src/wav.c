@@ -317,7 +317,7 @@ wav_play(wav_t *wav, double gain)
 
 	dbg_log("wav", 1, "wav_play %s @ %.2f", wav->name, gain);
 
-	if (!audio_init)
+	if (!audio_init())
 		return;
 
 	ctx_save();

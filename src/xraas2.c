@@ -1035,7 +1035,7 @@ static airport_t *
 apt_dat_lookup(const char *icao)
 {
 	airport_t srch;
-	strlcpy(srch.icao, icao, sizeof (srch.icao));
+	my_strlcpy(srch.icao, icao, sizeof (srch.icao));
 	return (avl_find(&state.apt_dat, &srch, NULL));
 }
 
@@ -1121,7 +1121,7 @@ map_apt_dat(const char *apt_dat_fname, bool_t geo_link)
 				arpt = calloc(1, sizeof (*arpt));
 				list_create(&arpt->rwys, sizeof(runway_t),
 				    offsetof(runway_t, node));
-				strlcpy(arpt->icao, new_icao,
+				my_strlcpy(arpt->icao, new_icao,
 				    sizeof (arpt->icao));
 				arpt->refpt = pos;
 				arpt->TL = TL;
@@ -1161,14 +1161,14 @@ map_apt_dat(const char *apt_dat_fname, bool_t geo_link)
 				rwy->arpt = arpt;
 				rwy->width = atof(comps[1]);
 
-				strlcpy(rwy->ends[0].id, comps[8 + 0],
+				my_strlcpy(rwy->ends[0].id, comps[8 + 0],
 				    sizeof (rwy->ends[0].id));
 				rwy->ends[0].thr = GEO_POS3(atof(comps[8 + 1]),
 				    atof(comps[8 + 2]), NAN);
 				rwy->ends[0].displ = atof(comps[8 + 3]);
 				rwy->ends[0].blast = atof(comps[8 + 4]);
 
-				strlcpy(rwy->ends[1].id, comps[8 + 9 + 0],
+				my_strlcpy(rwy->ends[1].id, comps[8 + 9 + 0],
 				    sizeof (rwy->ends[1].id));
 				rwy->ends[1].thr = GEO_POS3(
 				    atof(comps[8 + 9 + 1]),
@@ -1923,9 +1923,8 @@ load_airports_in_tile(geo_pos2_t tile_pos)
 	bool_t created;
 	char *cache_dir, *fname;
 	char lat_lon[16];
-	tile_t *tile;
 
-	tile = geo_table_get_tile(tile_pos, B_TRUE, &created);
+	(void) geo_table_get_tile(tile_pos, B_TRUE, &created);
 	if (!created)
 		return;
 
@@ -2747,7 +2746,7 @@ stop_check(const runway_t *rwy, int end, double hdg, vect2_t pos_v)
 		maxspd = gs;
 	}
 	if (!state.landing && gs < maxspd - ACCEL_STOP_SPD_THRESH)
-		strlcpy(state.rejected_takeoff, rwy_end->id,
+		my_strlcpy(state.rejected_takeoff, rwy_end->id,
 		    sizeof (state.rejected_takeoff));
 
 	double rpitch = acf_rwy_rel_pitch(rwy_end->thr.elev,
@@ -3404,7 +3403,7 @@ altimeter_setting(void)
 		state.TL = cur_arpt->TL;
 		state.TATL_field_elev = cur_arpt->refpt.elev;
 		if (strcmp(arpt_id, state.TATL_source) != 0) {
-			strlcpy(state.TATL_source, arpt_id,
+			my_strlcpy(state.TATL_source, arpt_id,
 			    sizeof (state.TATL_source));
 			field_changed = B_TRUE;
 			dbg_log("altimeter", 1, "TATL_source: %s "
@@ -3453,7 +3452,7 @@ altimeter_setting(void)
 			state.TA = cur_arpt->TA;
 			state.TL = cur_arpt->TL;
 			state.TATL_field_elev = cur_arpt->refpt.elev;
-			strlcpy(state.TATL_source, cur_arpt->icao,
+			my_strlcpy(state.TATL_source, cur_arpt->icao,
 			    sizeof (state.TATL_source));
 			field_changed = B_TRUE;
 			dbg_log("altimeter", 1, "TATL_source: %s "
@@ -3953,50 +3952,50 @@ process_conf(conf_t *conf)
 #define	GET_CONF(type, varname) \
 	do { \
 		/* first try the new name, then the old one */ \
-		if (!conf_get_ ## type(conf, #varname, &varname)) \
+		if (!conf_get_ ## type(conf, #varname, &state.varname)) \
 			(void) conf_get_ ## type(conf, "raas_" #varname, \
-			    &varname); \
+			    &state.varname); \
 	} while (0)
-	GET_CONF(b, state.enabled);
-	GET_CONF(b, state.allow_helos);
-	GET_CONF(i, state.min_engines);
-	GET_CONF(i, state.min_mtow);
-	GET_CONF(b, state.auto_disable_notify);
-	GET_CONF(b, state.startup_notify);
-	GET_CONF(b, state.use_imperial);
-	GET_CONF(b, state.voice_female);
-	GET_CONF(d, state.voice_volume);
-	GET_CONF(b, state.use_tts);
-	GET_CONF(b, state.us_runway_numbers);
-	GET_CONF(i, state.min_takeoff_dist);
-	GET_CONF(i, state.min_landing_dist);
-	GET_CONF(i, state.min_rotation_dist);
-	GET_CONF(d, state.min_rotation_angle);
-	GET_CONF(i, state.stop_dist_cutoff);
-	GET_CONF(d, state.min_landing_flap);
-	GET_CONF(d, state.min_takeoff_flap);
-	GET_CONF(d, state.max_takeoff_flap);
-	GET_CONF(ll, state.on_rwy_warn_initial);
-	GET_CONF(ll, state.on_rwy_warn_repeat);
-	GET_CONF(i, state.on_rwy_warn_max_n);
-	GET_CONF(b, state.too_high_enabled);
-	GET_CONF(b, state.too_fast_enabled);
-	GET_CONF(d, state.gpa_limit_mult);
-	GET_CONF(d, state.gpa_limit_max);
-	GET_CONF(b, state.alt_setting_enabled);
-	GET_CONF(b, state.qnh_alt_enabled);
-	GET_CONF(b, state.qfe_alt_enabled);
-	GET_CONF(b, state.disable_ext_view);
-	GET_CONF(b, state.override_electrical);
-	GET_CONF(b, state.override_replay);
-	GET_CONF(b, state.speak_units);
-	GET_CONF(i, state.long_land_lim_abs);
-	GET_CONF(d, state.long_land_lim_fract);
-	GET_CONF(b, state.nd_alerts_enabled);
-	GET_CONF(i, state.nd_alert_filter);
-	GET_CONF(b, state.nd_alert_overlay_enabled);
-	GET_CONF(b, state.nd_alert_overlay_force);
-	GET_CONF(i, state.nd_alert_timeout);
+	GET_CONF(b, enabled);
+	GET_CONF(b, allow_helos);
+	GET_CONF(i, min_engines);
+	GET_CONF(i, min_mtow);
+	GET_CONF(b, auto_disable_notify);
+	GET_CONF(b, startup_notify);
+	GET_CONF(b, use_imperial);
+	GET_CONF(b, voice_female);
+	GET_CONF(d, voice_volume);
+	GET_CONF(b, use_tts);
+	GET_CONF(b, us_runway_numbers);
+	GET_CONF(i, min_takeoff_dist);
+	GET_CONF(i, min_landing_dist);
+	GET_CONF(i, min_rotation_dist);
+	GET_CONF(d, min_rotation_angle);
+	GET_CONF(i, stop_dist_cutoff);
+	GET_CONF(d, min_landing_flap);
+	GET_CONF(d, min_takeoff_flap);
+	GET_CONF(d, max_takeoff_flap);
+	GET_CONF(ll, on_rwy_warn_initial);
+	GET_CONF(ll, on_rwy_warn_repeat);
+	GET_CONF(i, on_rwy_warn_max_n);
+	GET_CONF(b, too_high_enabled);
+	GET_CONF(b, too_fast_enabled);
+	GET_CONF(d, gpa_limit_mult);
+	GET_CONF(d, gpa_limit_max);
+	GET_CONF(b, alt_setting_enabled);
+	GET_CONF(b, qnh_alt_enabled);
+	GET_CONF(b, qfe_alt_enabled);
+	GET_CONF(b, disable_ext_view);
+	GET_CONF(b, override_electrical);
+	GET_CONF(b, override_replay);
+	GET_CONF(b, speak_units);
+	GET_CONF(i, long_land_lim_abs);
+	GET_CONF(d, long_land_lim_fract);
+	GET_CONF(b, nd_alerts_enabled);
+	GET_CONF(i, nd_alert_filter);
+	GET_CONF(b, nd_alert_overlay_enabled);
+	GET_CONF(b, nd_alert_overlay_force);
+	GET_CONF(i, nd_alert_timeout);
 #undef	GET_CONF
 
 	conf_get_i(conf, "debug", &xraas_debug);

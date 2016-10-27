@@ -27,6 +27,7 @@
 #define	_XRAAS_CONF_H_
 
 #include <stdio.h>
+#include <stdint.h>
 
 #include "types.h"
 #include "avl.h"
@@ -42,7 +43,7 @@ void free_conf(conf_t *conf);
 bool_t conf_get_str(const conf_t *conf, const char *key, const char **value);
 bool_t conf_get_i(const conf_t *conf, const char *key, int *value);
 bool_t conf_get_d(const conf_t *conf, const char *key, double *value);
-bool_t conf_get_ll(const conf_t *conf, const char *key, long long *value);
+bool_t conf_get_ll(const conf_t *conf, const char *key, int64_t *value);
 bool_t conf_get_b(const conf_t *conf, const char *key, bool_t *value);
 
 #ifdef	__cplusplus

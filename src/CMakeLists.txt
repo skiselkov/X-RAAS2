@@ -31,21 +31,22 @@ else()
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Werror --std=c99")
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} \
 	    -DCHECK_RESULT_USED=\"__attribute__ ((warn_unused_result))\"")
+	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_GNU_SOURCE")
 endif()
 
 #libraries
 #libraries
 if(UNIX)
         include_directories(xtcas PUBLIC "../SDK/CHeaders/XPLM/"
-            "../SDK/CHeaders/Widgets/" "../SDK/CHeaders/Wrappers/")
-endif(UNIX)
-if(APPLE)
+            "../SDK/CHeaders/Widgets/" "../SDK/CHeaders/Wrappers/"
+            "..")
+elseif(APPLE)
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -arch x86_64")
-endif(APPLE)
-if(WIN32)
+elseif(WIN32)
         target_include_directories(xtcas PUBLIC "..\\SDK\\CHeaders\\XPLM"
-            "..\\SDK\\CHeaders\\Widgets" "..\\SDK\\CHeaders\\Wrappers")
-endif(WIN32)
+            "..\\SDK\\CHeaders\\Widgets" "..\\SDK\\CHeaders\\Wrappers"
+            "..")
+endif()
 
 if(APPLE)
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -arch x86_64")
@@ -73,9 +74,6 @@ if(APPLE)
 	FIND_LIBRARY(OPENAL_LIBRARY OpenAL)
 	target_link_libraries(plugin ${XPLM_LIBRARY} ${XPWIDGETS_LIBRARY}
 	    ${OPENAL_LIBRARY})
-elseif(UNIX)
-	FIND_LIBRARY(OPENAL_LIBRARY OpenAL)
-	target_link_libraries(plugin ${OPENAL_LIBRARY})
 elseif(WIN32)
 	set(CMAKE_LIBRARY_PATH ${CMAKE_LIBRARY_PATH}
 	    "..\\SDK\\Libraries\\Win\\")
