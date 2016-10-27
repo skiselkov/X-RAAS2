@@ -255,12 +255,10 @@ struct airport {
 	avl_node_t	apt_dat_node;	/* apt_dat tree */
 	list_node_t	cur_arpts_node;	/* cur_arpts list */
 	list_node_t	tile_node;	/* tiles in the airport_geo_tree */
-	list_node_t	nearest_node;	/* find_nearest_arpts */
 };
 
 typedef struct tile_s {
-	int		lat;
-	int		lon;
+	geo_pos2_t	pos;
 	list_t		arpts;
 	avl_node_t	node;
 } tile_t;
@@ -327,23 +325,23 @@ typedef struct {
 
 static msg_t voice_msgs[NUM_MSGS] = {
 	{ .name = "0", .text = "Zero, ", .wav = NULL },
-	{ .name = "1", .text = "One,", .wav = NULL },
-	{ .name = "2", .text = "Two,", .wav = NULL },
-	{ .name = "3", .text = "Three,", .wav = NULL },
-	{ .name = "4", .text = "Four,", .wav = NULL },
-	{ .name = "5", .text = "Five,", .wav = NULL },
-	{ .name = "6", .text = "Six,", .wav = NULL },
-	{ .name = "7", .text = "Seven,", .wav = NULL },
-	{ .name = "8", .text = "Eight,", .wav = NULL },
-	{ .name = "9", .text = "Nine,", .wav = NULL },
-	{ .name = "30", .text = "Thirty,", .wav = NULL },
-	{ .name = "alt_set", .text = "Altimeter setting,", .wav = NULL },
+	{ .name = "1", .text = "One, ", .wav = NULL },
+	{ .name = "2", .text = "Two, ", .wav = NULL },
+	{ .name = "3", .text = "Three, ", .wav = NULL },
+	{ .name = "4", .text = "Four, ", .wav = NULL },
+	{ .name = "5", .text = "Five, ", .wav = NULL },
+	{ .name = "6", .text = "Six, ", .wav = NULL },
+	{ .name = "7", .text = "Seven, ", .wav = NULL },
+	{ .name = "8", .text = "Eight, ", .wav = NULL },
+	{ .name = "9", .text = "Nine, ", .wav = NULL },
+	{ .name = "30", .text = "Thirty, ", .wav = NULL },
+	{ .name = "alt_set", .text = "Altimeter setting, ", .wav = NULL },
 	{ .name = "apch", .text = "Approaching, ", .wav = NULL },
 	{ .name = "avail", .text = "Available, ", .wav = NULL },
-	{ .name = "caution", .text = "Caution!", .wav = NULL },
+	{ .name = "caution", .text = "Caution! ", .wav = NULL },
 	{ .name = "center", .text = "Center, ", .wav = NULL },
 	{ .name = "feet", .text = "Feet, ", .wav = NULL },
-	{ .name = "flaps", .text = "Flaps!", .wav = NULL },
+	{ .name = "flaps", .text = "Flaps! ", .wav = NULL },
 	{ .name = "hundred", .text = "Hundred, ", .wav = NULL },
 	{ .name = "left", .text = "Left, ", .wav = NULL },
 	{ .name = "long_land", .text = "Long landing! ", .wav = NULL },
@@ -353,7 +351,7 @@ static msg_t voice_msgs[NUM_MSGS] = {
 	{ .name = "right", .text = "Right, ", .wav = NULL },
 	{ .name = "rmng", .text = "Remaining, ", .wav = NULL },
 	{ .name = "rwys", .text = "Runways, ", .wav = NULL },
-	{ .name = "pause", .text = " , , ,", .wav = NULL },
+	{ .name = "pause", .text = " , , , ", .wav = NULL },
 	{ .name = "short_rwy", .text = "Short runway! ", .wav = NULL },
 	{ .name = "thousand", .text = "Thousand, ", .wav = NULL },
 	{ .name = "too_fast", .text = "Too fast! ", .wav = NULL },
@@ -542,12 +540,12 @@ airport_geo_tree_compar(const void *a, const void *b)
 {
 	const tile_t *ta = a, *tb = b;
 
-	if (ta->lat < tb->lat) {
+	if (ta->pos.lat < tb->pos.lat) {
 		return (-1);
-	} else if (ta->lat == tb->lat) {
-		if (ta->lon < tb->lon)
+	} else if (ta->pos.lat == tb->pos.lat) {
+		if (ta->pos.lon < tb->pos.lon)
 			return (-1);
-		else if (ta->lon == tb->lon)
+		else if (ta->pos.lon == tb->pos.lon)
 			return (0);
 		else
 			return (1);
@@ -733,16 +731,18 @@ dr_get(const char *drname)
 static tile_t *
 geo_table_get_tile(geo_pos2_t pos, bool_t create, bool_t *created_p)
 {
+	pos.lat = floor(pos.lat);
+	pos.lon = floor(pos.lon);
+
 	bool_t created = B_FALSE;
-	tile_t srch = { .lat = pos.lat, .lon = pos.lon };
+	tile_t srch = { .pos = pos };
 	tile_t *tile;
 	avl_index_t where;
 
 	tile = avl_find(&airport_geo_tree, &srch, &where);
 	if (tile == NULL && create) {
 		tile = malloc(sizeof (*tile));
-		tile->lat = pos.lat;
-		tile->lon = pos.lon;
+		tile->pos = pos;
 		list_create(&tile->arpts, sizeof (airport_t),
 		    offsetof(airport_t, tile_node));
 		avl_insert(&airport_geo_tree, tile, where);
@@ -1843,7 +1843,6 @@ free_airport(airport_t *arpt)
 	list_destroy(&arpt->rwys);
 	ASSERT(!list_link_active(&arpt->cur_arpts_node));
 	ASSERT(!list_link_active(&arpt->tile_node));
-	ASSERT(!list_link_active(&arpt->nearest_node));
 	free(arpt);
 }
 
@@ -1881,7 +1880,7 @@ find_nearest_airports(double reflat, double reflon)
 	list_t *l;
 
 	l = malloc(sizeof (*l));
-	list_create(l, sizeof (airport_t), offsetof(airport_t, nearest_node));
+	list_create(l, sizeof (airport_t), offsetof(airport_t, cur_arpts_node));
 	for (int i = -1; i <= 1; i++) {
 		for (int j = -1; j <= 1; j++) {
 			find_nearest_airports_tile(ecef,
@@ -1906,8 +1905,9 @@ load_airports_in_tile(geo_pos2_t tile_pos)
 	bool_t created;
 	char *cache_dir, *fname;
 	char lat_lon[16];
+	tile_t *tile;
 
-	(void) geo_table_get_tile(tile_pos, B_TRUE, &created);
+	tile = geo_table_get_tile(tile_pos, B_TRUE, &created);
 	if (!created)
 		return;
 
@@ -1953,26 +1953,24 @@ load_nearest_airport_tiles(void)
 	}
 }
 
-#if 0
 static double
 lon_delta(double x, double y)
 {
 	double u = MAX(x, y), d = MIN(x, y);
 
 	if (u - d <= 180)
-		return (u - d);
+		return (fabs(u - d));
 	else
-		return ((180 - u) - (-180 - d));
+		return (fabs((180 - u) - (-180 - d)));
 }
-#endif
 
 static void
 unload_distant_airport_tiles_i(tile_t *tile, geo_pos2_t my_pos)
 {
-	if (tile->lat < my_pos.lat - 1 || tile->lat > my_pos.lat + 1 ||
-	    tile->lon < my_pos.lon - 1 || tile->lon > my_pos.lon + 1) {
-		dbg_log("tile", 1, "unloading tile %d x %d",
-		    tile->lat, tile->lon);
+	if (fabs(tile->pos.lat - floor(my_pos.lat)) > 1 ||
+	    lon_delta(tile->pos.lon, floor(my_pos.lon)) > 1) {
+		dbg_log("tile", 1, "unloading tile %.0f x %.0f",
+		    tile->pos.lat, tile->pos.lon);
 		unload_tile(tile);
 	}
 }
@@ -2036,8 +2034,8 @@ acf_vel_vector(double time_fact)
 {
 	float nw_offset;
 	XPLMGetDatavf(drs.nw_offset, &nw_offset, 0, 1);
-	return (vect2_set_abs(hdg2dir(XPLMGetDatad(drs.hdg)),
-	    time_fact * XPLMGetDatad(drs.gs) - nw_offset));
+	return (vect2_set_abs(hdg2dir(XPLMGetDataf(drs.hdg)),
+	    time_fact * XPLMGetDataf(drs.gs) - nw_offset));
 }
 
 /*
@@ -2236,13 +2234,11 @@ rwy_key_tbl_create(avl_tree_t *tree)
 static void
 rwy_key_tbl_destroy(avl_tree_t *tree)
 {
-	void *cookie;
+	void *cookie = NULL;
 	rwy_key_t *key;
 
-	if (avl_numnodes(tree) != 0) {
-		while ((key = avl_destroy_nodes(tree, &cookie)) != NULL)
-			free(key);
-	}
+	while ((key = avl_destroy_nodes(tree, &cookie)) != NULL)
+		free(key);
 	avl_destroy(tree);
 }
 
@@ -2314,7 +2310,7 @@ do_approaching_rwy(const airport_t *arpt, const runway_t *rwy,
 	    rwy_end->id) != 0))
 		return;
 
-	if (!on_ground || XPLMGetDatad(drs.gs) < SPEED_THRESH) {
+	if (!on_ground || XPLMGetDataf(drs.gs) < SPEED_THRESH) {
 		msg_type_t *msg = NULL;
 		size_t msg_len = 0;
 		msg_prio_t msg_prio;
@@ -2446,7 +2442,7 @@ ground_runway_approach(void)
 {
 	unsigned in_prox = 0;
 
-	if (XPLMGetDatad(drs.rad_alt) < RADALT_FLARE_THRESH) {
+	if (XPLMGetDataf(drs.rad_alt) < RADALT_FLARE_THRESH) {
 		vect2_t vel_v = acf_vel_vector(RWY_PROXIMITY_TIME_FACT);
 		ASSERT(cur_arpts != NULL);
 		for (const airport_t *arpt = list_head(cur_arpts);
@@ -2470,7 +2466,7 @@ perform_on_rwy_ann(const char *rwy_id, vect2_t pos_v, vect2_t opp_thr_v,
 	msg_type_t *msg = NULL;
 	size_t msg_len = 0;
 	double dist = 10000000, dist_ND = NAN;
-	double flaprqst = XPLMGetDatad(drs.flaprqst);
+	double flaprqst = XPLMGetDataf(drs.flaprqst);
 	bool_t allow_on_rwy_ND_alert = B_TRUE;
 	nd_alert_level_t level = (non_routine ? ND_ALERT_NONROUTINE :
 	    ND_ALERT_ROUTINE);
@@ -2539,7 +2535,7 @@ on_rwy_check(const char *arpt_id, const char *rwy_id, double hdg,
 		return;
 
 	if (rwy_key_tbl_get(&on_rwy_ann, arpt_id, rwy_id) != 0) {
-		if (XPLMGetDatad(drs.gs) < SPEED_THRESH)
+		if (XPLMGetDataf(drs.gs) < SPEED_THRESH)
 			perform_on_rwy_ann(rwy_id, pos_v, opp_thr_v,
 			    strcmp(rejected_takeoff, "") != 0, B_FALSE);
 		rwy_key_tbl_set(&on_rwy_ann, arpt_id, rwy_id, B_TRUE);
@@ -2627,7 +2623,7 @@ static double
 acf_rwy_rel_pitch(double te, double ote, double len)
 {
 	double rwy_angle = RAD2DEG(asin((ote - te) / len));
-	return (XPLMGetDatad(drs.pitch) - rwy_angle);
+	return (XPLMGetDataf(drs.pitch) - rwy_angle);
 }
 
 /*
@@ -2638,7 +2634,7 @@ acf_rwy_rel_pitch(double te, double ote, double len)
 static bool_t
 decel_check(double dist_rmng)
 {
-	double cur_gs = XPLMGetDatad(drs.gs);
+	double cur_gs = XPLMGetDataf(drs.gs);
 	double decel_rate = (cur_gs - last_gs) / EXEC_INTVAL;
 	if (decel_rate >= 0)
 		return (B_FALSE);
@@ -2659,7 +2655,7 @@ stop_check(const runway_t *rwy, int end, double hdg, vect2_t pos_v)
 	const runway_end_t *rwy_end = &rwy->ends[end];
 	const runway_end_t *orwy_end = &rwy->ends[oend];
 	vect2_t opp_thr_v = orwy_end->thr_v;
-	long gs = XPLMGetDatad(drs.gs);
+	long gs = XPLMGetDataf(drs.gs);
 	long maxspd;
 	double dist = vect2_abs(vect2_sub(opp_thr_v, pos_v));
 	double rhdg = fabs(rel_hdg(hdg, rwy_end->hdg));
@@ -2680,13 +2676,13 @@ stop_check(const runway_t *rwy, int end, double hdg, vect2_t pos_v)
 	if (rhdg > HDG_ALIGN_THRESH)
 		return;
 
-	if (XPLMGetDatad(drs.rad_alt) > RADALT_GRD_THRESH) {
+	if (XPLMGetDataf(drs.rad_alt) > RADALT_GRD_THRESH) {
 		double clb_rate = conv_per_min(MET2FEET(XPLMGetDatad(drs.elev) -
 		    last_elev));
 
 		stop_check_reset(arpt_id, rwy_end->id);
 		if (departed &&
-		    XPLMGetDatad(drs.rad_alt) <= RADALT_DEPART_THRESH &&
+		    XPLMGetDataf(drs.rad_alt) <= RADALT_DEPART_THRESH &&
 		    clb_rate < GOAROUND_CLB_RATE_THRESH) {
 			/*
 			 * Our distance limit is the greater of either:
@@ -2752,7 +2748,7 @@ stop_check(const runway_t *rwy, int end, double hdg, vect2_t pos_v)
 	    (landing && dist < MAX(rwy->length / 2, stop_dist_cutoff) &&
 	    !decel_check(dist)) ||
 	    (!landing && dist < min_rotation_dist &&
-	    XPLMGetDatad(drs.rad_alt) < RADALT_GRD_THRESH &&
+	    XPLMGetDataf(drs.rad_alt) < RADALT_GRD_THRESH &&
 	    rpitch < min_rotation_angle))
 		perform_rwy_dist_remaining_callouts(opp_thr_v, pos_v);
 }
@@ -2767,8 +2763,8 @@ ground_on_runway_aligned_arpt(const airport_t *arpt)
 	vect2_t pos_v = vect2_add(geo2fpp(GEO_POS2(XPLMGetDatad(drs.lat),
 	    XPLMGetDatad(drs.lon)), &arpt->fpp),
 	    acf_vel_vector(LANDING_ROLLOUT_TIME_FACT));
-	double hdg = XPLMGetDatad(drs.hdg);
-	bool_t airborne = (XPLMGetDatad(drs.rad_alt) > RADALT_GRD_THRESH);
+	double hdg = XPLMGetDataf(drs.hdg);
+	bool_t airborne = (XPLMGetDataf(drs.rad_alt) > RADALT_GRD_THRESH);
 	const char *arpt_id = arpt->icao;
 
 	for (const runway_t *rwy = list_head(&arpt->rwys); rwy != NULL;
@@ -2809,7 +2805,7 @@ ground_on_runway_aligned(void)
 {
 	bool_t on_rwy = B_FALSE;
 
-	if (XPLMGetDatad(drs.rad_alt) < RADALT_DEPART_THRESH) {
+	if (XPLMGetDataf(drs.rad_alt) < RADALT_DEPART_THRESH) {
 		for (const airport_t *arpt = list_head(cur_arpts);
 		    arpt != NULL; arpt = list_next(cur_arpts, arpt)) {
 			if (ground_on_runway_aligned_arpt(arpt))
@@ -2817,7 +2813,7 @@ ground_on_runway_aligned(void)
 		}
 	}
 
-	if (on_rwy && XPLMGetDatad(drs.gs) < STOPPED_THRESH) {
+	if (on_rwy && XPLMGetDataf(drs.gs) < STOPPED_THRESH) {
 		if (on_rwy_timer == -1)
 			on_rwy_timer = microclock();
 	} else {
@@ -2831,9 +2827,9 @@ ground_on_runway_aligned(void)
 	}
 
 	/* Taxiway takeoff check */
-	if (!on_rwy && XPLMGetDatad(drs.rad_alt) < RADALT_GRD_THRESH &&
-	    ((!landing && XPLMGetDatad(drs.gs) >= SPEED_THRESH) ||
-	    (landing && XPLMGetDatad(drs.gs) >= HIGH_SPEED_THRESH))) {
+	if (!on_rwy && XPLMGetDataf(drs.rad_alt) < RADALT_GRD_THRESH &&
+	    ((!landing && XPLMGetDataf(drs.gs) >= SPEED_THRESH) ||
+	    (landing && XPLMGetDataf(drs.gs) >= HIGH_SPEED_THRESH))) {
 		if (!on_twy_ann) {
 			msg_type_t *msg = NULL;
 			size_t msg_len = 0;
@@ -2845,8 +2841,8 @@ ground_on_runway_aligned(void)
 			play_msg(msg, msg_len, MSG_PRIO_HIGH);
 			ND_alert(ND_ALERT_ON, ND_ALERT_CAUTION, NULL, NAN);
 		}
-	} else if (XPLMGetDatad(drs.gs) < SPEED_THRESH ||
-	    XPLMGetDatad(drs.rad_alt) >= RADALT_GRD_THRESH) {
+	} else if (XPLMGetDataf(drs.gs) < SPEED_THRESH ||
+	    XPLMGetDataf(drs.rad_alt) >= RADALT_GRD_THRESH) {
 		on_twy_ann = B_FALSE;
 	}
 
@@ -3055,9 +3051,9 @@ apch_config_chk(const char *arpt_id, const char *rwy_id, double height_abv_thr,
 		dbg_log("apch_config_chk", 2, "gpa_act = %.02f rwy_gpa = %.02f",
 		    gpa_act, rwy_gpa);
 		if (rwy_key_tbl_get(flap_ann_table, arpt_id, rwy_id) == 0 &&
-		    XPLMGetDatad(drs.flaprqst) < min_landing_flap) {
+		    XPLMGetDataf(drs.flaprqst) < min_landing_flap) {
 			dbg_log("apch_config_chk", 1, "FLAPS: flaprqst = %f "
-			    "min_flap = %f", XPLMGetDatad(drs.flaprqst),
+			    "min_flap = %f", XPLMGetDataf(drs.flaprqst),
 			    min_landing_flap);
 			if (gpws_flaps_ovrd()) {
 				dbg_log("apch_config_chk", 1,
@@ -3115,11 +3111,11 @@ apch_config_chk(const char *arpt_id, const char *rwy_id, double height_abv_thr,
 			rwy_key_tbl_set(gpa_ann_table, arpt_id, rwy_id, B_TRUE);
 			return (B_TRUE);
 		} else if (rwy_key_tbl_get(spd_ann_table, arpt_id, rwy_id) ==
-		    0 && too_fast_enabled && XPLMGetDatad(drs.airspeed) >
+		    0 && too_fast_enabled && XPLMGetDataf(drs.airspeed) >
 		    apch_spd_limit(height_abv_thr)) {
 			dbg_log("apch_config_chk", 1, "TOO FAST: "
 			    "airspeed = %.0f apch_spd_limit = %.0f",
-			    XPLMGetDatad(drs.airspeed), apch_spd_limit(
+			    XPLMGetDataf(drs.airspeed), apch_spd_limit(
 			    height_abv_thr));
 			if (gpws_terr_ovrd()) {
 				dbg_log("apch_config_chk", 1,
@@ -3210,7 +3206,7 @@ air_runway_approach_arpt_rwy(const airport_t *arpt, const runway_t *rwy,
 		/* If we are below 700 ft AFE and we haven't annunciated yet */
 		if (alt - telev < RWY_APCH_ALT_MAX &&
 		    rwy_key_tbl_get(&air_apch_rwy_ann, arpt_id, rwy_id) == 0 &&
-		    !number_in_rngs(XPLMGetDatad(drs.rad_alt),
+		    !number_in_rngs(XPLMGetDataf(drs.rad_alt),
 		    RWY_APCH_SUPP_WINDOWS, NUM_RWY_APCH_SUPP_WINDOWS)) {
 			/* Don't annunciate if we are too low */
 			if (alt - telev > RWY_APCH_ALT_MIN)
@@ -3267,7 +3263,7 @@ air_runway_approach_arpt(const airport_t *arpt)
 
 	unsigned in_apch_bbox = 0;
 	double alt = MET2FEET(XPLMGetDatad(drs.elev));
-	double hdg = XPLMGetDatad(drs.hdg);
+	double hdg = XPLMGetDataf(drs.hdg);
 	double elev = arpt->refpt.elev;
 
 	if (alt > elev + RWY_APCH_FLAP1_THRESH ||
@@ -3304,7 +3300,7 @@ air_runway_approach_arpt(const airport_t *arpt)
 static void
 air_runway_approach(void)
 {
-	if (XPLMGetDatad(drs.rad_alt) < RADALT_GRD_THRESH)
+	if (XPLMGetDataf(drs.rad_alt) < RADALT_GRD_THRESH)
 		return;
 
 	unsigned in_apch_bbox = 0;
@@ -3321,10 +3317,10 @@ air_runway_approach(void)
 	 * likely trying to land onto something that's not a runway.
 	 */
 	if (in_apch_bbox == 0 && clb_rate < 0 && !gear_is_up() &&
-	    XPLMGetDatad(drs.flaprqst) >= min_landing_flap) {
-		if (XPLMGetDatad(drs.rad_alt) <= OFF_RWY_HEIGHT_MAX) {
+	    XPLMGetDataf(drs.flaprqst) >= min_landing_flap) {
+		if (XPLMGetDataf(drs.rad_alt) <= OFF_RWY_HEIGHT_MAX) {
 			/* only annunciate if we're above the minimum height */
-			if (XPLMGetDatad(drs.rad_alt) >= OFF_RWY_HEIGHT_MIN &&
+			if (XPLMGetDataf(drs.rad_alt) >= OFF_RWY_HEIGHT_MIN &&
 			    !off_rwy_ann && !gpws_terr_ovrd()) {
 				msg_type_t *msg = NULL;
 				size_t msg_len = 0;
@@ -3376,7 +3372,7 @@ static void
 altimeter_setting(void)
 {
 	if (!alt_setting_enabled ||
-	    XPLMGetDatad(drs.rad_alt) < RADALT_GRD_THRESH)
+	    XPLMGetDataf(drs.rad_alt) < RADALT_GRD_THRESH)
 		return;
 
 	const airport_t *cur_arpt = find_nearest_curarpt();
@@ -3450,10 +3446,10 @@ altimeter_setting(void)
 		if (field_changed)
 			dbg_log("altimeter", 1, "TL = 0");
 		if (TA != 0) {
-			if (XPLMGetDatad(drs.baro_sl) > STD_BARO_REF) {
+			if (XPLMGetDataf(drs.baro_sl) > STD_BARO_REF) {
 				TL = TA;
 			} else {
-				double qnh = XPLMGetDatad(drs.baro_sl) * 33.85;
+				double qnh = XPLMGetDataf(drs.baro_sl) * 33.85;
 				TL = TA + 28 * (1013 - qnh);
 			}
 			if (field_changed)
@@ -3475,7 +3471,7 @@ altimeter_setting(void)
 		    "TATL_state = fl", TA);
 	}
 
-	if (TL != 0 && elev < TA && XPLMGetDatad(drs.baro_alt) < TL &&
+	if (TL != 0 && elev < TA && XPLMGetDataf(drs.baro_alt) < TL &&
 	    /*
 	     * If there's a gap between the altitudes and flight levels, don't
 	     * transition until we're below the TA
@@ -3502,10 +3498,10 @@ altimeter_setting(void)
 			double d_qnh = 0, d_qfe = 0;
 
 			if (qnh_alt_enabled)
-				d_qnh = fabs(elev - XPLMGetDatad(drs.baro_alt));
+				d_qnh = fabs(elev - XPLMGetDataf(drs.baro_alt));
 			if (TATL_field_elev != TATL_FIELD_ELEV_UNSET &&
 			    qfe_alt_enabled)
-				d_qfe = fabs(XPLMGetDatad(drs.baro_alt) -
+				d_qfe = fabs(XPLMGetDataf(drs.baro_alt) -
 				    (elev - TATL_field_elev));
 			dbg_log("altimeter", 1, "alt check; d_qnh: %.1f "
 			    " d_qfe: %.1f", d_qnh, d_qfe);
@@ -3605,8 +3601,6 @@ raas_exec(void)
 	int64_t time_s, time_e;
 #endif
 
-	logMsg("raas_exec");
-
 	/*
 	 * Before we start, wait a set delay, because X-Plane's datarefs
 	 * needed for proper init are unstable, so we'll give them an
@@ -3639,7 +3633,7 @@ raas_exec(void)
 
 	load_nearest_airports();
 
-	if (XPLMGetDatad(drs.rad_alt) > RADALT_FLARE_THRESH) {
+	if (XPLMGetDataf(drs.rad_alt) > RADALT_FLARE_THRESH) {
 		if (!departed) {
 			departed = B_TRUE;
 			dbg_log("flt_state", 1, "departed = true");
@@ -3652,14 +3646,14 @@ raas_exec(void)
 			dbg_log("ann_state", 1, "long_landing_ann = false");
 			long_landing_ann = B_FALSE;
 		}
-	} else if (XPLMGetDatad(drs.rad_alt) < RADALT_GRD_THRESH) {
+	} else if (XPLMGetDataf(drs.rad_alt) < RADALT_GRD_THRESH) {
 		if (departed) {
 			dbg_log("flt_state", 1, "landing = true");
 			dbg_log("flt_state", 1, "departed = false");
 			landing = B_TRUE;
 		}
 		departed = B_FALSE;
-		if (XPLMGetDatad(drs.gs) < SPEED_THRESH)
+		if (XPLMGetDataf(drs.gs) < SPEED_THRESH)
 			arriving = B_FALSE;
 	}
 	if (XPLMGetDataf(drs.gs) < SPEED_THRESH && long_landing_ann) {
@@ -3688,7 +3682,7 @@ raas_exec(void)
 #endif
 
 	last_elev = XPLMGetDatad(drs.elev);
-	last_gs = XPLMGetDatad(drs.gs);
+	last_gs = XPLMGetDataf(drs.gs);
 }
 
 static float
@@ -4077,7 +4071,7 @@ xraas_init(void)
 	if (chk_acf_is_helo() && !allow_helos)
 		return;
 	if (XPLMGetDatai(drs.num_engines) < min_engines ||
-	    XPLMGetDatad(drs.mtow) < min_mtow) {
+	    XPLMGetDataf(drs.mtow) < min_mtow) {
 		char icao[8];
 		memset(icao, 0, sizeof (icao));
 		XPLMGetDatab(drs.ICAO, icao, 0, sizeof (icao) - 1);
@@ -4088,7 +4082,7 @@ xraas_init(void)
 		    "minimum MTOW: %d kg\n"
 		    "Your aircraft: (%s) number of engines: %d; "
 		    "MTOW: %.0f kg\n", min_engines, min_mtow, icao,
-		    XPLMGetDatai(drs.num_engines), XPLMGetDatad(drs.mtow));
+		    XPLMGetDatai(drs.num_engines), XPLMGetDataf(drs.mtow));
 		return;
 	}
 }
@@ -4096,9 +4090,6 @@ xraas_init(void)
 static void
 xraas_fini(void)
 {
-	tile_t *tile;
-	void *cookie = NULL;
-
 	if (!enabled)
 		return;
 
@@ -4117,6 +4108,14 @@ xraas_fini(void)
 		raas.cur_msg = {}
 	end
 #endif
+
+	if (cur_arpts != NULL) {
+		free_nearest_airport_list(cur_arpts);
+		cur_arpts = NULL;
+	}
+
+	tile_t *tile;
+	void *cookie = NULL;
 
 	/* airports are freed in the free_tile function */
 	while ((tile = avl_destroy_nodes(&airport_geo_tree, &cookie)) != NULL)
@@ -4151,8 +4150,6 @@ XPluginStart(char *outName, char *outSig, char *outDesc)
 {
 	char *p;
 
-	logMsg("plugin start");
-
 	/* Always use Unix-native paths on the Mac! */
 	XPLMEnableFeature("XPLM_USE_NATIVE_PATHS", 1);
 
@@ -4184,13 +4181,11 @@ XPluginStart(char *outName, char *outSig, char *outDesc)
 PLUGIN_API void
 XPluginStop(void)
 {
-	logMsg("plugin stop");
 }
 
 PLUGIN_API int
 XPluginEnable(void)
 {
-	logMsg("plugin enable");
 	xraas_init();
 	return (1);
 }
@@ -4198,7 +4193,6 @@ XPluginEnable(void)
 PLUGIN_API void
 XPluginDisable(void)
 {
-	logMsg("plugin disable");
 	xraas_fini();
 }
 
@@ -4213,7 +4207,6 @@ XPluginReceiveMessage(XPLMPluginID src, int msg, void *param)
 		/* only respond to user aircraft reloads */
 		if ((long int)param != 0)
 			break;
-		logMsg("plane reload");
 		xraas_fini();
 		xraas_init();
 		break;
