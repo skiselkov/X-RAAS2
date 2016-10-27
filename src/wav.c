@@ -30,7 +30,7 @@
 
 #include <OpenAL/alc.h>
 
-#include "helpers.h"
+#include "assert.h"
 #include "list.h"
 #include "log.h"
 #include "types.h"
@@ -61,8 +61,10 @@ riff_free_chunk(riff_chunk_t *c)
 {
 	if (c->fourcc == RIFF_ID || c->fourcc == LIST_ID) {
 		for (riff_chunk_t *sc = list_head(&c->subchunks); sc != NULL;
-		    sc = list_head(&c->subchunks))
+		    sc = list_head(&c->subchunks)) {
+			list_remove(&c->subchunks, sc);
 			riff_free_chunk(sc);
+		}
 		list_destroy(&c->subchunks);
 	}
 	free(c);
@@ -71,7 +73,7 @@ riff_free_chunk(riff_chunk_t *c)
 static riff_chunk_t *
 riff_parse_chunk(uint8_t *buf, size_t bufsz, bool_t bswap)
 {
-	riff_chunk_t *c = calloc(sizeof (*c), 1);
+	riff_chunk_t *c = calloc(1, sizeof (*c));
 
 	memcpy(&c->fourcc, buf, sizeof (c->fourcc));
 	memcpy(&c->sz, buf + 4, sizeof (c->sz));
@@ -181,19 +183,21 @@ riff_find_chunk(riff_chunk_t *topchunk, size_t *chunksz, ...)
 
 	va_start(ap, chunksz);
 	while ((fourcc = va_arg(ap, uint32_t)) != 0) {
+		riff_chunk_t *sc;
+
 		ASSERT(fourcc != LIST_ID && fourcc != RIFF_ID);
 		if (topchunk->fourcc != LIST_ID &&
 		    topchunk->fourcc != RIFF_ID)
 			return (NULL);
-		for (riff_chunk_t *c = list_head(&topchunk->subchunks);
-		    c != NULL; c = list_next(&topchunk->subchunks, c)) {
-			if (c->fourcc == fourcc || (c->listcc == fourcc &&
-			    (c->fourcc == LIST_ID || c->fourcc == RIFF_ID))) {
-				topchunk = c;
-				continue;
-			}
+		for (sc = list_head(&topchunk->subchunks); sc != NULL;
+		    sc = list_next(&topchunk->subchunks, sc)) {
+			if (sc->fourcc == fourcc || (sc->listcc == fourcc &&
+			    (sc->fourcc == LIST_ID || sc->fourcc == RIFF_ID)))
+				break;
 		}
-		return (NULL);
+		if (sc == NULL)
+			return (NULL);
+		topchunk = sc;
 	}
 	va_end(ap);
 
@@ -230,7 +234,7 @@ xraas_wav_load(const char *filename)
 	filesz = ftell(fp);
 	fseek(fp, 0, SEEK_SET);
 
-	if ((wav = calloc(sizeof (*wav), 1)) == NULL)
+	if ((wav = calloc(1, sizeof (*wav))) == NULL)
 		goto errout;
 	if ((filebuf = malloc(filesz)) == NULL)
 		goto errout;
@@ -316,9 +320,9 @@ xraas_wav_load(const char *filename)
 	return (wav);
 
 errout:
-	if (filebuf)
+	if (filebuf != NULL)
 		free(filebuf);
-	if (riff)
+	if (riff != NULL)
 		riff_free_chunk(riff);
 	xraas_wav_free(wav);
 	fclose(fp);

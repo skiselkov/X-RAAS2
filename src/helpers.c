@@ -29,7 +29,14 @@
 #include <math.h>
 #include <ctype.h>
 
+/* OS X: we use this to convert our file path. */
+#if	APL
+#include <Carbon/Carbon.h>
+#endif	/* !APL */
+
+#include "assert.h"
 #include "helpers.h"
+#include "log.h"
 
 /*
  * How to turn to get from hdg1 to hdg2 with positive being right and negative

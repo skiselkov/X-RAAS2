@@ -27,7 +27,6 @@
 #define	_XRAAS_HELPERS_H_
 
 #include <stdarg.h>
-#include <assert.h>
 #include <stdio.h>
 
 #include "types.h"
@@ -95,21 +94,6 @@ extern "C" {
 
 #define	UNUSED_ATTR		__attribute__((unused))
 #define	UNUSED(x)		(void)(x)
-#ifdef	DEBUG
-#define	ASSERT(x)		VERIFY(x)
-#define	UNUSED_NODEBUG(x)
-#else	/* !DEBUG */
-#define	ASSERT(x)
-#define	UNUSED_NODEBUG(x)	UNUSED(x)
-#endif	/* !DEBUG */
-#define	VERIFY(x) \
-	do { \
-		if (!(x)) { \
-			logMsg("assertion \"" #x "\" failed\n"); \
-			xraas_log_backtrace(); \
-			abort(); \
-		} \
-	} while (0)
 
 /*
  * Compile-time assertion. The condition 'x' must be constant.
@@ -204,16 +188,6 @@ void append_format(char **str, size_t *sz, const char *format, ...)
 
 #define	USEC2SEC(usec)	(usec / 1000000ll)
 #define	SEC2USEC(sec)	(sec * 1000000ll)
-
-/*
- * Weighted avg, 'w' is weight fraction from 0.0 = all of x to 1.0 = all of y.
- */
-static inline double
-wavg(double x, double y, double w)
-{
-	ASSERT(w >= 0.0 && w <= 1.0);
-	return (x + (y - x) * w);
-}
 
 #ifdef	__cplusplus
 }

@@ -35,6 +35,8 @@
 #define	PREFIX_FMT	"%s[%s:%d]: ", PREFIX, filename, line
 #endif	/* !IBM */
 
+int xraas_debug = 0;
+
 void
 xraas_log(const char *filename, int line, const char *fmt, ...)
 {
@@ -55,10 +57,11 @@ xraas_log_v(const char *filename, int line, const char *fmt, va_list ap)
 	va_copy(ap_copy, ap);
 	len = vsnprintf(NULL, 0, fmt, ap_copy);
 
-	buf = (char *)malloc(prefix_len + len + 1);
+	buf = (char *)malloc(prefix_len + len + 2);
 
 	(void) snprintf(buf, prefix_len + 1, PREFIX_FMT);
 	(void) vsnprintf(&buf[prefix_len], len + 1, fmt, ap);
+	(void) sprintf(&buf[strlen(buf)], "\n");
 
 	XPLMDebugString(buf);
 
@@ -92,8 +95,9 @@ void xraas_log_backtrace(void)
 
 	msg = (char *)malloc(msg_len + 1);
 	strcpy(msg, BACKTRACE_STR);
-	for (i = 1, j = BACKTRACE_STRLEN; i < sz; i++)
+	for (i = 1, j = BACKTRACE_STRLEN; i < sz; i++) {
 		j += sprintf(&msg[j], "%s\n", fnames[i]);
+	}
 
 	XPLMDebugString(msg);
 	fputs(msg, stderr);
@@ -109,8 +113,8 @@ xraas_dbg_log(const char *filename, int line, const char *name, int level,
 {
 	va_list ap;
 	UNUSED(name);
-	UNUSED(level);
 	va_start(ap, fmt);
-	xraas_log_v(filename, line, fmt, ap);
+	if (level < xraas_debug)
+		xraas_log_v(filename, line, fmt, ap);
 	va_end(ap);
 }

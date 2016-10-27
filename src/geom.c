@@ -29,7 +29,7 @@
 #include <stdio.h>
 
 #include "math.h"
-#include "helpers.h"
+#include "assert.h"
 #include "geom.h"
 #include "perf.h"
 #include "log.h"
@@ -1371,7 +1371,7 @@ bezier_alloc(size_t n_pts)
 	bezier_t *curve = malloc(sizeof (*curve));
 
 	curve->n_pts = n_pts;
-	curve->pts = calloc(sizeof (vect2_t), n_pts);
+	curve->pts = calloc(n_pts, sizeof (vect2_t));
 
 	return (curve);
 }

@@ -20,6 +20,7 @@
 #define _XRAAS_LOG_H_
 
 #include <stdarg.h>
+
 #include "helpers.h"
 
 #ifdef __cplusplus
@@ -47,6 +48,8 @@ void xraas_log(const char *filename, int line, const char *fmt, ...)
     PRINTF_ATTR(3);
 void xraas_log_v(const char *filename, int line, const char *fmt, va_list ap);
 void xraas_log_backtrace(void);
+
+extern int xraas_debug;
 void xraas_dbg_log(const char *filename, int line, const char *name, int level,
     const char *fmt, ...) PRINTF_ATTR(5);
 

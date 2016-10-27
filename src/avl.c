@@ -88,7 +88,7 @@
  */
 
 #include <stdlib.h>
-#include "helpers.h"
+#include "assert.h"
 #include "avl.h"
 
 /*

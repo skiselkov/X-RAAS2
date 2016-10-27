@@ -15,6 +15,7 @@
  * Copyright 2016 Saso Kiselkov. All rights reserved.
  */
 
+#include <errno.h>
 #include <ctype.h>
 #include <stddef.h>
 #include <math.h>
@@ -35,6 +36,7 @@
 #include <XPLMUtilities.h>
 #include <XPLMPlugin.h>
 
+#include "assert.h"
 #include "avl.h"
 #include "conf.h"
 #include "geom.h"
@@ -108,6 +110,7 @@
 #define	UNITS_APPEND_INTVAL		120	/* seconds */
 
 #define	RWY_ID_KEY_SZ			16
+#define	TILE_NAME_FMT			"%+03.0f%+04.0f"
 
 typedef struct {
 	double min, max;
@@ -265,6 +268,7 @@ typedef struct tile_s {
 typedef struct rwy_key_s {
 	char		key[RWY_ID_KEY_SZ];
 	int		value;
+	avl_node_t	node;
 } rwy_key_t;
 
 typedef struct msg {
@@ -413,6 +417,7 @@ static double long_land_lim_fract;		/* fraction, 0-1 */
 
 //static bool_t debug_graphical = B_FALSE;
 //static int debug_graphical_bg = 0;
+bool_t debug = B_FALSE;
 
 static avl_tree_t on_rwy_ann;
 static avl_tree_t apch_rwy_ann;
@@ -514,6 +519,7 @@ static struct {
 	XPLMDataRef plug_bus_load;
 } drs;
 
+static void unload_distant_airport_tiles(bool_t unload_all);
 static void free_airport(airport_t *arpt);
 static void log_init_msg(bool_t display, int timeout, int man_sect_number,
     const char *man_sect_name, const char *fmt, ...) PRINTF_ATTR(5);
@@ -573,19 +579,29 @@ strsplit(const char *input, char *sep, bool_t skip_empty, size_t *num)
 
 	for (const char *a = input, *b = strstr(a, sep);
 	    a != NULL; a = b + seplen, b = strstr(a, sep)) {
-		if (b == NULL)
+		if (b == NULL) {
 			b = input + strlen(input);
+			if (a != b || !skip_empty)
+				n++;
+			break;
+		}
 		if (a == b && skip_empty)
 			continue;
 		n++;
 	}
 
-	result = calloc(sizeof (char *), n);
+	result = calloc(n, sizeof (char *));
 
 	for (const char *a = input, *b = strstr(a, sep);
 	    a != NULL; a = b + seplen, b = strstr(a, sep)) {
-		if (b == NULL)
+		if (b == NULL) {
 			b = input + strlen(input);
+			if (a != b || !skip_empty) {
+				result[i] = calloc(b - a + 1, sizeof (char));
+				memcpy(result[i], a, b - a);
+			}
+			break;
+		}
 		if (a == b && skip_empty)
 			continue;
 		ASSERT(i < n);
@@ -833,7 +849,7 @@ top:
 	 * At this point the queue only contains messages of equal priotity
 	 * to our own, queue up at the end.
 	 */
-	ann = calloc(sizeof (*ann), 1);
+	ann = calloc(1, sizeof (*ann));
 	ann->msgs = msg;
 	ann->num_msgs = msg_len;
 	ann->prio = prio;
@@ -1016,13 +1032,24 @@ apt_dat_insert(airport_t *arpt)
 	avl_insert(&apt_dat, arpt, where);
 }
 
+static void
+geo_link_airport(airport_t *arpt)
+{
+	tile_t *tile = geo_table_get_tile(GEO3_TO_GEO2(arpt->refpt), B_TRUE,
+	    NULL);
+	ASSERT(!list_link_active(&arpt->tile_node));
+	list_insert_tail(&tile->arpts, arpt);
+	dbg_log("tile", 2, "geo_xref\t%s\t%f\t%f", arpt->icao, arpt->refpt.lat,
+	    arpt->refpt.lon);
+}
+
 /*
  * Parses an apt.dat (or X-RAAS_apt_dat.cache) file, parses its contents
  * and reconstructs our apt_dat tree. This is called at the start of
  * X-RAAS to populate the airport and runway database.
  */
 static size_t
-map_apt_dat(const char *apt_dat_fname)
+map_apt_dat(const char *apt_dat_fname, bool_t geo_link)
 {
 	FILE *apt_dat_f;
 	size_t arpt_cnt = 0;
@@ -1086,12 +1113,10 @@ map_apt_dat(const char *apt_dat_fname)
 				arpt->TA = TA;
 				apt_dat_insert(arpt);
 				if (!IS_NULL_GEO_POS(pos)) {
-					tile_t *tile = geo_table_get_tile(
-					    GEO3_TO_GEO2(pos), B_FALSE, NULL);
-					ASSERT(tile != NULL);
-					list_insert_tail(&tile->arpts, arpt);
-					dbg_log("tile", 2, "geo_xref\t%s\t%f"
-					    "\t%f", new_icao, pos.lat, pos.lon);
+					ASSERT(geo_link);
+					geo_link_airport(arpt);
+				} else {
+					ASSERT(!geo_link);
 				}
 			}
 			free_strlist(comps, ncomps);
@@ -1109,7 +1134,7 @@ map_apt_dat(const char *apt_dat_fname)
 
 			if (arpt == NULL) {
 				dbg_log("tile", 0, "%s:%d: malformed apt.dat. "
-				    "Runway line is not preceded by a runway "
+				    "Runway line is not preceded by an airport "
 				    "line, skipping.", apt_dat_fname, line_num);
 				free_strlist(comps, ncomps);
 				continue;
@@ -1118,6 +1143,7 @@ map_apt_dat(const char *apt_dat_fname)
 			if (rwy_is_hard(atoi(comps[2]))) {
 				rwy = calloc(1, sizeof (*rwy));
 
+				rwy->arpt = arpt;
 				rwy->width = atof(comps[1]);
 
 				strlcpy(rwy->ends[0].id, comps[8 + 0],
@@ -1219,12 +1245,11 @@ find_all_apt_dats(size_t *num)
 		fclose(scenery_packs_ini);
 	}
 
-	/* append the default apt.dat and a terminating NULL */
-	n += 2;
+	/* append the default apt.dat */
+	n += 1;
 	apt_dats = realloc(apt_dats, n * sizeof (char *));
-	apt_dats[n - 2] = mkpathname(xpdir, "Resources", "default scenery",
+	apt_dats[n - 1] = mkpathname(xpdir, "Resources", "default scenery",
 	    "default apt dat", "Earth nav data", "apt.dat", NULL);
-	apt_dats[n - 1] = NULL;
 
 	free(line);
 
@@ -1296,6 +1321,7 @@ load_airports_txt(void)
 			if (arpt != NULL) {
 				arpt->refpt = GEO_POS3(atof(comps[3]),
 				    atof(comps[4]), arpt->refpt.elev);
+				geo_link_airport(arpt);
 				arpt->TA = atof(comps[6]);
 				arpt->TL = atof(comps[7]);
 			}
@@ -1305,10 +1331,7 @@ load_airports_txt(void)
 			double telev, gpa, tch;
 
 			if (arpt == NULL) {
-				dbg_log("tile", 0, "%s:%d: malformed runway "
-				    "entry not following an airport entry, "
-				    "skipping. Offending line:\n%s",
-				    fname, line_num, line);
+				/* airport not in scenery database, skip it */
 				continue;
 			}
 
@@ -1351,11 +1374,16 @@ load_airports_txt(void)
 	return (B_TRUE);
 }
 
-static void
+static bool_t
 create_directory(const char *dirname)
 {
 	ASSERT(dirname != NULL);
-	mkdir(dirname, 0777);
+	if (mkdir(dirname, 0777) != 0 && errno != EEXIST) {
+		logMsg("Error creating directory %s: %s", dirname,
+		    strerror(errno));
+		return (B_FALSE);
+	}
+	return (B_TRUE);
 }
 
 static void
@@ -1368,9 +1396,10 @@ remove_directory(const char *dirname)
 static char *
 apt_dat_cache_dir(geo_pos2_t pos, const char *suffix)
 {
-	/* TODO: implement this */
 	char lat_lon[16];
-	snprintf(lat_lon, sizeof (lat_lon), "%+03.0f%+04.0f",
+
+	VERIFY(!IS_NULL_GEO_POS(pos));
+	snprintf(lat_lon, sizeof (lat_lon), TILE_NAME_FMT,
 	    floor(pos.lat / 10) * 10, floor(pos.lon / 10) * 10);
 
 	if (suffix != NULL)
@@ -1381,28 +1410,31 @@ apt_dat_cache_dir(geo_pos2_t pos, const char *suffix)
 		    NULL));
 }
 
-static void
+static bool_t
 write_apt_dat(const airport_t *arpt)
 {
 	char lat_lon[16];
 	char *fname;
 	FILE *fp;
 
-	snprintf(lat_lon, sizeof (lat_lon), "%+03.0f+%04.0f",
+	snprintf(lat_lon, sizeof (lat_lon), TILE_NAME_FMT,
 	    arpt->refpt.lat, arpt->refpt.lon);
 	fname = apt_dat_cache_dir(GEO3_TO_GEO2(arpt->refpt), lat_lon);
 
 	fp = fopen(fname, "a");
-	VERIFY(fp != NULL);
+	if (fp == NULL) {
+		logMsg("Error writing file %s: %s", fname, strerror(errno));
+		return (B_FALSE);
+	}
 
-	fprintf(fp, "1 %f 0 0 %s TA:%f TL:%f LAT:%f LON:%f\n",
+	fprintf(fp, "1 %f 0 0 %s TA:%.0f TL:%.0f LAT:%f LON:%f\n",
 	    arpt->refpt.elev, arpt->icao, arpt->TL, arpt->TA,
 	    arpt->refpt.lat, arpt->refpt.lon);
 	for (const runway_t *rwy = list_head(&arpt->rwys); rwy != NULL;
 	    rwy = list_next(&arpt->rwys, rwy)) {
-		fprintf(fp, "100 %f 1 0 0 0 0 0 "
-		    "%s %f %f %f %f 0 0 0 0 "
-		    "%s %f %f %f %f "
+		fprintf(fp, "100 %.2f 1 0 0 0 0 0 "
+		    "%s %f %f %.1f %.1f 0 0 0 0 "
+		    "%s %f %f %.1f %.1f "
 		    "GPA1:%f GPA2:%f TCH1:%f TCH2:%f TELEV1:%f TELEV2:%f\n",
 		    rwy->width,
 		    rwy->ends[0].id, rwy->ends[0].thr.lat,
@@ -1417,6 +1449,39 @@ write_apt_dat(const airport_t *arpt)
 	}
 	fclose(fp);
 	free(fname);
+
+	return (B_TRUE);
+}
+
+/*
+ * Some airports appear in apt.dat files, but not in the Airports.txt, but
+ * apt.dat doesn't tell us their airport reference point. Thus we do the
+ * next best thing and auto-compute the lat/lon as the arithmetic average
+ * of the lat/lon of the first runway's thresholds.
+ */
+static void
+airport_auto_refpt(airport_t *arpt)
+{
+	runway_t *rwy;
+	geo_pos3_t p1, p2;
+
+	rwy = list_head(&arpt->rwys);
+	ASSERT(IS_NULL_GEO_POS(arpt->refpt));
+	ASSERT(rwy != NULL);
+
+	p1 = rwy->ends[0].thr;
+	p2 = rwy->ends[1].thr;
+	/* Just to make sure there are no airports on the date line. */
+	ASSERT(fabs(p1.lon - p2.lon) < 90);
+	arpt->refpt.lat = (p1.lat + p2.lat) / 2;
+	arpt->refpt.lon = (p1.lon + p2.lon) / 2;
+	ASSERT(!isnan(arpt->refpt.elev));
+
+	/*
+	 * Because the airport lacked a refpt, it's not in the
+	 * airport_geo_tree, so add it back in.
+	 */
+	geo_link_airport(arpt);
 }
 
 /*
@@ -1452,29 +1517,36 @@ recreate_apt_dat_cache(void)
 	char **apt_dat_files = find_all_apt_dats(&n_apt_dat_files);
 	bool_t success = B_TRUE;
 	char *filename;
-	void *cookie = NULL;
 
 	/* First scan all the provided apt.dat files */
 	for (size_t i = 0; i < n_apt_dat_files; i++)
-		map_apt_dat(apt_dat_files[i]);
+		map_apt_dat(apt_dat_files[i], B_FALSE);
 
-	free(apt_dat_files);
-
-	/* remove airports without runways */
+	/*
+	 * Remove airports without runways. We can do this step now, because
+	 * no airports have yet been linked in to airport_geo_tree.
+	 */
 	airport_t *arpt, *next_arpt;
 	for (arpt = avl_first(&apt_dat); arpt != NULL; arpt = next_arpt) {
 		next_arpt = AVL_NEXT(&apt_dat, arpt);
-		if (list_head(&arpt->rwys) == NULL)
+		if (list_head(&arpt->rwys) == NULL) {
 			avl_remove(&apt_dat, arpt);
+			free_airport(arpt);
+		}
 	}
 	if (!load_airports_txt()) {
 		success = B_FALSE;
 		goto out;
 	}
+	/* After this step, removal of airports must be done through tiles. */
 
 	filename = mkpathname(xpprefsdir, "X-RAAS_apt_dat_cache", NULL);
 	remove_directory(filename);
-	create_directory(filename);
+	if (!create_directory(filename)) {
+		free(filename);
+		success = B_FALSE;
+		goto out;
+	}
 	free(filename);
 	version_file = fopen(version_filename, "w");
 	if (version_file == NULL) {
@@ -1486,20 +1558,25 @@ recreate_apt_dat_cache(void)
 
 	for (arpt = avl_first(&apt_dat); arpt != NULL;
 	    arpt = AVL_NEXT(&apt_dat, arpt)) {
-		char *dirname = apt_dat_cache_dir(GEO3_TO_GEO2(arpt->refpt),
-		    NULL);
-		create_directory(dirname);
-		write_apt_dat(arpt);
+		char *dirname;
+
+		if (IS_NULL_GEO_POS(arpt->refpt))
+			airport_auto_refpt(arpt);
+		dirname = apt_dat_cache_dir(GEO3_TO_GEO2(arpt->refpt), NULL);
+		if (!create_directory(dirname) || !write_apt_dat(arpt)) {
+			free(dirname);
+			success = B_FALSE;
+			goto out;
+		}
 		free(dirname);
 	}
 out:
-	while ((arpt = avl_destroy_nodes(&airport_geo_tree, &cookie)) != NULL)
-		free_airport(arpt);
+	unload_distant_airport_tiles(B_TRUE);
 
 	free_strlist(apt_dat_files, n_apt_dat_files);
 	free(version_filename);
 
-	return (B_FALSE);
+	return (success);
 }
 
 /*
@@ -1532,7 +1609,7 @@ make_apch_prox_bbox(const runway_t *rwy, int end_i)
 	const fpp_t *fpp = &rwy->arpt->fpp;
 	double limit_left = 1000000, limit_right = 1000000;
 	vect2_t x, a, b, b1, c, c1, d, thr_v, othr_v, dir_v;
-	vect2_t *bbox = calloc(sizeof (vect2_t), 7);
+	vect2_t *bbox = calloc(7, sizeof (vect2_t));
 	size_t n_pts = 0;
 
 	ASSERT(fpp != NULL);
@@ -1835,10 +1912,10 @@ load_airports_in_tile(geo_pos2_t tile_pos)
 		return;
 
 	cache_dir = apt_dat_cache_dir(tile_pos, NULL);
-	snprintf(lat_lon, sizeof (lat_lon), "%03.0f_%03.0f",
+	snprintf(lat_lon, sizeof (lat_lon), TILE_NAME_FMT,
 	    tile_pos.lat, tile_pos.lon);
-	fname = mkpathname(cache_dir, lat_lon);
-	map_apt_dat(fname);
+	fname = mkpathname(cache_dir, lat_lon, NULL);
+	map_apt_dat(fname, B_TRUE);
 	free(cache_dir);
 	free(fname);
 }
@@ -1849,6 +1926,7 @@ free_tile(tile_t *tile)
 	for (airport_t *arpt = list_head(&tile->arpts); arpt != NULL;
 	    arpt = list_head(&tile->arpts)) {
 		list_remove(&tile->arpts, arpt);
+		avl_remove(&apt_dat, arpt);
 		unload_airport(arpt);
 		free_airport(arpt);
 	}
@@ -1900,16 +1978,27 @@ unload_distant_airport_tiles_i(tile_t *tile, geo_pos2_t my_pos)
 }
 
 static void
-unload_distant_airport_tiles(void)
+unload_distant_airport_tiles(bool_t unload_all)
 {
-	geo_pos2_t my_pos = GEO_POS2(XPLMGetDatad(drs.lat),
-	    XPLMGetDatad(drs.lon));
+	geo_pos2_t my_pos;
 	tile_t *tile, *next_tile;
+
+	if (unload_all)
+		/* invalid position so we can never be near */
+		my_pos = GEO_POS2(10000, 10000);
+	else
+		my_pos = GEO_POS2(XPLMGetDatad(drs.lat),
+	    XPLMGetDatad(drs.lon));
 
 	for (tile = avl_first(&airport_geo_tree); tile != NULL;
 	    tile = next_tile) {
 		next_tile = AVL_NEXT(&airport_geo_tree, tile);
 		unload_distant_airport_tiles_i(tile, my_pos);
+	}
+
+	if (unload_all) {
+		ASSERT(avl_numnodes(&airport_geo_tree) == 0);
+		ASSERT(avl_numnodes(&apt_dat) == 0);
 	}
 }
 
@@ -1929,7 +2018,7 @@ load_nearest_airports(void)
 	last_airport_reload = now;
 
 	load_nearest_airport_tiles();
-	unload_distant_airport_tiles();
+	unload_distant_airport_tiles(B_FALSE);
 
 	if (cur_arpts != NULL)
 		free_nearest_airport_list(cur_arpts);
@@ -2141,7 +2230,7 @@ static void
 rwy_key_tbl_create(avl_tree_t *tree)
 {
 	avl_create(tree, rwy_id_key_compar, sizeof (rwy_key_t),
-	    offsetof(rwy_key_t, key));
+	    offsetof(rwy_key_t, node));
 }
 
 static void
@@ -2150,8 +2239,10 @@ rwy_key_tbl_destroy(avl_tree_t *tree)
 	void *cookie;
 	rwy_key_t *key;
 
-	while ((key = avl_destroy_nodes(tree, &cookie)) != NULL)
-		free(key);
+	if (avl_numnodes(tree) != 0) {
+		while ((key = avl_destroy_nodes(tree, &cookie)) != NULL)
+			free(key);
+	}
 	avl_destroy(tree);
 }
 
@@ -2185,7 +2276,7 @@ rwy_key_tbl_set(avl_tree_t *tree, const char *arpt_id, const char *rwy_id,
 
 	snprintf(srch.key, sizeof (srch.key), "%s/%s", arpt_id, rwy_id);
 	if ((key = avl_find(tree, &srch, &where)) == NULL) {
-		key = calloc(sizeof (*key), 1);
+		key = calloc(1, sizeof (*key));
 		snprintf(key->key, sizeof (key->key), "%s/%s", arpt_id, rwy_id);
 		avl_insert(tree, key, where);
 	}
@@ -2515,8 +2606,6 @@ perform_rwy_dist_remaining_callouts(vect2_t opp_thr_v, vect2_t pos_v)
 		}
 	}
 
-	ASSERT(prepend == NULL || the_asd != NULL);
-
 	if (the_asd == NULL || the_asd->ann)
 		return;
 
@@ -2561,7 +2650,6 @@ decel_check(double dist_rmng)
 static void
 stop_check(const runway_t *rwy, int end, double hdg, vect2_t pos_v)
 {
-	ASSERT(arpt_id != NULL);
 	ASSERT(rwy != NULL);
 	ASSERT(end == 0 || end == 1);
 	ASSERT(!IS_NULL_VECT(pos_v));
@@ -3160,7 +3248,7 @@ static void
 reset_airport_approach_table(avl_tree_t *tbl, const airport_t *arpt)
 {
 	ASSERT(tbl != NULL);
-	ASSERT(arpt_id != NULL);
+	ASSERT(arpt != NULL);
 
 	if (avl_numnodes(tbl) == 0)
 		return;
@@ -3517,6 +3605,8 @@ raas_exec(void)
 	int64_t time_s, time_e;
 #endif
 
+	logMsg("raas_exec");
+
 	/*
 	 * Before we start, wait a set delay, because X-Plane's datarefs
 	 * needed for proper init are unstable, so we'll give them an
@@ -3739,6 +3829,13 @@ snd_sys_fini(void)
 	if (use_tts)
 		return;
 
+	for (ann_t *ann = list_head(&playback_queue); ann != NULL;
+	    ann = list_head(&playback_queue)) {
+		list_remove(&playback_queue, ann);
+		free(ann->msgs);
+		free(ann);
+	}
+
 	XPLMUnregisterFlightLoopCallback(snd_sched_cb, NULL);
 	list_destroy(&playback_queue);
 
@@ -3822,6 +3919,8 @@ reset_config(void)
 	nd_alert_overlay_enabled = B_TRUE;
 	nd_alert_overlay_force = B_FALSE;
 	nd_alert_timeout = 7;
+
+	xraas_debug = 0;
 }
 
 static void
@@ -3870,6 +3969,8 @@ process_conf(conf_t *conf)
 	GET_CONF(b, nd_alert_overlay_force);
 	GET_CONF(i, nd_alert_timeout);
 #undef	GET_CONF
+
+	xraas_conf_get_i(conf, "raas_debug", &xraas_debug);
 }
 
 /*
@@ -3935,7 +4036,7 @@ xraas_init(void)
 	start_time = microclock();
 	XPLMGetNthAircraftModel(0, acf_filename, acf_path);
 
-	if (!load_configs)
+	if (!load_configs())
 		return;
 
 	if (!enabled)
@@ -3943,24 +4044,6 @@ xraas_init(void)
 
 	raas_dr_reset();
 	snd_sys_init();
-
-	if (chk_acf_is_helo() && !allow_helos)
-		return;
-	if (XPLMGetDatai(drs.num_engines) < min_engines ||
-	    XPLMGetDatad(drs.mtow) < min_mtow) {
-		char icao[8];
-		memset(icao, 0, sizeof (icao));
-		XPLMGetDatab(drs.ICAO, icao, 0, sizeof (icao) - 1);
-		log_init_msg(auto_disable_notify, INIT_ERR_MSG_TIMEOUT,
-		    3, "Activating X-RAAS in the aircraft",
-		    "X-RAAS: auto-disabled: aircraft below X-RAAS limits:\n"
-		    "X-RAAS configuration: minimum number of engines: %d; "
-		    "minimum MTOW: %d kg\n"
-		    "Your aircraft: (%s) number of engines: %d; "
-		    "MTOW: %.0f kg\n", min_engines, min_mtow, icao,
-		    XPLMGetDatai(drs.num_engines), XPLMGetDatad(drs.mtow));
-		return;
-	}
 
 #define	AIRPORT_TABLE_SZ	512
 #define	RUNWAY_TABLE_SZ		128
@@ -3990,6 +4073,24 @@ xraas_init(void)
 		return;
 
 	XPLMRegisterFlightLoopCallback(raas_exec_cb, EXEC_INTVAL, NULL);
+
+	if (chk_acf_is_helo() && !allow_helos)
+		return;
+	if (XPLMGetDatai(drs.num_engines) < min_engines ||
+	    XPLMGetDatad(drs.mtow) < min_mtow) {
+		char icao[8];
+		memset(icao, 0, sizeof (icao));
+		XPLMGetDatab(drs.ICAO, icao, 0, sizeof (icao) - 1);
+		log_init_msg(auto_disable_notify, INIT_ERR_MSG_TIMEOUT,
+		    3, "Activating X-RAAS in the aircraft",
+		    "X-RAAS: auto-disabled: aircraft below X-RAAS limits:\n"
+		    "X-RAAS configuration: minimum number of engines: %d; "
+		    "minimum MTOW: %d kg\n"
+		    "Your aircraft: (%s) number of engines: %d; "
+		    "MTOW: %.0f kg\n", min_engines, min_mtow, icao,
+		    XPLMGetDatai(drs.num_engines), XPLMGetDatad(drs.mtow));
+		return;
+	}
 }
 
 static void
@@ -4018,13 +4119,10 @@ xraas_fini(void)
 #endif
 
 	/* airports are freed in the free_tile function */
-	while (avl_destroy_nodes(&airport_geo_tree, &cookie) != NULL)
-		;
-	avl_destroy(&apt_dat);
-
 	while ((tile = avl_destroy_nodes(&airport_geo_tree, &cookie)) != NULL)
 		free_tile(tile);
 	avl_destroy(&airport_geo_tree);
+	avl_destroy(&apt_dat);
 
 	rwy_key_tbl_destroy(&accel_stop_max_spd);
 	rwy_key_tbl_destroy(&on_rwy_ann);
@@ -4045,13 +4143,6 @@ xraas_fini(void)
 		init_msg = NULL;
 	}
 
-	for (ann_t *ann = list_head(&playback_queue); ann != NULL;
-	    ann = list_head(&playback_queue)) {
-		list_remove(&playback_queue, ann);
-		free(ann->msgs);
-		free(ann);
-	}
-
 	XPLMUnregisterFlightLoopCallback(raas_exec_cb, NULL);
 }
 
@@ -4059,6 +4150,11 @@ PLUGIN_API int
 XPluginStart(char *outName, char *outSig, char *outDesc)
 {
 	char *p;
+
+	logMsg("plugin start");
+
+	/* Always use Unix-native paths on the Mac! */
+	XPLMEnableFeature("XPLM_USE_NATIVE_PATHS", 1);
 
 	strcpy(outName, XRAAS2_PLUGIN_NAME);
 	strcpy(outSig, XRAAS2_PLUGIN_SIG);
@@ -4068,6 +4164,11 @@ XPluginStart(char *outName, char *outSig, char *outDesc)
 	XPLMGetPrefsPath(xpprefsdir);
 
 	XPLMGetPluginInfo(XPLMGetMyID(), NULL, plugindir, NULL, NULL);
+
+	/* cut off X-Plane.prf from prefs path */
+	if ((p = strrchr(xpprefsdir, DIRSEP)) != NULL)
+		*p = '\0';
+
 	/* cut off the trailing path component (our filename) */
 	if ((p = strrchr(plugindir, DIRSEP)) != NULL)
 		*p = '\0';
@@ -4083,11 +4184,13 @@ XPluginStart(char *outName, char *outSig, char *outDesc)
 PLUGIN_API void
 XPluginStop(void)
 {
+	logMsg("plugin stop");
 }
 
 PLUGIN_API int
 XPluginEnable(void)
 {
+	logMsg("plugin enable");
 	xraas_init();
 	return (1);
 }
@@ -4095,13 +4198,24 @@ XPluginEnable(void)
 PLUGIN_API void
 XPluginDisable(void)
 {
+	logMsg("plugin disable");
 	xraas_fini();
 }
 
 PLUGIN_API void
-XPluginReceiveMessage(XPLMPluginID inFromWho, int inMessage, void *inParam)
+XPluginReceiveMessage(XPLMPluginID src, int msg, void *param)
 {
-	UNUSED(inFromWho);
-	UNUSED(inMessage);
-	UNUSED(inParam);
+	UNUSED(src);
+	UNUSED(param);
+
+	switch(msg) {
+	case XPLM_MSG_PLANE_LOADED:
+		/* only respond to user aircraft reloads */
+		if ((long int)param != 0)
+			break;
+		logMsg("plane reload");
+		xraas_fini();
+		xraas_init();
+		break;
+	}
 }

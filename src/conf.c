@@ -22,8 +22,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "helpers.h"
 #include "avl.h"
+#include "helpers.h"
+#include "log.h"
 
 #include "conf.h"
 
@@ -65,7 +66,7 @@ xraas_parse_conf(FILE *fp, int *errline)
 	size_t linecap = 0;
 	int linenum = 0;
 
-	conf = calloc(sizeof (*conf), 1);
+	conf = calloc(1, sizeof (*conf));
 	avl_create(&conf->tree, conf_key_compar, sizeof (conf_key_t),
 	    offsetof(conf_key_t, node));
 
@@ -108,7 +109,7 @@ xraas_parse_conf(FILE *fp, int *errline)
 		ck = avl_find(&conf->tree, &srch, &where);
 		if (ck == NULL) {
 			/* if the key didn't exist yet, create a new one */
-			ck = calloc(sizeof (*ck), 1);
+			ck = calloc(1, sizeof (*ck));
 			(void) strlcpy(ck->key, line, sizeof (ck->key));
 			avl_insert(&conf->tree, ck, where);
 		}
@@ -156,6 +157,7 @@ xraas_conf_get_i(const conf_t *conf, const char *key, int *value)
 	const conf_key_t *ck = conf_find(conf, key);
 	if (ck == NULL)
 		return (B_FALSE);
+	logMsg("%s = %s\n", key, ck->value);
 	*value = atoi(ck->value);
 	return (B_TRUE);
 }
