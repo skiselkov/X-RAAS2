@@ -190,8 +190,8 @@ extern void avl_insert_here(avl_tree_t *tree, void *new_data, void *here,
  * if the tree is empty.
  *
  */
-extern void *avl_first(avl_tree_t *tree);
-extern void *avl_last(avl_tree_t *tree);
+extern void *avl_first(const avl_tree_t *tree);
+extern void *avl_last(const avl_tree_t *tree);
 
 
 /*

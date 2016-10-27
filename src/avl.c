@@ -119,10 +119,10 @@ static const int  avl_balance2child[]	= {0, 0, 1};
  * otherwise next node
  */
 void *
-avl_walk(avl_tree_t *tree, void	*oldnode, int left)
+avl_walk(const avl_tree_t *tree, const void	*oldnode, int left)
 {
 	size_t off = tree->avl_offset;
-	avl_node_t *node = AVL_DATA2NODE(oldnode, off);
+	const avl_node_t *node = AVL_DATA2NODE(oldnode, off);
 	int right = 1 - left;
 	int was_child;
 
@@ -166,10 +166,10 @@ avl_walk(avl_tree_t *tree, void	*oldnode, int left)
  * (leftmost child from root of tree)
  */
 void *
-avl_first(avl_tree_t *tree)
+avl_first(const avl_tree_t *tree)
 {
-	avl_node_t *node;
-	avl_node_t *prev = NULL;
+	const avl_node_t *node;
+	const avl_node_t *prev = NULL;
 	size_t off = tree->avl_offset;
 
 	for (node = tree->avl_root; node != NULL; node = node->avl_child[0])
@@ -185,10 +185,10 @@ avl_first(avl_tree_t *tree)
  * (rightmost child from root of tree)
  */
 void *
-avl_last(avl_tree_t *tree)
+avl_last(const avl_tree_t *tree)
 {
-	avl_node_t *node;
-	avl_node_t *prev = NULL;
+	const avl_node_t *node;
+	const avl_node_t *prev = NULL;
 	size_t off = tree->avl_offset;
 
 	for (node = tree->avl_root; node != NULL; node = node->avl_child[1])

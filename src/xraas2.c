@@ -239,7 +239,7 @@ struct runway {
 	vect2_t		*tora_bbox;	/* on-runway on ground (for tkoff) */
 	vect2_t		*asda_bbox;	/* on-runway on ground (for stopping) */
 
-	list_node_t	node;
+	avl_node_t	node;
 };
 
 struct airport {
@@ -247,7 +247,7 @@ struct airport {
 	geo_pos3_t	refpt;		/* airport reference point location */
 	double		TA;		/* transition altitude in feet */
 	double		TL;		/* transition level in feet */
-	list_t		rwys;
+	avl_tree_t	rwys;
 
 	bool_t		load_complete;	/* true if we've done load_airport */
 	vect3_t		ecef;		/* refpt ECEF coordinates */
@@ -560,6 +560,24 @@ airport_geo_tree_compar(const void *a, const void *b)
 	} else {
 		return (1);
 	}
+}
+
+static int
+runway_compar(const void *a, const void *b)
+{
+	const runway_t *ra = a, *rb = b;
+	int res = strcmp(ra->joint_id, rb->joint_id);
+	if (res != 0) {
+		/* make sure the runways are not simply reversals */
+		ASSERT(strcmp(ra->ends[0].id, rb->ends[1].id) != 0);
+		ASSERT(strcmp(ra->ends[1].id, rb->ends[0].id) != 0);
+	}
+	if (res < 0)
+		return (-1);
+	else if (res == 0)
+		return (0);
+	else
+		return (1);
 }
 
 /*
@@ -1083,9 +1101,18 @@ map_apt_dat(const char *apt_dat_fname, bool_t geo_link)
 
 	while (!feof(apt_dat_f)) {
 		line_num++;
-		if (getline(&line, &linecap, apt_dat_f) <= 0)
+		if (getline(&line, &linecap, apt_dat_f) <= 0) {
 			continue;
+		}
 		strip_space(line);
+		if (strlen(line) == 0) {
+			/*
+			 * An empty line denotes the end of an airport entry,
+			 * so stop adding runways to the previous airport.
+			 */
+			arpt = NULL;
+			continue;
+		}
 		if (strstr(line, "1 ") == line) {
 			const char *new_icao;
 			double TA = 0, TL = 0;
@@ -1119,7 +1146,8 @@ map_apt_dat(const char *apt_dat_fname, bool_t geo_link)
 			if (arpt == NULL) {
 				arpt_cnt++;
 				arpt = calloc(1, sizeof (*arpt));
-				list_create(&arpt->rwys, sizeof(runway_t),
+				avl_create(&arpt->rwys, runway_compar,
+				    sizeof(runway_t),
 				    offsetof(runway_t, node));
 				my_strlcpy(arpt->icao, new_icao,
 				    sizeof (arpt->icao));
@@ -1133,6 +1161,13 @@ map_apt_dat(const char *apt_dat_fname, bool_t geo_link)
 				} else {
 					ASSERT(!geo_link);
 				}
+			} else {
+				/*
+				 * This airport was already known from
+				 * a previously loaded apt.dat. Avoid
+				 * overwriting its data.
+				 */
+				arpt = NULL;
 			}
 			free_strlist(comps, ncomps);
 		} else if (strstr(line, "100 ") == line && arpt != NULL) {
@@ -1147,15 +1182,9 @@ map_apt_dat(const char *apt_dat_fname, bool_t geo_link)
 				continue;
 			}
 
-			if (arpt == NULL) {
-				dbg_log("tile", 0, "%s:%d: malformed apt.dat. "
-				    "Runway line is not preceded by an airport "
-				    "line, skipping.", apt_dat_fname, line_num);
-				free_strlist(comps, ncomps);
-				continue;
-			}
-
 			if (rwy_is_hard(atoi(comps[2]))) {
+				avl_index_t where;
+
 				rwy = calloc(1, sizeof (*rwy));
 
 				rwy->arpt = arpt;
@@ -1196,8 +1225,32 @@ map_apt_dat(const char *apt_dat_fname, bool_t geo_link)
 					    atof(&comps[27][7]);
 				}
 
-				list_insert_tail(&arpt->rwys, rwy);
+				if (avl_find(&arpt->rwys, rwy, &where) !=
+				    NULL) {
+					logMsg("%s seems corrupted, it "
+					    "contains a duplicate runway "
+					    "entry %s/%s at airport %s",
+					    apt_dat_fname, rwy->ends[0].id,
+					    rwy->ends[1].id, arpt->icao);
+					free(rwy);
+					free_strlist(comps, ncomps);
+					break;
+				} else {
+					avl_insert(&arpt->rwys, rwy, where);
+				}
 			}
+			free_strlist(comps, ncomps);
+		} else if (strstr(line, "1302 ") == line && arpt != NULL) {
+			comps = strsplit(line, " ", B_TRUE, &ncomps);
+			/* This line can contain varying numbers of comps */
+			if (ncomps != 3) {
+				free_strlist(comps, ncomps);
+				continue;
+			}
+			if (strcmp(comps[1], "transition_alt") == 0)
+				arpt->TA = atoi(comps[2]);
+			else if (strcmp(comps[1], "transition_level") == 0)
+				arpt->TL = atoi(comps[2]);
 			free_strlist(comps, ncomps);
 		}
 	}
@@ -1367,8 +1420,8 @@ load_airports_txt(void)
 			gpa = atof(comps[11]);
 			tch = atof(comps[12]);
 
-			for (runway_t *rwy = list_head(&arpt->rwys);
-			    rwy != NULL; rwy = list_next(&arpt->rwys, rwy)) {
+			for (runway_t *rwy = avl_first(&arpt->rwys);
+			    rwy != NULL; rwy = AVL_NEXT(&arpt->rwys, rwy)) {
 				if (strcmp(rwy->ends[0].id, rwy_id) == 0) {
 					rwy->ends[0].thr.elev = telev;
 					rwy->ends[0].gpa = gpa;
@@ -1448,8 +1501,8 @@ write_apt_dat(const airport_t *arpt)
 	fprintf(fp, "1 %f 0 0 %s TA:%.0f TL:%.0f LAT:%f LON:%f\n",
 	    arpt->refpt.elev, arpt->icao, arpt->TL, arpt->TA,
 	    arpt->refpt.lat, arpt->refpt.lon);
-	for (const runway_t *rwy = list_head(&arpt->rwys); rwy != NULL;
-	    rwy = list_next(&arpt->rwys, rwy)) {
+	for (const runway_t *rwy = avl_first(&arpt->rwys); rwy != NULL;
+	    rwy = AVL_NEXT(&arpt->rwys, rwy)) {
 		fprintf(fp, "100 %.2f 1 0 0 0 0 0 "
 		    "%s %f %f %.1f %.1f 0 0 0 0 "
 		    "%s %f %f %.1f %.1f "
@@ -1483,7 +1536,7 @@ airport_auto_refpt(airport_t *arpt)
 	runway_t *rwy;
 	geo_pos3_t p1, p2;
 
-	rwy = list_head(&arpt->rwys);
+	rwy = avl_first(&arpt->rwys);
 	ASSERT(IS_NULL_GEO_POS(arpt->refpt));
 	ASSERT(rwy != NULL);
 
@@ -1547,7 +1600,7 @@ recreate_apt_dat_cache(void)
 	airport_t *arpt, *next_arpt;
 	for (arpt = avl_first(&state.apt_dat); arpt != NULL; arpt = next_arpt) {
 		next_arpt = AVL_NEXT(&state.apt_dat, arpt);
-		if (list_head(&arpt->rwys) == NULL) {
+		if (avl_first(&arpt->rwys) == NULL) {
 			avl_remove(&state.apt_dat, arpt);
 			free_airport(arpt);
 		}
@@ -1669,8 +1722,8 @@ make_apch_prox_bbox(const runway_t *rwy, int end_i)
 	if (strlen(end->id) >= 3) {
 		int my_num_id = atoi(end->id);
 
-		for (const runway_t *orwy = list_head(&rwy->arpt->rwys);
-		    orwy != NULL; orwy = list_next(&rwy->arpt->rwys, orwy)) {
+		for (const runway_t *orwy = avl_first(&rwy->arpt->rwys);
+		    orwy != NULL; orwy = AVL_NEXT(&rwy->arpt->rwys, orwy)) {
 			const runway_end_t *orwy_end;
 			vect2_t othr_v, v;
 			double a, dist;
@@ -1830,8 +1883,8 @@ load_airport(airport_t *arpt)
 	    B_FALSE);
 	arpt->ecef = sph2ecef(arpt->refpt);
 
-	for (runway_t *rwy = list_head(&arpt->rwys); rwy != NULL;
-	    rwy = list_next(&arpt->rwys, rwy))
+	for (runway_t *rwy = avl_first(&arpt->rwys); rwy != NULL;
+	    rwy = AVL_NEXT(&arpt->rwys, rwy))
 		load_rwy_info(rwy);
 
 	arpt->load_complete = B_TRUE;
@@ -1842,8 +1895,8 @@ unload_airport(airport_t *arpt)
 {
 	if (!arpt->load_complete)
 		return;
-	for (runway_t *rwy = list_head(&arpt->rwys); rwy != NULL;
-	    rwy = list_next(&arpt->rwys, rwy))
+	for (runway_t *rwy = avl_first(&arpt->rwys); rwy != NULL;
+	    rwy = AVL_NEXT(&arpt->rwys, rwy))
 		unload_rwy_info(rwy);
 	arpt->load_complete = B_FALSE;
 }
@@ -1851,14 +1904,14 @@ unload_airport(airport_t *arpt)
 static void
 free_airport(airport_t *arpt)
 {
+	void *cookie = NULL;
+	runway_t *rwy;
+
 	ASSERT(!arpt->load_complete);
 
-	for (runway_t *rwy = list_head(&arpt->rwys); rwy != NULL;
-	    rwy = list_head(&arpt->rwys)) {
-		list_remove(&arpt->rwys, rwy);
+	while ((rwy = avl_destroy_nodes(&arpt->rwys, &cookie)) != NULL)
 		free(rwy);
-	}
-	list_destroy(&arpt->rwys);
+	avl_destroy(&arpt->rwys);
 	ASSERT(!list_link_active(&arpt->cur_arpts_node));
 	ASSERT(!list_link_active(&arpt->tile_node));
 	free(arpt);
@@ -2268,21 +2321,27 @@ rwy_key_tbl_empty(avl_tree_t *tree)
 	}
 }
 
+#define rwy_key_tbl_remove(tree, arpt_id, rwy_id) \
+        rwy_key_tbl_remove_impl(tree, #tree, arpt_id, rwy_id)
 static void
-rwy_key_tbl_remove(avl_tree_t *tree, const char *arpt_id, const char *rwy_id)
+rwy_key_tbl_remove_impl(avl_tree_t *tree, const char *name,
+    const char *arpt_id, const char *rwy_id)
 {
 	rwy_key_t srch, *key;
 
 	snprintf(srch.key, sizeof (srch.key), "%s/%s", arpt_id, rwy_id);
 	if ((key = avl_find(tree, &srch, NULL)) != NULL) {
+	        dbg_log("rwy_key", 1, "%s[%s/%s] = nil", name, arpt_id, rwy_id);
 		avl_remove(tree, key);
 		free(key);
 	}
 }
 
+#define rwy_key_tbl_set(tree, arpt_id, rwy_id, value) \
+        rwy_key_tbl_set_impl(tree, #tree, arpt_id, rwy_id, value)
 static void
-rwy_key_tbl_set(avl_tree_t *tree, const char *arpt_id, const char *rwy_id,
-    int value)
+rwy_key_tbl_set_impl(avl_tree_t *tree, const char *name,
+    const char *arpt_id, const char *rwy_id, int value)
 {
 	rwy_key_t srch, *key;
 	avl_index_t where;
@@ -2293,7 +2352,11 @@ rwy_key_tbl_set(avl_tree_t *tree, const char *arpt_id, const char *rwy_id,
 		snprintf(key->key, sizeof (key->key), "%s/%s", arpt_id, rwy_id);
 		avl_insert(tree, key, where);
 	}
-	key->value = value;
+	if (key->value != value) {
+		dbg_log("rwy_key", 1, "%s[%s/%s] = %d", name, arpt_id, rwy_id,
+		    value);
+		key->value = value;
+        }
 }
 
 static int
@@ -2320,8 +2383,10 @@ do_approaching_rwy(const airport_t *arpt, const runway_t *rwy,
 
 	rwy_end = &rwy->ends[end];
 
-	if ((on_ground && rwy_key_tbl_get(&state.apch_rwy_ann, arpt->icao,
-	    rwy->joint_id)) ||
+	if ((on_ground &&
+	    (rwy_key_tbl_get(&state.apch_rwy_ann, arpt->icao, rwy->joint_id) ||
+	    rwy_key_tbl_get(&state.on_rwy_ann, arpt->icao, rwy->ends[0].id) ||
+	    rwy_key_tbl_get(&state.on_rwy_ann, arpt->icao, rwy->ends[1].id))) ||
 	    (!on_ground && rwy_key_tbl_get(&state.air_apch_rwy_ann, arpt->icao,
 	    rwy->joint_id) != 0))
 		return;
@@ -2338,7 +2403,8 @@ do_approaching_rwy(const airport_t *arpt, const runway_t *rwy,
 
 		/* Multiple runways being approached? */
 		if ((on_ground && avl_numnodes(&state.apch_rwy_ann) != 0) ||
-		    (!on_ground && avl_numnodes(&state.air_apch_rwy_ann) != 0)) {
+		    (!on_ground && avl_numnodes(&state.air_apch_rwy_ann) !=
+		    0)) {
 			if (on_ground)
 				/*
 				 * On the ground we don't want to re-annunciate
@@ -2370,19 +2436,20 @@ do_approaching_rwy(const airport_t *arpt, const runway_t *rwy,
 			end
 #endif
 			if (on_ground)
-				rwy_key_tbl_set(&state.apch_rwy_ann, arpt->icao,
-				    rwy->joint_id, B_TRUE);
+				rwy_key_tbl_set(&state.apch_rwy_ann,
+				    arpt->icao, rwy->joint_id, B_TRUE);
 			else
-				rwy_key_tbl_set(&state.air_apch_rwy_ann, arpt->icao,
-				    rwy->joint_id, B_TRUE);
+				rwy_key_tbl_set(&state.air_apch_rwy_ann,
+				    arpt->icao, rwy->joint_id, B_TRUE);
 
 			if (annunciated_rwys)
 				return;
 		}
 
-		if ((on_ground && rwy_key_tbl_get(&state.apch_rwy_ann, arpt->icao,
-		    rwy->joint_id) == 0) || (!on_ground && rwy_key_tbl_get(
-		    &state.air_apch_rwy_ann, arpt->icao, rwy->joint_id) == 0) ||
+		if ((on_ground && rwy_key_tbl_get(&state.apch_rwy_ann,
+		    arpt->icao, rwy->joint_id) == 0) ||
+		    (!on_ground && rwy_key_tbl_get(&state.air_apch_rwy_ann,
+		    arpt->icao, rwy->joint_id) == 0) ||
 		    !annunciated_rwys) {
 			double dist_ND = NAN;
 			nd_alert_level_t level = ND_ALERT_ROUTINE;
@@ -2406,11 +2473,11 @@ do_approaching_rwy(const airport_t *arpt, const runway_t *rwy,
 	}
 
 	if (on_ground)
-		rwy_key_tbl_set(&state.apch_rwy_ann, arpt->icao, rwy->joint_id,
-		    B_TRUE);
+		rwy_key_tbl_set(&state.apch_rwy_ann, arpt->icao,
+		    rwy->joint_id, B_TRUE);
 	else
-		rwy_key_tbl_set(&state.air_apch_rwy_ann, arpt->icao, rwy->joint_id,
-		    B_TRUE);
+		rwy_key_tbl_set(&state.air_apch_rwy_ann, arpt->icao,
+		    rwy->joint_id, B_TRUE);
 }
 
 static bool_t
@@ -2426,8 +2493,8 @@ ground_runway_approach_arpt_rwy(const airport_t *arpt, const runway_t *rwy,
 		    B_TRUE);
 		return (B_TRUE);
 	} else {
-		rwy_key_tbl_remove(&state.apch_rwy_ann, arpt->icao, rwy->ends[0].id);
-		rwy_key_tbl_remove(&state.apch_rwy_ann, arpt->icao, rwy->ends[1].id);
+		rwy_key_tbl_remove(&state.apch_rwy_ann, arpt->icao,
+		    rwy->joint_id);
 		return (B_FALSE);
 	}
 }
@@ -2445,8 +2512,8 @@ ground_runway_approach_arpt(const airport_t *arpt, vect2_t vel_v)
 	pos_v = geo2fpp(GEO_POS2(XPLMGetDatad(drs.lat), XPLMGetDatad(drs.lon)),
 	    &arpt->fpp);
 
-	for (const runway_t *rwy = list_head(&arpt->rwys); rwy != NULL;
-	    rwy = list_next(&arpt->rwys, rwy)) {
+	for (const runway_t *rwy = avl_first(&arpt->rwys); rwy != NULL;
+	    rwy = AVL_NEXT(&arpt->rwys, rwy)) {
 		if (ground_runway_approach_arpt_rwy(arpt, rwy, pos_v, vel_v))
 			in_prox++;
 	}
@@ -2785,22 +2852,35 @@ ground_on_runway_aligned_arpt(const airport_t *arpt)
 	bool_t airborne = (XPLMGetDataf(drs.rad_alt) > RADALT_GRD_THRESH);
 	const char *arpt_id = arpt->icao;
 
-	for (const runway_t *rwy = list_head(&arpt->rwys); rwy != NULL;
-	    rwy = list_next(&arpt->rwys, rwy)) {
+	for (const runway_t *rwy = avl_first(&arpt->rwys); rwy != NULL;
+	    rwy = AVL_NEXT(&arpt->rwys, rwy)) {
 		ASSERT(rwy->tora_bbox != NULL);
 		if (!airborne && vect2_in_poly(pos_v, rwy->tora_bbox)) {
+		        /*
+		         * In order to produce on-runway annunciations we need
+		         * to be both NOT airborne AND in the TORA bbox.
+		         */
 			on_rwy = B_TRUE;
 			on_rwy_check(arpt_id, rwy->ends[0].id, hdg,
 			    rwy->ends[0].hdg, pos_v, rwy->ends[1].dthr_v);
 			on_rwy_check(arpt_id, rwy->ends[1].id, hdg,
 			    rwy->ends[1].hdg, pos_v, rwy->ends[0].dthr_v);
-		} else {
+		} else if (!vect2_in_poly(pos_v, rwy->prox_bbox)) {
+		        /*
+		         * To reset the 'on-runway' annunciation state, we must
+		         * have left the wider approach bbox. This is to give
+		         * us some hysteresis in case we come onto the runway
+		         * at a very shallow angle and whether we're on the
+		         * runway or not could fluctuate.
+		         */
 			rwy_key_tbl_remove(&state.on_rwy_ann, arpt_id,
 			    rwy->ends[0].id);
 			rwy_key_tbl_remove(&state.on_rwy_ann, arpt_id,
 			    rwy->ends[1].id);
-			if (strcmp(state.rejected_takeoff, rwy->ends[0].id) == 0 ||
-			    strcmp(state.rejected_takeoff, rwy->ends[1].id) == 0) {
+			if (strcmp(state.rejected_takeoff, rwy->ends[0].id) ==
+			    0 ||
+			    strcmp(state.rejected_takeoff, rwy->ends[1].id) ==
+			    0) {
 				dbg_log("ann_state", 1,
 				    "state.rejected_takeoff = nil");
 				*state.rejected_takeoff = 0;
@@ -3223,15 +3303,16 @@ air_runway_approach_arpt_rwy(const airport_t *arpt, const runway_t *rwy,
 
 		/* If we are below 700 ft AFE and we haven't annunciated yet */
 		if (alt - telev < RWY_APCH_ALT_MAX &&
-		    rwy_key_tbl_get(&state.air_apch_rwy_ann, arpt_id, rwy_id) == 0 &&
+		    rwy_key_tbl_get(&state.air_apch_rwy_ann, arpt_id,
+		    rwy->joint_id) == 0 &&
 		    !number_in_rngs(XPLMGetDataf(drs.rad_alt),
 		    RWY_APCH_SUPP_WINDOWS, NUM_RWY_APCH_SUPP_WINDOWS)) {
 			/* Don't annunciate if we are too low */
 			if (alt - telev > RWY_APCH_ALT_MIN)
 				do_approaching_rwy(arpt, rwy,
 				    closest_rwy_end(pos_v, rwy), B_FALSE);
-			rwy_key_tbl_set(&state.air_apch_rwy_ann, arpt_id, rwy_id,
-			    B_TRUE);
+			rwy_key_tbl_set(&state.air_apch_rwy_ann, arpt_id,
+			    rwy->joint_id, B_TRUE);
 		}
 
 		if (alt - telev < SHORT_RWY_APCH_ALT_MAX &&
@@ -3252,7 +3333,8 @@ air_runway_approach_arpt_rwy(const airport_t *arpt, const runway_t *rwy,
 
 		return (B_TRUE);
 	} else if (!in_prox_bbox) {
-		rwy_key_tbl_remove(&state.air_apch_rwy_ann, arpt_id, rwy_id);
+		rwy_key_tbl_remove(&state.air_apch_rwy_ann, arpt_id,
+		    rwy->joint_id);
 	}
 
 	return (B_FALSE);
@@ -3267,8 +3349,8 @@ reset_airport_approach_table(avl_tree_t *tbl, const airport_t *arpt)
 	if (avl_numnodes(tbl) == 0)
 		return;
 
-	for (const runway_t *rwy = list_head(&arpt->rwys); rwy != NULL;
-	    rwy = list_next(&arpt->rwys, rwy)) {
+	for (const runway_t *rwy = avl_first(&arpt->rwys); rwy != NULL;
+	    rwy = AVL_NEXT(&arpt->rwys, rwy)) {
 		rwy_key_tbl_remove(tbl, arpt->icao, rwy->ends[0].id);
 		rwy_key_tbl_remove(tbl, arpt->icao, rwy->ends[1].id);
 	}
@@ -3302,8 +3384,8 @@ air_runway_approach_arpt(const airport_t *arpt)
 	vect2_t pos_v = geo2fpp(GEO_POS2(XPLMGetDatad(drs.lat),
 	    XPLMGetDatad(drs.lon)), &arpt->fpp);
 
-	for (const runway_t *rwy = list_head(&arpt->rwys); rwy != NULL;
-	    rwy = list_next(&arpt->rwys, rwy)) {
+	for (const runway_t *rwy = avl_first(&arpt->rwys); rwy != NULL;
+	    rwy = AVL_NEXT(&arpt->rwys, rwy)) {
 		if (air_runway_approach_arpt_rwy(arpt, rwy, 0, pos_v,
 		    hdg, alt) ||
 		    air_runway_approach_arpt_rwy(arpt, rwy, 1, pos_v,
