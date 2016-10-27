@@ -2,9 +2,9 @@ cmake_minimum_required(VERSION 2.8.3)
 project(plugin C)
 
 SET(SRC xraas2.c geom.c math.c helpers.c perf.c log.c list.c avl.c conf.c
-    wav.c)
+    riff.c wav.c)
 SET(HDR geom.h math.h types.h helpers.h perf.h log.h list.h avl.h avl_impl.h
-    conf.h wav.h)
+    conf.h riff.h wav.h)
 
 SET(ALL_SRC ${SRC} ${HDR})
 LIST(SORT ALL_SRC)
@@ -61,6 +61,8 @@ elseif(WIN32)
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DAPL=0 -DIBM=1 -DLIN=0 \
 	    -D_CRT_SECURE_NO_WARNINGS /bigobj")
 endif()
+
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fvisibility=hidden")
 
 #linking
 link_libraries(m)

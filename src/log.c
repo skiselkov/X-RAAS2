@@ -38,16 +38,16 @@
 int xraas_debug = 0;
 
 void
-xraas_log(const char *filename, int line, const char *fmt, ...)
+log_impl(const char *filename, int line, const char *fmt, ...)
 {
 	va_list ap;
 	va_start(ap, fmt);
-	xraas_log_v(filename, line, fmt, ap);
+	log_impl_v(filename, line, fmt, ap);
 	va_end(ap);
 }
 
 void
-xraas_log_v(const char *filename, int line, const char *fmt, va_list ap)
+log_impl_v(const char *filename, int line, const char *fmt, va_list ap)
 {
 	va_list ap_copy;
 	char *buf;
@@ -76,7 +76,7 @@ xraas_log_v(const char *filename, int line, const char *fmt, va_list ap)
 #define	BACKTRACE_STRLEN	strlen(BACKTRACE_STR)
 #endif	/* !__GNUC__ && !__clang__ */
 
-void xraas_log_backtrace(void)
+void log_backtrace(void)
 {
 #if	IBM
 	/* logging backtraces is not implemented yet */
@@ -108,13 +108,13 @@ void xraas_log_backtrace(void)
 }
 
 void
-xraas_dbg_log(const char *filename, int line, const char *name, int level,
+dbg_log_impl(const char *filename, int line, const char *name, int level,
     const char *fmt, ...)
 {
 	va_list ap;
 	UNUSED(name);
 	va_start(ap, fmt);
 	if (level < xraas_debug)
-		xraas_log_v(filename, line, fmt, ap);
+		log_impl_v(filename, line, fmt, ap);
 	va_end(ap);
 }

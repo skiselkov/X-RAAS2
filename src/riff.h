@@ -23,43 +23,34 @@
  * Copyright 2016 Saso Kiselkov. All rights reserved.
  */
 
-#ifndef	_XRAAS_WAV_H_
-#define	_XRAAS_WAV_H_
+#ifndef	_XRAAS_RIFF_H_
+#define	_XRAAS_RIFF_H_
 
-#include <stdint.h>
-#include <OpenAL/al.h>
+#include "types.h"
 
 #ifdef	__cplusplus
 extern "C" {
 #endif
 
-typedef struct wav_fmt_hdr {
-	uint16_t	datafmt;	/* PCM = 1 */
-	uint16_t	n_channels;
-	uint32_t	srate;		/* sample rate in Hz */
-	uint32_t	byte_rate;	/* (srate * bps * #channels) / 8 */
-	uint16_t	padding;	/* unused */
-	uint16_t	bps;		/* bits per sample */
-} wav_fmt_hdr_t;
+typedef struct riff_chunk {
+	bool_t		bswap;
+	uint32_t	fourcc;
+	uint8_t		*data;
+	uint32_t	sz;
 
-typedef struct wav_s {
-	char		*name;
-	wav_fmt_hdr_t	fmt;
-	double		duration;	/* in seconds */
-	ALuint		albuf;
-	ALuint		alsrc;
-} wav_t;
+	/* populated if fourcc is RIFF_ID or LIST_ID */
+	uint32_t	listcc;
+	list_t		subchunks;
 
-void audio_set_shared_ctx(bool_t flag);
-void audio_fini();
+	list_node_t	node;
+} riff_chunk_t;
 
-wav_t *wav_load(const char *filename, const char *descr_name);
-void wav_free(wav_t *wav);
-void wav_play(wav_t *wav, double gain);
-void wav_stop(wav_t *wav);
+void riff_free_chunk(riff_chunk_t *c);
+riff_chunk_t *riff_parse(uint32_t filetype, uint8_t *buf, size_t bufsz);
+uint8_t *riff_find_chunk(riff_chunk_t *topchunk, size_t *chunksz, ...);
 
 #ifdef	__cplusplus
 }
 #endif
 
-#endif	/* _XRAAS_WAV_H_ */
+#endif	/* _XRAAS_RIFF_H_ */

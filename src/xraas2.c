@@ -230,6 +230,7 @@ struct runway {
 	airport_t	*arpt;
 	double		width;
 	runway_end_t	ends[2];
+	char		joint_id[8];
 
 	/* computed on load_airport */
 	double		length;		/* meters */
@@ -268,12 +269,6 @@ typedef struct rwy_key_s {
 	int		value;
 	avl_node_t	node;
 } rwy_key_t;
-
-typedef struct msg {
-	const char *name;
-	const char *text;
-	wav_t *wav;
-} msg_t;
 
 typedef enum {
 	ZERO_MSG,
@@ -323,6 +318,12 @@ typedef struct {
 	list_node_t	node;
 } ann_t;
 
+typedef struct msg {
+	const char *name;
+	const char *text;
+	wav_t *wav;
+} msg_t;
+
 static msg_t voice_msgs[NUM_MSGS] = {
 	{ .name = "0", .text = "Zero, ", .wav = NULL },
 	{ .name = "1", .text = "One, ", .wav = NULL },
@@ -360,126 +361,132 @@ static msg_t voice_msgs[NUM_MSGS] = {
 	{ .name = "unstable", .text = "Unstable! ", .wav = NULL }
 };
 
-static list_t playback_queue;
-
-static bool_t enabled;
-static int min_engines;				/* count */
-static int min_mtow;				/* kg */
-static bool_t allow_helos;
-static bool_t auto_disable_notify;
-static bool_t startup_notify;
-static bool_t override_electrical;
-static bool_t override_replay;
-static bool_t use_tts;
-static bool_t speak_units;
-
-static bool_t use_imperial;
-static int min_takeoff_dist;			/* meters */
-static int min_landing_dist;			/* meters */
-static int min_rotation_dist;			/* meters */
-static double min_rotation_angle;		/* degrees */
-static int stop_dist_cutoff;			/* meters */
-static bool_t voice_female;
-static double voice_volume;
-static bool_t disable_ext_view;
-static double min_landing_flap;			/* ratio, 0-1 */
-static double min_takeoff_flap;			/* ratio, 0-1 */
-static double max_takeoff_flap;			/* ratio, 0-1 */
-
-static bool_t nd_alerts_enabled;
-static int nd_alert_filter;			/* nd_alert_level_t */
-static bool_t nd_alert_overlay_enabled;
-static bool_t nd_alert_overlay_force;
-static int nd_alert_timeout;			/* seconds */
-
-static int on_rwy_warn_initial;			/* seconds */
-static int on_rwy_warn_repeat;			/* seconds */
-static int on_rwy_warn_max_n;			/* count */
-
-static bool_t too_high_enabled;
-static bool_t too_fast_enabled;
-static double gpa_limit_mult;			/* multiplier */
-static double gpa_limit_max;			/* degrees */
-
-static const char *GPWS_priority_dataref = "sim/cockpit2/annunciators/GPWS";
-static const char *GPWS_inop_dataref = "sim/cockpit/warnings/annunciators/GPWS";
-
-static bool_t alt_setting_enabled;
-static bool_t qnh_alt_enabled;
-static bool_t qfe_alt_enabled;
-
-static bool_t us_runway_numbers;
-
-static int long_land_lim_abs;			/* meters */
-static double long_land_lim_fract;		/* fraction, 0-1 */
-
-//static bool_t debug_graphical = B_FALSE;
-//static int debug_graphical_bg = 0;
-bool_t debug = B_FALSE;
-
-static avl_tree_t on_rwy_ann;
-static avl_tree_t apch_rwy_ann;
-static bool_t apch_rwys_ann = B_FALSE;     /* when multiple met the criteria */
-static avl_tree_t air_apch_rwy_ann ;
-static bool_t air_apch_rwys_ann = B_FALSE; /* when multiple met the criteria */
-static bool_t air_apch_short_rwy_ann = B_FALSE;
-static avl_tree_t air_apch_flap1_ann;
-static avl_tree_t air_apch_flap2_ann;
-static avl_tree_t air_apch_flap3_ann;
-static avl_tree_t air_apch_gpa1_ann;
-static avl_tree_t air_apch_gpa2_ann;
-static avl_tree_t air_apch_gpa3_ann;
-static avl_tree_t air_apch_spd1_ann;
-static avl_tree_t air_apch_spd2_ann;
-static avl_tree_t air_apch_spd3_ann;
-static bool_t on_twy_ann = B_FALSE;
-static bool_t long_landing_ann = B_FALSE;
-static bool_t short_rwy_takeoff_chk = B_FALSE;
-static int64_t on_rwy_timer = -1;
-static int on_rwy_warnings = 0;
-static bool_t off_rwy_ann = B_FALSE;
-static char rejected_takeoff[8] = { 0 };
-
-static avl_tree_t accel_stop_max_spd;
-static int accel_stop_ann_initial = 0;
-static bool_t departed = B_FALSE;
-static bool_t arriving = B_FALSE;
-static bool_t landing = B_FALSE;
-
-enum TATL_state_e {
+typedef enum TATL_state_e {
 	TATL_STATE_ALT,
 	TATL_STATE_FL
-};
+} TATL_state_t;
 
-static int TA = 0;
-static int TL = 0;
 #define TATL_FIELD_ELEV_UNSET -1000000
-static int TATL_field_elev = TATL_FIELD_ELEV_UNSET;
-static enum TATL_state_e TATL_state = TATL_STATE_ALT;
-static int64_t TATL_transition = -1;
-static char TATL_source[8] = { 0 };
 
-//static bool_t view_is_ext = B_FALSE;
-static int bus_loaded = -1;
-static int last_elev = 0;
-static double last_gs = 0;			/* in m/s */
-static uint64_t last_units_call = 0;
+typedef struct xraas_state {
+	list_t		playback_queue;
+
+	bool_t		init_called;
+	bool_t		enabled;
+	int		min_engines;		/* count */
+	int		min_mtow;		/* kg */
+	bool_t		allow_helos;
+	bool_t		auto_disable_notify;
+	bool_t		startup_notify;
+	bool_t		override_electrical;
+	bool_t		override_replay;
+	bool_t		use_tts;
+	bool_t		speak_units;
+
+	bool_t		use_imperial;
+	int		min_takeoff_dist;		/* meters */
+	int		min_landing_dist;		/* meters */
+	int		min_rotation_dist;		/* meters */
+	double		min_rotation_angle;		/* degrees */
+	int		stop_dist_cutoff;		/* meters */
+	bool_t		voice_female;
+	double		voice_volume;
+	bool_t		disable_ext_view;
+	double		min_landing_flap;		/* ratio, 0-1 */
+	double		min_takeoff_flap;		/* ratio, 0-1 */
+	double		max_takeoff_flap;		/* ratio, 0-1 */
+
+	bool_t		nd_alerts_enabled;
+	int		nd_alert_filter;		/* nd_alert_level_t */
+	bool_t		nd_alert_overlay_enabled;
+	bool_t		nd_alert_overlay_force;
+	int		nd_alert_timeout;		/* seconds */
+
+	int64_t		on_rwy_warn_initial;		/* seconds */
+	int64_t		on_rwy_warn_repeat;		/* seconds */
+	int		on_rwy_warn_max_n;		/* count */
+
+	bool_t		too_high_enabled;
+	bool_t		too_fast_enabled;
+	double		gpa_limit_mult;			/* multiplier */
+	double		gpa_limit_max;			/* degrees */
+
+	const char	*GPWS_priority_dataref;
+	const char	*GPWS_inop_dataref;
+
+	bool_t		alt_setting_enabled;
+	bool_t		qnh_alt_enabled;
+	bool_t		qfe_alt_enabled;
+
+	bool_t		us_runway_numbers;
+
+	int		long_land_lim_abs;		/* meters */
+	double		long_land_lim_fract;		/* fraction, 0-1 */
+
+	bool_t		debug_graphical;
+	int		debug_graphical_bg;
+	bool_t		debug;
+
+	avl_tree_t	on_rwy_ann;
+	avl_tree_t	apch_rwy_ann;
+	bool_t		apch_rwys_ann;		/* when multiple met criteria */
+	avl_tree_t	air_apch_rwy_ann;
+	bool_t		air_apch_rwys_ann;	/* when multiple met criteria */
+	bool_t		air_apch_short_rwy_ann;
+	avl_tree_t	air_apch_flap1_ann;
+	avl_tree_t	air_apch_flap2_ann;
+	avl_tree_t	air_apch_flap3_ann;
+	avl_tree_t	air_apch_gpa1_ann;
+	avl_tree_t	air_apch_gpa2_ann;
+	avl_tree_t	air_apch_gpa3_ann;
+	avl_tree_t	air_apch_spd1_ann;
+	avl_tree_t	air_apch_spd2_ann;
+	avl_tree_t	air_apch_spd3_ann;
+	bool_t		on_twy_ann;
+	bool_t		long_landing_ann;
+	bool_t		short_rwy_takeoff_chk;
+	int64_t		on_rwy_timer;
+	int		on_rwy_warnings;
+	bool_t		off_rwy_ann;
+	char		rejected_takeoff[8];
+
+	avl_tree_t	accel_stop_max_spd;
+	int		accel_stop_ann_initial;
+
+	bool_t		departed;
+	bool_t		arriving;
+	bool_t		landing;
+	int		TA;
+	int		TL;
+	int		TATL_field_elev;
+	TATL_state_t	TATL_state;
+	int64_t		TATL_transition;
+	char		TATL_source[8];
+
+	bool_t		view_is_ext;
+	int		bus_loaded;
+	int		last_elev;
+	double		last_gs;			/* in m/s */
+	uint64_t	last_units_call;
+
+	list_t		*cur_arpts;
+	avl_tree_t	apt_dat;
+	avl_tree_t	airport_geo_tree;
+	int64_t		start_time;
+	int64_t		last_exec_time;
+	int64_t		last_airport_reload;
+
+	char		*init_msg;
+	int64_t		init_msg_end;
+} xraas_state_t;
+
+static xraas_state_t state;
 
 static char xpdir[512] = { 0 };
 static char xpprefsdir[512] = { 0 };
 static char plugindir[512] = { 0 };
 static char acf_path[512] = { 0 };
 static char acf_filename[512] = { 0 };
-
-static list_t *cur_arpts = NULL;
-static avl_tree_t apt_dat;
-static avl_tree_t airport_geo_tree;
-static int64_t start_time = 0;
-static int64_t last_exec_time = 0;
-static int64_t last_airport_reload = 0;
-
-static char *init_msg = NULL;
-static int64_t init_msg_end = 0;
 
 static const char *FJS737[] = { "B732", NULL };
 static const char *IXEG737[] = { "B733", NULL };
@@ -517,6 +524,7 @@ static struct {
 	XPLMDataRef plug_bus_load;
 } drs;
 
+static void state_reset(void);
 static void unload_distant_airport_tiles(bool_t unload_all);
 static void free_airport(airport_t *arpt);
 static void log_init_msg(bool_t display, int timeout, int man_sect_number,
@@ -739,13 +747,13 @@ geo_table_get_tile(geo_pos2_t pos, bool_t create, bool_t *created_p)
 	tile_t *tile;
 	avl_index_t where;
 
-	tile = avl_find(&airport_geo_tree, &srch, &where);
+	tile = avl_find(&state.airport_geo_tree, &srch, &where);
 	if (tile == NULL && create) {
 		tile = malloc(sizeof (*tile));
 		tile->pos = pos;
 		list_create(&tile->arpts, sizeof (airport_t),
 		    offsetof(airport_t, tile_node));
-		avl_insert(&airport_geo_tree, tile, where);
+		avl_insert(&state.airport_geo_tree, tile, where);
 		created = B_TRUE;
 	}
 	if (created_p != NULL)
@@ -782,8 +790,8 @@ raas_dr_reset(void)
 	drs.mtow = dr_get("sim/aircraft/weight/acf_m_max");
 	drs.ICAO = dr_get("sim/aircraft/view/acf_ICAO");
 
-	drs.gpws_prio = dr_get(GPWS_priority_dataref);
-	drs.gpws_inop = dr_get(GPWS_inop_dataref);
+	drs.gpws_prio = dr_get(state.GPWS_priority_dataref);
+	drs.gpws_inop = dr_get(state.GPWS_inop_dataref);
 
 //	drs.ND_alert = dr_get(
 //	    "sim/multiplayer/position/plane19_taxi_light_on")
@@ -816,7 +824,7 @@ play_msg(msg_type_t *msg, size_t msg_len, msg_prio_t prio)
 {
 	ann_t *ann;
 
-	if (use_tts) {
+	if (state.use_tts) {
 		char *buf;
 		size_t buflen = 0;
 		for (size_t i = 0; i < msg_len; i++)
@@ -824,22 +832,29 @@ play_msg(msg_type_t *msg, size_t msg_len, msg_prio_t prio)
 		buf = malloc(buflen + 1);
 		for (size_t i = 0; i < msg_len; i++)
 			strcat(buf, voice_msgs[msg[i]].text);
+		dbg_log("tts", 1, "TTS: \"%s\"", buf);
 		XPLMSpeakString(buf);
 		free(buf);
 		return;
 	}
 
 top:
-	ann = list_head(&playback_queue);
+	ann = list_head(&state.playback_queue);
 	if (ann != NULL) {
 		if (ann->prio > prio) {
 			/* current message overrides us, be quiet */
+			dbg_log("snd", 1, "priority too low, suppressing.");
 			free(msg);
 			return;
 		}
 		if (ann->prio < prio) {
 			/* we override the queue head, remove it and retry */
-			list_remove(&playback_queue, ann);
+			dbg_log("snd", 1, "priority higher, stopping "
+			    "current annunciation.");
+			list_remove(&state.playback_queue, ann);
+			if (ann->cur_msg != -1)
+				wav_stop(
+				    voice_msgs[ann->msgs[ann->cur_msg]].wav);
 			free(ann->msgs);
 			free(ann);
 			goto top;
@@ -854,7 +869,7 @@ top:
 	ann->num_msgs = msg_len;
 	ann->prio = prio;
 	ann->cur_msg = -1;
-	list_insert_tail(&playback_queue, ann);
+	list_insert_tail(&state.playback_queue, ann);
 }
 
 static void
@@ -868,7 +883,7 @@ ND_alert(nd_alert_msg_type_t msg_type, nd_alert_level_t level,
 }
 
 /*
- * Returns true if landing gear is fully retracted, false otherwise.
+ * Returns true if state.landing gear is fully retracted, false otherwise.
  */
 static bool_t
 gear_is_up(void)
@@ -1021,15 +1036,15 @@ apt_dat_lookup(const char *icao)
 {
 	airport_t srch;
 	strlcpy(srch.icao, icao, sizeof (srch.icao));
-	return (avl_find(&apt_dat, &srch, NULL));
+	return (avl_find(&state.apt_dat, &srch, NULL));
 }
 
 static void
 apt_dat_insert(airport_t *arpt)
 {
 	avl_index_t where;
-	VERIFY(avl_find(&apt_dat, arpt, &where) == NULL);
-	avl_insert(&apt_dat, arpt, where);
+	VERIFY(avl_find(&state.apt_dat, arpt, &where) == NULL);
+	avl_insert(&state.apt_dat, arpt, where);
 }
 
 static void
@@ -1045,7 +1060,7 @@ geo_link_airport(airport_t *arpt)
 
 /*
  * Parses an apt.dat (or X-RAAS_apt_dat.cache) file, parses its contents
- * and reconstructs our apt_dat tree. This is called at the start of
+ * and reconstructs our state.apt_dat tree. This is called at the start of
  * X-RAAS to populate the airport and runway database.
  */
 static size_t
@@ -1160,6 +1175,9 @@ map_apt_dat(const char *apt_dat_fname, bool_t geo_link)
 				    atof(comps[8 + 9 + 2]), NAN);
 				rwy->ends[1].displ = atof(comps[8 + 9 + 3]);
 				rwy->ends[1].blast = atof(comps[8 + 9 + 4]);
+
+				snprintf(rwy->joint_id, sizeof (rwy->joint_id),
+				    "%s%s", rwy->ends[0].id, rwy->ends[1].id);
 
 				if (ncomps >= 28 &&
 				    strstr(comps[22], "GPA1:") == comps[22] &&
@@ -1485,7 +1503,7 @@ airport_auto_refpt(airport_t *arpt)
 }
 
 /*
- * Takes the current state of the raas.apt_dat table and writes all the
+ * Takes the current state of the apt_dat table and writes all the
  * airports in it to the X-RAAS_apt_dat.cache so that a subsequent run
  * of X-RAAS can pick this info up.
  */
@@ -1527,10 +1545,10 @@ recreate_apt_dat_cache(void)
 	 * no airports have yet been linked in to airport_geo_tree.
 	 */
 	airport_t *arpt, *next_arpt;
-	for (arpt = avl_first(&apt_dat); arpt != NULL; arpt = next_arpt) {
-		next_arpt = AVL_NEXT(&apt_dat, arpt);
+	for (arpt = avl_first(&state.apt_dat); arpt != NULL; arpt = next_arpt) {
+		next_arpt = AVL_NEXT(&state.apt_dat, arpt);
 		if (list_head(&arpt->rwys) == NULL) {
-			avl_remove(&apt_dat, arpt);
+			avl_remove(&state.apt_dat, arpt);
 			free_airport(arpt);
 		}
 	}
@@ -1556,8 +1574,8 @@ recreate_apt_dat_cache(void)
 	fprintf(version_file, "%d\n", XRAAS_apt_dat_cache_version);
 	fclose(version_file);
 
-	for (arpt = avl_first(&apt_dat); arpt != NULL;
-	    arpt = AVL_NEXT(&apt_dat, arpt)) {
+	for (arpt = avl_first(&state.apt_dat); arpt != NULL;
+	    arpt = AVL_NEXT(&state.apt_dat, arpt)) {
 		char *dirname;
 
 		if (IS_NULL_GEO_POS(arpt->refpt))
@@ -1848,7 +1866,7 @@ free_airport(airport_t *arpt)
 
 /*
  * The actual worker function for find_nearest_airports. Performs the
- * search in a specified airport_geo_tree tile. Position is a 3-space
+ * search in a specified state.airport_geo_tree tile. Position is a 3-space
  * ECEF vector.
  */
 static void
@@ -1871,7 +1889,7 @@ find_nearest_airports_tile(vect3_t ecef, geo_pos2_t tile_coord, list_t *l)
 /*
  * Locates all airports within an ARPT_LOAD_LIMIT distance limit (in meters)
  * of a geographic reference position. The airports are searched for in the
- * apt_dat database and this function returns its result into the list argument.
+ * state.apt_dat database and this function returns its result into the list argument.
  */
 static list_t *
 find_nearest_airports(double reflat, double reflon)
@@ -1926,7 +1944,7 @@ free_tile(tile_t *tile)
 	for (airport_t *arpt = list_head(&tile->arpts); arpt != NULL;
 	    arpt = list_head(&tile->arpts)) {
 		list_remove(&tile->arpts, arpt);
-		avl_remove(&apt_dat, arpt);
+		avl_remove(&state.apt_dat, arpt);
 		unload_airport(arpt);
 		free_airport(arpt);
 	}
@@ -1937,7 +1955,7 @@ free_tile(tile_t *tile)
 static void
 unload_tile(tile_t *tile)
 {
-	avl_remove(&airport_geo_tree, tile);
+	avl_remove(&state.airport_geo_tree, tile);
 	free_tile(tile);
 }
 
@@ -1988,22 +2006,22 @@ unload_distant_airport_tiles(bool_t unload_all)
 		my_pos = GEO_POS2(XPLMGetDatad(drs.lat),
 	    XPLMGetDatad(drs.lon));
 
-	for (tile = avl_first(&airport_geo_tree); tile != NULL;
+	for (tile = avl_first(&state.airport_geo_tree); tile != NULL;
 	    tile = next_tile) {
-		next_tile = AVL_NEXT(&airport_geo_tree, tile);
+		next_tile = AVL_NEXT(&state.airport_geo_tree, tile);
 		unload_distant_airport_tiles_i(tile, my_pos);
 	}
 
 	if (unload_all) {
-		ASSERT(avl_numnodes(&airport_geo_tree) == 0);
-		ASSERT(avl_numnodes(&apt_dat) == 0);
+		ASSERT(avl_numnodes(&state.airport_geo_tree) == 0);
+		ASSERT(avl_numnodes(&state.apt_dat) == 0);
 	}
 }
 
 /*
  * Locates any airports within a 8 nm radius of the aircraft and loads
- * their RAAS data from the apt_dat database. The function then updates
- * cur_arpts with the new information and expunges airports that are no
+ * their RAAS data from the state.apt_dat database. The function then updates
+ * state.cur_arpts with the new information and expunges airports that are no
  * longer in range.
  */
 static void
@@ -2011,16 +2029,16 @@ load_nearest_airports(void)
 {
 	int64_t now = microclock();
 
-	if (now - last_airport_reload < SEC2USEC(ARPT_RELOAD_INTVAL))
+	if (now - state.last_airport_reload < SEC2USEC(ARPT_RELOAD_INTVAL))
 		return;
-	last_airport_reload = now;
+	state.last_airport_reload = now;
 
 	load_nearest_airport_tiles();
 	unload_distant_airport_tiles(B_FALSE);
 
-	if (cur_arpts != NULL)
-		free_nearest_airport_list(cur_arpts);
-	cur_arpts = find_nearest_airports(XPLMGetDatad(drs.lat),
+	if (state.cur_arpts != NULL)
+		free_nearest_airport_list(state.cur_arpts);
+	state.cur_arpts = find_nearest_airports(XPLMGetDatad(drs.lat),
 	    XPLMGetDatad(drs.lon));
 }
 
@@ -2093,7 +2111,7 @@ rwy_id_to_msg(const char *rwy_id, msg_type_t **msg, size_t *len)
 		return;
 	}
 
-	if (first_digit != '0' || !us_runway_numbers)
+	if (first_digit != '0' || !state.us_runway_numbers)
 		append_msglist(msg, len, first_digit - '0');
 	append_msglist(msg, len, rwy_id[1] - '0');
 	if (strlen(rwy_id) >= 3)
@@ -2134,7 +2152,7 @@ dist_to_msg(double dist, msg_type_t **msg, size_t *len, bool_t div_by_100)
 	ASSERT(len != NULL);
 
 	if (!div_by_100) {
-		if (use_imperial) {
+		if (state.use_imperial) {
 			double dist_ft = MET2FEET(dist);
 			if (dist_ft >= 1000) {
 				thousands_msg(msg, len, dist_ft / 1000);
@@ -2179,7 +2197,7 @@ dist_to_msg(double dist, msg_type_t **msg, size_t *len, bool_t div_by_100)
 	} else {
 		int thousands, hundreds;
 
-		if (use_imperial) {
+		if (state.use_imperial) {
 			int dist_ft = MET2FEET(dist);
 			thousands = dist_ft / 1000;
 			hundreds = (dist_ft % 1000) / 100;
@@ -2201,14 +2219,14 @@ dist_to_msg(double dist, msg_type_t **msg, size_t *len, bool_t div_by_100)
 
 	/* Optionally append units if it is time to do so */
 	now = microclock();
-	if (now - last_units_call > SEC2USEC(UNITS_APPEND_INTVAL) &&
-	    speak_units) {
-		if (use_imperial)
+	if (now - state.last_units_call > SEC2USEC(UNITS_APPEND_INTVAL) &&
+	    state.speak_units) {
+		if (state.use_imperial)
 			append_msglist(msg, len, FEET_MSG);
 		else
 			append_msglist(msg, len, METERS_MSG);
 	}
-	last_units_call = now;
+	state.last_units_call = now;
 }
 
 static int
@@ -2303,11 +2321,10 @@ do_approaching_rwy(const airport_t *arpt, const runway_t *rwy,
 
 	rwy_end = &rwy->ends[end];
 
-	if ((on_ground && (rwy_key_tbl_get(&apch_rwy_ann, arpt->icao,
-	    rwy_end->id) != 0 ||
-	    rwy_key_tbl_get(&on_rwy_ann, arpt->icao, rwy_end->id) != 0)) ||
-	    (!on_ground && rwy_key_tbl_get(&air_apch_rwy_ann, arpt->icao,
-	    rwy_end->id) != 0))
+	if ((on_ground && rwy_key_tbl_get(&state.apch_rwy_ann, arpt->icao,
+	    rwy->joint_id)) ||
+	    (!on_ground && rwy_key_tbl_get(&state.air_apch_rwy_ann, arpt->icao,
+	    rwy->joint_id) != 0))
 		return;
 
 	if (!on_ground || XPLMGetDataf(drs.gs) < SPEED_THRESH) {
@@ -2316,26 +2333,26 @@ do_approaching_rwy(const airport_t *arpt, const runway_t *rwy,
 		msg_prio_t msg_prio;
 		bool_t annunciated_rwys = B_TRUE;
 
-		if ((on_ground && apch_rwys_ann) ||
-		    (!on_ground && air_apch_rwys_ann))
+		if ((on_ground && state.apch_rwys_ann) ||
+		    (!on_ground && state.air_apch_rwys_ann))
 			return;
 
 		/* Multiple runways being approached? */
-		if ((on_ground && avl_numnodes(&apch_rwy_ann) != 0) ||
-		    (!on_ground && avl_numnodes(&air_apch_rwy_ann) != 0)) {
+		if ((on_ground && avl_numnodes(&state.apch_rwy_ann) != 0) ||
+		    (!on_ground && avl_numnodes(&state.air_apch_rwy_ann) != 0)) {
 			if (on_ground)
 				/*
 				 * On the ground we don't want to re-annunciate
 				 * "approaching" once the runway is resolved.
 				 */
-				rwy_key_tbl_set(&apch_rwy_ann, arpt->icao,
-				    rwy_end->id, B_TRUE);
+				rwy_key_tbl_set(&state.apch_rwy_ann, arpt->icao,
+				    rwy->joint_id, B_TRUE);
 			else
 				/*
 				 * In the air, we DO want to re-annunciate
 				 * "approaching" once the runway is resolved
 				 */
-				rwy_key_tbl_empty(&air_apch_rwy_ann);
+				rwy_key_tbl_empty(&state.air_apch_rwy_ann);
 			/*
 			 * If the "approaching ..." annunciation for the
 			 * previous runway is still playing, try to modify
@@ -2354,19 +2371,19 @@ do_approaching_rwy(const airport_t *arpt, const runway_t *rwy,
 			end
 #endif
 			if (on_ground)
-				rwy_key_tbl_set(&apch_rwy_ann, arpt->icao,
-				    rwy_end->id, B_TRUE);
+				rwy_key_tbl_set(&state.apch_rwy_ann, arpt->icao,
+				    rwy->joint_id, B_TRUE);
 			else
-				rwy_key_tbl_set(&air_apch_rwy_ann, arpt->icao,
-				    rwy_end->id, B_TRUE);
+				rwy_key_tbl_set(&state.air_apch_rwy_ann, arpt->icao,
+				    rwy->joint_id, B_TRUE);
 
 			if (annunciated_rwys)
 				return;
 		}
 
-		if ((on_ground && rwy_key_tbl_get(&apch_rwy_ann, arpt->icao,
-		    rwy_end->id) == 0) || (!on_ground && rwy_key_tbl_get(
-		    &air_apch_rwy_ann, arpt->icao, rwy_end->id) == 0) ||
+		if ((on_ground && rwy_key_tbl_get(&state.apch_rwy_ann, arpt->icao,
+		    rwy->joint_id) == 0) || (!on_ground && rwy_key_tbl_get(
+		    &state.air_apch_rwy_ann, arpt->icao, rwy->joint_id) == 0) ||
 		    !annunciated_rwys) {
 			double dist_ND = NAN;
 			nd_alert_level_t level = ND_ALERT_ROUTINE;
@@ -2375,7 +2392,7 @@ do_approaching_rwy(const airport_t *arpt, const runway_t *rwy,
 			rwy_id_to_msg(rwy_end->id, &msg, &msg_len);
 			msg_prio = MSG_PRIO_LOW;
 
-			if (!on_ground && rwy->length < min_landing_dist) {
+			if (!on_ground && rwy->length < state.min_landing_dist) {
 				dist_to_msg(rwy->length, &msg, &msg_len,
 				    B_TRUE);
 				append_msglist(&msg, &msg_len, AVAIL_MSG);
@@ -2390,9 +2407,10 @@ do_approaching_rwy(const airport_t *arpt, const runway_t *rwy,
 	}
 
 	if (on_ground)
-		rwy_key_tbl_set(&apch_rwy_ann, arpt->icao, rwy_end->id, B_TRUE);
+		rwy_key_tbl_set(&state.apch_rwy_ann, arpt->icao, rwy->joint_id,
+		    B_TRUE);
 	else
-		rwy_key_tbl_set(&air_apch_rwy_ann, arpt->icao, rwy_end->id,
+		rwy_key_tbl_set(&state.air_apch_rwy_ann, arpt->icao, rwy->joint_id,
 		    B_TRUE);
 }
 
@@ -2409,8 +2427,8 @@ ground_runway_approach_arpt_rwy(const airport_t *arpt, const runway_t *rwy,
 		    B_TRUE);
 		return (B_TRUE);
 	} else {
-		rwy_key_tbl_remove(&apch_rwy_ann, arpt->icao, rwy->ends[0].id);
-		rwy_key_tbl_remove(&apch_rwy_ann, arpt->icao, rwy->ends[1].id);
+		rwy_key_tbl_remove(&state.apch_rwy_ann, arpt->icao, rwy->ends[0].id);
+		rwy_key_tbl_remove(&state.apch_rwy_ann, arpt->icao, rwy->ends[1].id);
 		return (B_FALSE);
 	}
 }
@@ -2444,24 +2462,24 @@ ground_runway_approach(void)
 
 	if (XPLMGetDataf(drs.rad_alt) < RADALT_FLARE_THRESH) {
 		vect2_t vel_v = acf_vel_vector(RWY_PROXIMITY_TIME_FACT);
-		ASSERT(cur_arpts != NULL);
-		for (const airport_t *arpt = list_head(cur_arpts);
-		    arpt != NULL; arpt = list_next(cur_arpts, arpt))
+		ASSERT(state.cur_arpts != NULL);
+		for (const airport_t *arpt = list_head(state.cur_arpts);
+		    arpt != NULL; arpt = list_next(state.cur_arpts, arpt))
 			in_prox += ground_runway_approach_arpt(arpt, vel_v);
 	}
 
 	if (in_prox == 0) {
-		if (landing)
-			dbg_log("flt_state", 1, "landing = false");
-		landing = B_FALSE;
+		if (state.landing)
+			dbg_log("flt_state", 1, "state.landing = false");
+		state.landing = B_FALSE;
 	}
 	if (in_prox <= 1)
-		apch_rwys_ann = B_FALSE;
+		state.apch_rwys_ann = B_FALSE;
 }
 
 static void
 perform_on_rwy_ann(const char *rwy_id, vect2_t pos_v, vect2_t opp_thr_v,
-    bool_t no_flap_check, bool_t non_routine)
+    bool_t no_flap_check, bool_t non_routine, int repeats)
 {
 	msg_type_t *msg = NULL;
 	size_t msg_len = 0;
@@ -2471,26 +2489,29 @@ perform_on_rwy_ann(const char *rwy_id, vect2_t pos_v, vect2_t opp_thr_v,
 	nd_alert_level_t level = (non_routine ? ND_ALERT_NONROUTINE :
 	    ND_ALERT_ROUTINE);
 
-	ASSERT(rwy_id != NULL);
-	append_msglist(&msg, &msg_len, ON_RWY_MSG);
-
 	if (!IS_NULL_VECT(pos_v) && !IS_NULL_VECT(opp_thr_v))
 		dist = vect2_abs(vect2_sub(opp_thr_v, pos_v));
 
-	rwy_id_to_msg(rwy_id, &msg, &msg_len);
-	if (dist < min_takeoff_dist && !landing) {
-		dist_to_msg(dist, &msg, &msg_len, B_TRUE);
-		dist_ND = dist;
-		level = ND_ALERT_NONROUTINE;
-		append_msglist(&msg, &msg_len, RMNG_MSG);
-	}
+	ASSERT(rwy_id != NULL);
+	for (int i = 0; i < repeats; i++) {
+		append_msglist(&msg, &msg_len, ON_RWY_MSG);
 
-	if ((flaprqst < min_takeoff_flap || flaprqst > max_takeoff_flap) &&
-	    !landing && !gpws_flaps_ovrd() && !no_flap_check) {
-		append_msglist(&msg, &msg_len, FLAPS_MSG);
-		append_msglist(&msg, &msg_len, FLAPS_MSG);
-		allow_on_rwy_ND_alert = B_FALSE;
-		ND_alert(ND_ALERT_FLAPS, ND_ALERT_CAUTION, NULL, NAN);
+		rwy_id_to_msg(rwy_id, &msg, &msg_len);
+		if (dist < state.min_takeoff_dist && !state.landing) {
+			dist_to_msg(dist, &msg, &msg_len, B_TRUE);
+			dist_ND = dist;
+			level = ND_ALERT_NONROUTINE;
+			append_msglist(&msg, &msg_len, RMNG_MSG);
+		}
+
+		if ((flaprqst < state.min_takeoff_flap ||
+		    flaprqst > state.max_takeoff_flap) &&
+		    !state.landing && !gpws_flaps_ovrd() && !no_flap_check) {
+			append_msglist(&msg, &msg_len, FLAPS_MSG);
+			append_msglist(&msg, &msg_len, FLAPS_MSG);
+			allow_on_rwy_ND_alert = B_FALSE;
+			ND_alert(ND_ALERT_FLAPS, ND_ALERT_CAUTION, NULL, NAN);
+		}
 	}
 
 	play_msg(msg, msg_len, MSG_PRIO_HIGH);
@@ -2514,31 +2535,29 @@ on_rwy_check(const char *arpt_id, const char *rwy_id, double hdg,
 	 */
 	if (rhdg >= 90) {
 		/* reset the annunciation if the aircraft turns around fully */
-		rwy_key_tbl_remove(&on_rwy_ann, arpt_id, rwy_id);
+		rwy_key_tbl_remove(&state.on_rwy_ann, arpt_id, rwy_id);
 		return;
 	}
 
-	if (on_rwy_timer != -1 && strcmp(rejected_takeoff, "") == 0 &&
-	    ((now - on_rwy_timer > SEC2USEC(on_rwy_warn_initial) &&
-	    on_rwy_warnings == 0) ||
-	    (now - on_rwy_timer - on_rwy_warn_initial >
-	    on_rwy_warnings * on_rwy_warn_repeat)) &&
-	    on_rwy_warnings < on_rwy_warn_max_n) {
-		on_rwy_warnings++;
+	if (state.on_rwy_timer != -1 && *state.rejected_takeoff == 0 &&
+	    ((now - state.on_rwy_timer > SEC2USEC(state.on_rwy_warn_initial) &&
+	    state.on_rwy_warnings == 0) ||
+	    (now - state.on_rwy_timer - SEC2USEC(state.on_rwy_warn_initial) >
+	    state.on_rwy_warnings * SEC2USEC(state.on_rwy_warn_repeat))) &&
+	    state.on_rwy_warnings < state.on_rwy_warn_max_n) {
+		state.on_rwy_warnings++;
 		perform_on_rwy_ann(rwy_id, NULL_VECT2, NULL_VECT2, B_TRUE,
-		    B_TRUE);
-		perform_on_rwy_ann(rwy_id, NULL_VECT2, NULL_VECT2, B_TRUE,
-		    B_TRUE);
+		    B_TRUE, 2);
 	}
 
 	if (rhdg > HDG_ALIGN_THRESH)
 		return;
 
-	if (rwy_key_tbl_get(&on_rwy_ann, arpt_id, rwy_id) != 0) {
+	if (rwy_key_tbl_get(&state.on_rwy_ann, arpt_id, rwy_id) == B_FALSE) {
 		if (XPLMGetDataf(drs.gs) < SPEED_THRESH)
 			perform_on_rwy_ann(rwy_id, pos_v, opp_thr_v,
-			    strcmp(rejected_takeoff, "") != 0, B_FALSE);
-		rwy_key_tbl_set(&on_rwy_ann, arpt_id, rwy_id, B_TRUE);
+			    strcmp(state.rejected_takeoff, "") != 0, B_FALSE, 1);
+		rwy_key_tbl_set(&state.on_rwy_ann, arpt_id, rwy_id, B_TRUE);
 	}
 }
 
@@ -2548,9 +2567,9 @@ stop_check_reset(const char *arpt_id, const char *rwy_id)
 	ASSERT(arpt_id != NULL);
 	ASSERT(rwy_id != NULL);
 
-	if (rwy_key_tbl_get(&accel_stop_max_spd, arpt_id, rwy_id) != 0) {
-		rwy_key_tbl_remove(&accel_stop_max_spd, arpt_id, rwy_id);
-		accel_stop_ann_initial = 0;
+	if (rwy_key_tbl_get(&state.accel_stop_max_spd, arpt_id, rwy_id) != 0) {
+		rwy_key_tbl_remove(&state.accel_stop_max_spd, arpt_id, rwy_id);
+		state.accel_stop_ann_initial = 0;
 		for (int i = 0; !isnan(accel_stop_distances[i].min); i++)
 			accel_stop_distances[i].ann = B_FALSE;
 	}
@@ -2562,11 +2581,11 @@ takeoff_rwy_dist_check(vect2_t opp_thr_v, vect2_t pos_v)
 	ASSERT(!IS_NULL_VECT(opp_thr_v));
 	ASSERT(!IS_NULL_VECT(pos_v));
 
-	if (short_rwy_takeoff_chk)
+	if (state.short_rwy_takeoff_chk)
 		return;
 
 	double dist = vect2_abs(vect2_sub(opp_thr_v, pos_v));
-	if (dist < min_takeoff_dist) {
+	if (dist < state.min_takeoff_dist) {
 		msg_type_t *msg = NULL;
 		size_t msg_len = 0;
 		append_msglist(&msg, &msg_len, CAUTION_MSG);
@@ -2575,7 +2594,7 @@ takeoff_rwy_dist_check(vect2_t opp_thr_v, vect2_t pos_v)
 		play_msg(msg, msg_len, MSG_PRIO_HIGH);
 		ND_alert(ND_ALERT_SHORT_RWY, ND_ALERT_CAUTION, NULL, NAN);
 	}
-	short_rwy_takeoff_chk = B_TRUE;
+	state.short_rwy_takeoff_chk = B_TRUE;
 }
 
 static void
@@ -2635,7 +2654,7 @@ static bool_t
 decel_check(double dist_rmng)
 {
 	double cur_gs = XPLMGetDataf(drs.gs);
-	double decel_rate = (cur_gs - last_gs) / EXEC_INTVAL;
+	double decel_rate = (cur_gs - state.last_gs) / EXEC_INTVAL;
 	if (decel_rate >= 0)
 		return (B_FALSE);
 	double t = cur_gs / (-decel_rate);
@@ -2678,10 +2697,10 @@ stop_check(const runway_t *rwy, int end, double hdg, vect2_t pos_v)
 
 	if (XPLMGetDataf(drs.rad_alt) > RADALT_GRD_THRESH) {
 		double clb_rate = conv_per_min(MET2FEET(XPLMGetDatad(drs.elev) -
-		    last_elev));
+		    state.last_elev));
 
 		stop_check_reset(arpt_id, rwy_end->id);
-		if (departed &&
+		if (state.departed &&
 		    XPLMGetDataf(drs.rad_alt) <= RADALT_DEPART_THRESH &&
 		    clb_rate < GOAROUND_CLB_RATE_THRESH) {
 			/*
@@ -2690,15 +2709,15 @@ stop_check(const runway_t *rwy, int end, double hdg, vect2_t pos_v)
 			 *	a) runway length minus 2000 feet
 			 *	b) 3/4 the runway length
 			 * 2) the lesser of:
-			 *	a) minimum safe landing distance
+			 *	a) minimum safe state.landing distance
 			 *	b) full runway length
 			 */
 			double dist_lim = MAX(MAX(
-			    rwy->length - long_land_lim_abs,
-			    rwy->length * (1 - long_land_lim_fract)),
-			    MIN(rwy->length, min_landing_dist));
+			    rwy->length - state.long_land_lim_abs,
+			    rwy->length * (1 - state.long_land_lim_fract)),
+			    MIN(rwy->length, state.min_landing_dist));
 			if (dist < dist_lim) {
-				if (!long_landing_ann) {
+				if (!state.long_landing_ann) {
 					msg_type_t *msg = NULL;
 					size_t msg_len = 0;
 					append_msglist(&msg, &msg_len,
@@ -2707,8 +2726,8 @@ stop_check(const runway_t *rwy, int end, double hdg, vect2_t pos_v)
 					    LONG_LAND_MSG);
 					play_msg(msg, msg_len, MSG_PRIO_HIGH);
 					dbg_log("ann_state", 1,
-					    "long_landing_ann = true");
-					long_landing_ann = B_TRUE;
+					    "state.long_landing_ann = true");
+					state.long_landing_ann = B_TRUE;
 					ND_alert(ND_ALERT_LONG_LAND,
 					    ND_ALERT_CAUTION, NULL, NAN);
 				}
@@ -2719,37 +2738,37 @@ stop_check(const runway_t *rwy, int end, double hdg, vect2_t pos_v)
 		return;
 	}
 
-	if (!arriving)
+	if (!state.arriving)
 		takeoff_rwy_dist_check(opp_thr_v, pos_v);
 
-	maxspd = rwy_key_tbl_get(&accel_stop_max_spd, arpt_id, rwy_end->id);
+	maxspd = rwy_key_tbl_get(&state.accel_stop_max_spd, arpt_id, rwy_end->id);
 	if (gs > maxspd) {
-		rwy_key_tbl_set(&accel_stop_max_spd, arpt_id, rwy_end->id, gs);
+		rwy_key_tbl_set(&state.accel_stop_max_spd, arpt_id, rwy_end->id, gs);
 		maxspd = gs;
 	}
-	if (!landing && gs < maxspd - ACCEL_STOP_SPD_THRESH)
-		strlcpy(rejected_takeoff, rwy_end->id,
-		    sizeof (rejected_takeoff));
+	if (!state.landing && gs < maxspd - ACCEL_STOP_SPD_THRESH)
+		strlcpy(state.rejected_takeoff, rwy_end->id,
+		    sizeof (state.rejected_takeoff));
 
 	double rpitch = acf_rwy_rel_pitch(rwy_end->thr.elev,
 	    orwy_end->thr.elev, rwy->length);
 	/*
 	 * We want to perform distance remaining callouts if:
-	 * 1) we are NOT landing and speed has decayed below the rejected
+	 * 1) we are NOT state.landing and speed has decayed below the rejected
 	 *    takeoff threshold, or
-	 * 2) we ARE landing, distance remaining is below the stop readout
+	 * 2) we ARE state.landing, distance remaining is below the stop readout
 	 *    cutoff and our deceleration is insufficient to stop within the
 	 *    remaining distance, or
-	 * 3) we are NOT landing, distance remaining is below the rotation
+	 * 3) we are NOT state.landing, distance remaining is below the rotation
 	 *    threshold and our pitch angle to the runway indicates that
 	 *    rotation has not yet been initiated.
 	 */
-	if (strcmp(rejected_takeoff, rwy_end->id) == 0 ||
-	    (landing && dist < MAX(rwy->length / 2, stop_dist_cutoff) &&
+	if (strcmp(state.rejected_takeoff, rwy_end->id) == 0 ||
+	    (state.landing && dist < MAX(rwy->length / 2, state.stop_dist_cutoff) &&
 	    !decel_check(dist)) ||
-	    (!landing && dist < min_rotation_dist &&
+	    (!state.landing && dist < state.min_rotation_dist &&
 	    XPLMGetDataf(drs.rad_alt) < RADALT_GRD_THRESH &&
-	    rpitch < min_rotation_angle))
+	    rpitch < state.min_rotation_angle))
 		perform_rwy_dist_remaining_callouts(opp_thr_v, pos_v);
 }
 
@@ -2773,19 +2792,19 @@ ground_on_runway_aligned_arpt(const airport_t *arpt)
 		if (!airborne && vect2_in_poly(pos_v, rwy->tora_bbox)) {
 			on_rwy = B_TRUE;
 			on_rwy_check(arpt_id, rwy->ends[0].id, hdg,
-			    rwy->ends[0].hdg, pos_v, rwy->ends[0].dthr_v);
+			    rwy->ends[0].hdg, pos_v, rwy->ends[1].dthr_v);
 			on_rwy_check(arpt_id, rwy->ends[1].id, hdg,
-			    rwy->ends[1].hdg, pos_v, rwy->ends[1].dthr_v);
+			    rwy->ends[1].hdg, pos_v, rwy->ends[0].dthr_v);
 		} else {
-			rwy_key_tbl_remove(&on_rwy_ann, arpt_id,
+			rwy_key_tbl_remove(&state.on_rwy_ann, arpt_id,
 			    rwy->ends[0].id);
-			rwy_key_tbl_remove(&on_rwy_ann, arpt_id,
+			rwy_key_tbl_remove(&state.on_rwy_ann, arpt_id,
 			    rwy->ends[1].id);
-			if (strcmp(rejected_takeoff, rwy->ends[0].id) == 0 ||
-			    strcmp(rejected_takeoff, rwy->ends[1].id) == 0) {
+			if (strcmp(state.rejected_takeoff, rwy->ends[0].id) == 0 ||
+			    strcmp(state.rejected_takeoff, rwy->ends[1].id) == 0) {
 				dbg_log("ann_state", 1,
-				    "rejected_takeoff = nil");
-				*rejected_takeoff = 0;
+				    "state.rejected_takeoff = nil");
+				*state.rejected_takeoff = 0;
 			}
 		}
 		if (vect2_in_poly(pos_v, rwy->asda_bbox)) {
@@ -2806,35 +2825,35 @@ ground_on_runway_aligned(void)
 	bool_t on_rwy = B_FALSE;
 
 	if (XPLMGetDataf(drs.rad_alt) < RADALT_DEPART_THRESH) {
-		for (const airport_t *arpt = list_head(cur_arpts);
-		    arpt != NULL; arpt = list_next(cur_arpts, arpt)) {
+		for (const airport_t *arpt = list_head(state.cur_arpts);
+		    arpt != NULL; arpt = list_next(state.cur_arpts, arpt)) {
 			if (ground_on_runway_aligned_arpt(arpt))
 				on_rwy = B_TRUE;
 		}
 	}
 
 	if (on_rwy && XPLMGetDataf(drs.gs) < STOPPED_THRESH) {
-		if (on_rwy_timer == -1)
-			on_rwy_timer = microclock();
+		if (state.on_rwy_timer == -1)
+			state.on_rwy_timer = microclock();
 	} else {
-		on_rwy_timer = -1;
-		on_rwy_warnings = 0;
+		state.on_rwy_timer = -1;
+		state.on_rwy_warnings = 0;
 	}
 
 	if (!on_rwy) {
-		short_rwy_takeoff_chk = B_FALSE;
-		*rejected_takeoff = 0;
+		state.short_rwy_takeoff_chk = B_FALSE;
+		*state.rejected_takeoff = 0;
 	}
 
 	/* Taxiway takeoff check */
 	if (!on_rwy && XPLMGetDataf(drs.rad_alt) < RADALT_GRD_THRESH &&
-	    ((!landing && XPLMGetDataf(drs.gs) >= SPEED_THRESH) ||
-	    (landing && XPLMGetDataf(drs.gs) >= HIGH_SPEED_THRESH))) {
-		if (!on_twy_ann) {
+	    ((!state.landing && XPLMGetDataf(drs.gs) >= SPEED_THRESH) ||
+	    (state.landing && XPLMGetDataf(drs.gs) >= HIGH_SPEED_THRESH))) {
+		if (!state.on_twy_ann) {
 			msg_type_t *msg = NULL;
 			size_t msg_len = 0;
 
-			on_twy_ann = B_TRUE;
+			state.on_twy_ann = B_TRUE;
 			append_msglist(&msg, &msg_len, CAUTION_MSG);
 			append_msglist(&msg, &msg_len, ON_TWY_MSG);
 			append_msglist(&msg, &msg_len, ON_TWY_MSG);
@@ -2843,7 +2862,7 @@ ground_on_runway_aligned(void)
 		}
 	} else if (XPLMGetDataf(drs.gs) < SPEED_THRESH ||
 	    XPLMGetDataf(drs.rad_alt) >= RADALT_GRD_THRESH) {
-		on_twy_ann = B_FALSE;
+		state.on_twy_ann = B_FALSE;
 	}
 
 	return (on_rwy);
@@ -2887,8 +2906,8 @@ gpa_limit(double rwy_gpa, double dist_from_thr)
 			    ((dist_from_thr - gpa_segs[i].min) /
 			    (gpa_segs[i].max - gpa_segs[i].min)) *
 			    (gpa_segs[i].f2 - gpa_segs[i].f1);
-			return (MIN(MIN(gpa_limit_mult, mult) *
-			    rwy_gpa, gpa_limit_max));
+			return (MIN(MIN(state.gpa_limit_mult, mult) *
+			    rwy_gpa, state.gpa_limit_max));
 		}
 	}
 
@@ -2896,16 +2915,16 @@ gpa_limit(double rwy_gpa, double dist_from_thr)
 }
 
 /*
- * Gets the landing speed selected in the FMC. This function returns two
+ * Gets the state.landing speed selected in the FMC. This function returns two
  * values:
- *	*) The landing speed (a number).
- *	*) A boolean indicating if the landing speed return is a reference
+ *	*) The state.landing speed (a number).
+ *	*) A boolean indicating if the state.landing speed return is a reference
  *	   speed (wind margin is NOT taken into account) or an approach
  *	   speed (wind margin IS taken into account). Boeing aircraft tend
  *	   to use Vref, whereas Airbus aircraft tend to use Vapp (V_LS).
  * The functionality of this depends on the exact aircraft model loaded
- * and whether it exposes the landing speed to us. If the aircraft doesn't
- * support exposing the landing speed or the landing speed is not yet
+ * and whether it exposes the state.landing speed to us. If the aircraft doesn't
+ * support exposing the state.landing speed or the state.landing speed is not yet
  * selected in the FMC, this function returns two nil values instead.
  */
 static double
@@ -2943,22 +2962,22 @@ get_land_spd(bool_t *vref)
 
 /*
  * Computes the approach speed limit. The approach speed limit is computed
- * relative to the landing speed selected in the FMC with an extra added on
+ * relative to the state.landing speed selected in the FMC with an extra added on
  * top based on our height above the runway threshold:
  * 1) If the aircraft is outside the approach speed limit protection envelope
  *	(below 300 feet or above 950 feet above runway elevation), this
  *	function returns a very high speed value to guarantee that any
  *	comparison with the actual airspeed will indicate "in range".
- * 2) If the FMC doesn't expose landing speed information, or the information
+ * 2) If the FMC doesn't expose state.landing speed information, or the information
  *	has not yet been entered, this function again returns a very high
  *	spped limit value.
- * 3) If the FMC exposes landing speed information and the information has
+ * 3) If the FMC exposes state.landing speed information and the information has
  *	been set, the computed margin value is:
- *	a) if the landing speed is based on the reference landing speed (Vref),
+ *	a) if the state.landing speed is based on the reference state.landing speed (Vref),
  *	   +30 knots between 300 and 500 feet, and between 500 and 950
  *	   increasing linearly from +30 knots at 500 feet to +40 knots at
  *	   950 feet.
- *	b) if the landing speed is based on the approach landing speed (Vapp),
+ *	b) if the state.landing speed is based on the approach state.landing speed (Vapp),
  *	   +15 knots between 300 and 500 feet, and between 500 and 950
  *	   increasing linearly from +15 knots at 500 feet to +40 knots at
  *	   950 feet.
@@ -2977,7 +2996,7 @@ apch_spd_limit(double height_abv_thr)
 	 */
 	const lin_func_seg_t vref_segs[APCH_SPD_SEGS] = {
 		/*
-		 * If the landing speed is a reference speed (Vref), we allow
+		 * If the state.landing speed is a reference speed (Vref), we allow
 		 * up to 30 knots above Vref for approach speed margin when low.
 		 */
 		{ .min = 300, .max = 500, .f1 = 30, .f2 = 30 },
@@ -2985,7 +3004,7 @@ apch_spd_limit(double height_abv_thr)
 	};
 	const lin_func_seg_t vapp_segs[APCH_SPD_SEGS] = {
 		/*
-		 * If the landing speed is an approach speed (Vapp), we use
+		 * If the state.landing speed is an approach speed (Vapp), we use
 		 * a more restrictive speed margin value of 15 knots when low
 		 */
 		{ .min = 300, .max = 500, .f1 = 15, .f2 = 15 },
@@ -2994,7 +3013,7 @@ apch_spd_limit(double height_abv_thr)
 	const lin_func_seg_t *segs;
 
 	/*
-	 * If the landing speed is unknown, just return a huge number so
+	 * If the state.landing speed is unknown, just return a huge number so
 	 * we will always be under this speed.
 	 */
 	if (isnan(land_spd))
@@ -3041,7 +3060,7 @@ apch_config_chk(const char *arpt_id, const char *rwy_id, double height_abv_thr,
 	ASSERT(rwy_id != NULL);
 
 	double clb_rate = conv_per_min(MET2FEET(XPLMGetDatad(drs.elev) -
-	    last_elev));
+	    state.last_elev));
 
 	if (height_abv_thr < win_ceil && height_abv_thr > win_floor &&
 	    (!gear_is_up() || !check_gear) &&
@@ -3051,10 +3070,10 @@ apch_config_chk(const char *arpt_id, const char *rwy_id, double height_abv_thr,
 		dbg_log("apch_config_chk", 2, "gpa_act = %.02f rwy_gpa = %.02f",
 		    gpa_act, rwy_gpa);
 		if (rwy_key_tbl_get(flap_ann_table, arpt_id, rwy_id) == 0 &&
-		    XPLMGetDataf(drs.flaprqst) < min_landing_flap) {
+		    XPLMGetDataf(drs.flaprqst) < state.min_landing_flap) {
 			dbg_log("apch_config_chk", 1, "FLAPS: flaprqst = %f "
 			    "min_flap = %f", XPLMGetDataf(drs.flaprqst),
-			    min_landing_flap);
+			    state.min_landing_flap);
 			if (gpws_flaps_ovrd()) {
 				dbg_log("apch_config_chk", 1,
 				    "FLAPS: flaps ovrd active");
@@ -3111,7 +3130,7 @@ apch_config_chk(const char *arpt_id, const char *rwy_id, double height_abv_thr,
 			rwy_key_tbl_set(gpa_ann_table, arpt_id, rwy_id, B_TRUE);
 			return (B_TRUE);
 		} else if (rwy_key_tbl_get(spd_ann_table, arpt_id, rwy_id) ==
-		    0 && too_fast_enabled && XPLMGetDataf(drs.airspeed) >
+		    0 && state.too_fast_enabled && XPLMGetDataf(drs.airspeed) >
 		    apch_spd_limit(height_abv_thr)) {
 			dbg_log("apch_config_chk", 1, "TOO FAST: "
 			    "airspeed = %.0f apch_spd_limit = %.0f",
@@ -3180,7 +3199,7 @@ air_runway_approach_arpt_rwy(const airport_t *arpt, const runway_t *rwy,
 		double above_tch = FEET2MET(MET2FEET(XPLMGetDatad(drs.elev)) -
 		    (telev + tch));
 
-		if (too_high_enabled && tch != 0 && rwy_gpa != 0 &&
+		if (state.too_high_enabled && tch != 0 && rwy_gpa != 0 &&
 		    fabs(elev - telev) < BOGUS_THR_ELEV_LIMIT)
 			gpa_act = RAD2DEG(atan(above_tch / dist));
 		else
@@ -3189,42 +3208,42 @@ air_runway_approach_arpt_rwy(const airport_t *arpt, const runway_t *rwy,
 		if (apch_config_chk(arpt_id, rwy_id, alt - telev,
 		    gpa_act, rwy_gpa, RWY_APCH_FLAP1_THRESH,
 		    RWY_APCH_FLAP2_THRESH, &msg, &msg_len,
-		    &air_apch_flap1_ann, &air_apch_gpa1_ann,
-		    &air_apch_spd1_ann, B_FALSE, B_TRUE, dist, B_TRUE) ||
+		    &state.air_apch_flap1_ann, &state.air_apch_gpa1_ann,
+		    &state.air_apch_spd1_ann, B_FALSE, B_TRUE, dist, B_TRUE) ||
 		    apch_config_chk(arpt_id, rwy_id, alt - telev,
 		    gpa_act, rwy_gpa, RWY_APCH_FLAP2_THRESH,
 		    RWY_APCH_FLAP3_THRESH, &msg, &msg_len,
-		    &air_apch_flap2_ann, &air_apch_gpa2_ann,
-		    &air_apch_spd2_ann, B_FALSE, B_FALSE, dist, B_FALSE) ||
+		    &state.air_apch_flap2_ann, &state.air_apch_gpa2_ann,
+		    &state.air_apch_spd2_ann, B_FALSE, B_FALSE, dist, B_FALSE) ||
 		    apch_config_chk(arpt_id, rwy_id, alt - telev,
 		    gpa_act, rwy_gpa, RWY_APCH_FLAP3_THRESH,
 		    RWY_APCH_FLAP4_THRESH, &msg, &msg_len,
-		    &air_apch_flap3_ann, &air_apch_gpa3_ann,
-		    &air_apch_spd3_ann, B_TRUE, B_FALSE, dist, B_FALSE))
+		    &state.air_apch_flap3_ann, &state.air_apch_gpa3_ann,
+		    &state.air_apch_spd3_ann, B_TRUE, B_FALSE, dist, B_FALSE))
 			msg_prio = MSG_PRIO_HIGH;
 
 		/* If we are below 700 ft AFE and we haven't annunciated yet */
 		if (alt - telev < RWY_APCH_ALT_MAX &&
-		    rwy_key_tbl_get(&air_apch_rwy_ann, arpt_id, rwy_id) == 0 &&
+		    rwy_key_tbl_get(&state.air_apch_rwy_ann, arpt_id, rwy_id) == 0 &&
 		    !number_in_rngs(XPLMGetDataf(drs.rad_alt),
 		    RWY_APCH_SUPP_WINDOWS, NUM_RWY_APCH_SUPP_WINDOWS)) {
 			/* Don't annunciate if we are too low */
 			if (alt - telev > RWY_APCH_ALT_MIN)
 				do_approaching_rwy(arpt, rwy,
 				    closest_rwy_end(pos_v, rwy), B_FALSE);
-			rwy_key_tbl_set(&air_apch_rwy_ann, arpt_id, rwy_id,
+			rwy_key_tbl_set(&state.air_apch_rwy_ann, arpt_id, rwy_id,
 			    B_TRUE);
 		}
 
 		if (alt - telev < SHORT_RWY_APCH_ALT_MAX &&
 		    alt - telev > SHORT_RWY_APCH_ALT_MIN &&
-		    rwy_end->land_len < min_landing_dist &&
-		    !air_apch_short_rwy_ann) {
+		    rwy_end->land_len < state.min_landing_dist &&
+		    !state.air_apch_short_rwy_ann) {
 			append_msglist(&msg, &msg_len, CAUTION_MSG);
 			append_msglist(&msg, &msg_len, SHORT_RWY_MSG);
 			append_msglist(&msg, &msg_len, SHORT_RWY_MSG);
 			msg_prio = MSG_PRIO_HIGH;
-			air_apch_short_rwy_ann = B_TRUE;
+			state.air_apch_short_rwy_ann = B_TRUE;
 			ND_alert(ND_ALERT_SHORT_RWY, ND_ALERT_CAUTION,
 			    NULL, NAN);
 		}
@@ -3234,7 +3253,7 @@ air_runway_approach_arpt_rwy(const airport_t *arpt, const runway_t *rwy,
 
 		return (B_TRUE);
 	} else if (!in_prox_bbox) {
-		rwy_key_tbl_remove(&air_apch_rwy_ann, arpt_id, rwy_id);
+		rwy_key_tbl_remove(&state.air_apch_rwy_ann, arpt_id, rwy_id);
 	}
 
 	return (B_FALSE);
@@ -3268,16 +3287,16 @@ air_runway_approach_arpt(const airport_t *arpt)
 
 	if (alt > elev + RWY_APCH_FLAP1_THRESH ||
 	    alt < elev - ARPT_APCH_BLW_ELEV_THRESH) {
-		reset_airport_approach_table(&air_apch_flap1_ann, arpt);
-		reset_airport_approach_table(&air_apch_flap2_ann, arpt);
-		reset_airport_approach_table(&air_apch_flap3_ann, arpt);
-		reset_airport_approach_table(&air_apch_gpa1_ann, arpt);
-		reset_airport_approach_table(&air_apch_gpa2_ann, arpt);
-		reset_airport_approach_table(&air_apch_gpa3_ann, arpt);
-		reset_airport_approach_table(&air_apch_spd1_ann, arpt);
-		reset_airport_approach_table(&air_apch_spd2_ann, arpt);
-		reset_airport_approach_table(&air_apch_spd3_ann, arpt);
-		reset_airport_approach_table(&air_apch_rwy_ann, arpt);
+		reset_airport_approach_table(&state.air_apch_flap1_ann, arpt);
+		reset_airport_approach_table(&state.air_apch_flap2_ann, arpt);
+		reset_airport_approach_table(&state.air_apch_flap3_ann, arpt);
+		reset_airport_approach_table(&state.air_apch_gpa1_ann, arpt);
+		reset_airport_approach_table(&state.air_apch_gpa2_ann, arpt);
+		reset_airport_approach_table(&state.air_apch_gpa3_ann, arpt);
+		reset_airport_approach_table(&state.air_apch_spd1_ann, arpt);
+		reset_airport_approach_table(&state.air_apch_spd2_ann, arpt);
+		reset_airport_approach_table(&state.air_apch_spd3_ann, arpt);
+		reset_airport_approach_table(&state.air_apch_rwy_ann, arpt);
 		return (0);
 	}
 
@@ -3305,23 +3324,23 @@ air_runway_approach(void)
 
 	unsigned in_apch_bbox = 0;
 	double clb_rate = conv_per_min(MET2FEET(XPLMGetDatad(drs.elev) -
-	    last_elev));
+	    state.last_elev));
 
-	for (const airport_t *arpt = list_head(cur_arpts); arpt != NULL;
-	    arpt = list_next(cur_arpts, arpt))
+	for (const airport_t *arpt = list_head(state.cur_arpts); arpt != NULL;
+	    arpt = list_next(state.cur_arpts, arpt))
 		in_apch_bbox += air_runway_approach_arpt(arpt);
 
 	/*
 	 * If we are neither over an approach bbox nor a runway, and we're
-	 * not climbing and we're in a landing configuration, we're most
+	 * not climbing and we're in a state.landing configuration, we're most
 	 * likely trying to land onto something that's not a runway.
 	 */
 	if (in_apch_bbox == 0 && clb_rate < 0 && !gear_is_up() &&
-	    XPLMGetDataf(drs.flaprqst) >= min_landing_flap) {
+	    XPLMGetDataf(drs.flaprqst) >= state.min_landing_flap) {
 		if (XPLMGetDataf(drs.rad_alt) <= OFF_RWY_HEIGHT_MAX) {
 			/* only annunciate if we're above the minimum height */
 			if (XPLMGetDataf(drs.rad_alt) >= OFF_RWY_HEIGHT_MIN &&
-			    !off_rwy_ann && !gpws_terr_ovrd()) {
+			    !state.off_rwy_ann && !gpws_terr_ovrd()) {
 				msg_type_t *msg = NULL;
 				size_t msg_len = 0;
 
@@ -3333,19 +3352,19 @@ air_runway_approach(void)
 				ND_alert(ND_ALERT_TWY, ND_ALERT_CAUTION,
 				    NULL, NAN);
 			}
-			off_rwy_ann = B_TRUE;
+			state.off_rwy_ann = B_TRUE;
 		} else {
 			/*
 			 * Annunciation gets reset once we climb through
 			 * the maximum annunciation altitude.
 			 */
-			off_rwy_ann = B_FALSE;
+			state.off_rwy_ann = B_FALSE;
 		}
 	}
 	if (in_apch_bbox == 0)
-		air_apch_short_rwy_ann = B_FALSE;
+		state.air_apch_short_rwy_ann = B_FALSE;
 	if (in_apch_bbox <= 1)
-		air_apch_rwys_ann = B_FALSE;
+		state.air_apch_rwys_ann = B_FALSE;
 }
 
 static const airport_t *
@@ -3356,8 +3375,8 @@ find_nearest_curarpt(void)
 	    XPLMGetDatad(drs.lon), XPLMGetDatad(drs.elev)));
 	const airport_t *cur_arpt = NULL;
 
-	for (const airport_t *arpt = list_head(cur_arpts); arpt != NULL;
-	    arpt = list_next(cur_arpts, arpt)) {
+	for (const airport_t *arpt = list_head(state.cur_arpts); arpt != NULL;
+	    arpt = list_next(state.cur_arpts, arpt)) {
 		double dist = vect3_abs(vect3_sub(arpt->ecef, pos_ecef));
 		if (dist < min_dist) {
 			min_dist = dist;
@@ -3371,7 +3390,7 @@ find_nearest_curarpt(void)
 static void
 altimeter_setting(void)
 {
-	if (!alt_setting_enabled ||
+	if (!state.alt_setting_enabled ||
 	    XPLMGetDataf(drs.rad_alt) < RADALT_GRD_THRESH)
 		return;
 
@@ -3381,15 +3400,16 @@ altimeter_setting(void)
 	if (cur_arpt != NULL) {
 		const char *arpt_id = cur_arpt->icao;
 		dbg_log("altimeter", 2, "find_nearest_curarpt() = %s", arpt_id);
-		TA = cur_arpt->TA;
-		TL = cur_arpt->TL;
-		TATL_field_elev = cur_arpt->refpt.elev;
-		if (strcmp(arpt_id, TATL_source) != 0) {
-			strlcpy(TATL_source, arpt_id, sizeof (TATL_source));
+		state.TA = cur_arpt->TA;
+		state.TL = cur_arpt->TL;
+		state.TATL_field_elev = cur_arpt->refpt.elev;
+		if (strcmp(arpt_id, state.TATL_source) != 0) {
+			strlcpy(state.TATL_source, arpt_id,
+			    sizeof (state.TATL_source));
 			field_changed = B_TRUE;
 			dbg_log("altimeter", 1, "TATL_source: %s "
 			    "TA: %d TL: %d field_elev: %d", arpt_id,
-			    TA, TL, TATL_field_elev);
+			    state.TA, state.TL, state.TATL_field_elev);
 		}
 	} else {
 		float lat = XPLMGetDataf(drs.lat), lon = XPLMGetDataf(drs.lon);
@@ -3409,7 +3429,7 @@ altimeter_setting(void)
 		}
 
 		if (!IS_NULL_VECT(arpt_ecef) &&
-		    strcmp(TATL_source, outID) != 0 &&
+		    strcmp(state.TATL_source, outID) != 0 &&
 		    vect3_abs(vect3_sub(pos_ecef, arpt_ecef)) <
 		    TATL_REMOTE_ARPT_DIST_LIMIT) {
 			load_airports_in_tile(GEO_POS2(outLat, outLon));
@@ -3430,79 +3450,82 @@ altimeter_setting(void)
 		}
 
 		if (cur_arpt != NULL) {
-			TA = cur_arpt->TA;
-			TL = cur_arpt->TL;
-			TATL_field_elev = cur_arpt->refpt.elev;
-			strlcpy(TATL_source, cur_arpt->icao,
-			    sizeof (TATL_source));
+			state.TA = cur_arpt->TA;
+			state.TL = cur_arpt->TL;
+			state.TATL_field_elev = cur_arpt->refpt.elev;
+			strlcpy(state.TATL_source, cur_arpt->icao,
+			    sizeof (state.TATL_source));
 			field_changed = B_TRUE;
 			dbg_log("altimeter", 1, "TATL_source: %s "
 			    "TA: %d TA: %d field_elev: %d", cur_arpt->icao,
-			    TA, TL, TATL_field_elev);
+			    state.TA, state.TL, state.TATL_field_elev);
 		}
 	}
 
-	if (TL == 0) {
+	if (state.TL == 0) {
 		if (field_changed)
 			dbg_log("altimeter", 1, "TL = 0");
-		if (TA != 0) {
+		if (state.TA != 0) {
 			if (XPLMGetDataf(drs.baro_sl) > STD_BARO_REF) {
-				TL = TA;
+				state.TL = state.TA;
 			} else {
 				double qnh = XPLMGetDataf(drs.baro_sl) * 33.85;
-				TL = TA + 28 * (1013 - qnh);
+				state.TL = state.TA + 28 * (1013 - qnh);
 			}
 			if (field_changed)
-				dbg_log("altimeter", 1, "TL(auto) = %d", TL);
+				dbg_log("altimeter", 1, "TL(auto) = %d",
+				    state.TL);
 		}
 	}
-	if (TA == 0) {
+	if (state.TA == 0) {
 		if (field_changed)
-			dbg_log("altimeter", 1, "TA(auto) = %d", TA);
-		TA = TL;
+			dbg_log("altimeter", 1, "TA(auto) = %d", state.TA);
+		state.TA = state.TL;
 	}
 
 	double elev = MET2FEET(XPLMGetDatad(drs.elev));
 
-	if (TA != 0 && elev > TA && TATL_state == TATL_STATE_ALT) {
-		TATL_transition = microclock();
-		TATL_state = TATL_STATE_FL;
+	if (state.TA != 0 && elev > state.TA && state.TATL_state == TATL_STATE_ALT) {
+		state.TATL_transition = microclock();
+		state.TATL_state = TATL_STATE_FL;
 		dbg_log("altimeter", 1, "elev > TA (%d) transitioning "
-		    "TATL_state = fl", TA);
+		    "state.TATL_state = fl", state.TA);
 	}
 
-	if (TL != 0 && elev < TA && XPLMGetDataf(drs.baro_alt) < TL &&
+	if (state.TL != 0 && elev < state.TA &&
+	    XPLMGetDataf(drs.baro_alt) < state.TL &&
 	    /*
 	     * If there's a gap between the altitudes and flight levels, don't
-	     * transition until we're below the TA
+	     * transition until we're below the state.TA
 	     */
-	    (TA == 0 || elev < TA) && TATL_state == TATL_STATE_FL) {
-		TATL_transition = microclock();
-		TATL_state = TATL_STATE_ALT;
+	    (state.TA == 0 || elev < state.TA) && state.TATL_state == TATL_STATE_FL) {
+		state.TATL_transition = microclock();
+		state.TATL_state = TATL_STATE_ALT;
 		dbg_log("altimeter", 1, "baro_alt < TL (%d) "
-		    "transitioning TATL_state = alt", TL);
+		    "transitioning state.TATL_state = alt", state.TL);
 	}
 
 	int64_t now = microclock();
-	if (TATL_transition != -1) {
+	if (state.TATL_transition != -1) {
 		if (/* We have transitioned into ALT mode */
-		    TATL_state == TATL_STATE_ALT &&
+		    state.TATL_state == TATL_STATE_ALT &&
 		    /* The fixed timeout has passed, OR */
-		    (now - TATL_transition > ALTM_SETTING_TIMEOUT ||
+		    (now - state.TATL_transition > ALTM_SETTING_TIMEOUT ||
 		    /*
 		     * The field has a known elevation and we are within
 		     * 1500 feet of it
 		     */
-		    (TATL_field_elev != TATL_FIELD_ELEV_UNSET &&
-		    (elev < TATL_field_elev + ALTM_SETTING_ALT_CHK_LIMIT)))) {
+		    (state.TATL_field_elev != TATL_FIELD_ELEV_UNSET &&
+		    (elev < state.TATL_field_elev +
+		    ALTM_SETTING_ALT_CHK_LIMIT)))) {
 			double d_qnh = 0, d_qfe = 0;
 
-			if (qnh_alt_enabled)
+			if (state.qnh_alt_enabled)
 				d_qnh = fabs(elev - XPLMGetDataf(drs.baro_alt));
-			if (TATL_field_elev != TATL_FIELD_ELEV_UNSET &&
-			    qfe_alt_enabled)
+			if (state.TATL_field_elev != TATL_FIELD_ELEV_UNSET &&
+			    state.qfe_alt_enabled)
 				d_qfe = fabs(XPLMGetDataf(drs.baro_alt) -
-				    (elev - TATL_field_elev));
+				    (elev - state.TATL_field_elev));
 			dbg_log("altimeter", 1, "alt check; d_qnh: %.1f "
 			    " d_qfe: %.1f", d_qnh, d_qfe);
 			if (/* The set baro is out of bounds for QNH, OR */
@@ -3516,9 +3539,9 @@ altimeter_setting(void)
 				ND_alert(ND_ALERT_ALTM_SETTING,
 				    ND_ALERT_CAUTION, NULL, NAN);
 			}
-			TATL_transition = -1;
-		} else if (TATL_state == TATL_STATE_FL &&
-		    now - TATL_transition > ALTM_SETTING_TIMEOUT) {
+			state.TATL_transition = -1;
+		} else if (state.TATL_state == TATL_STATE_FL &&
+		    now - state.TATL_transition > ALTM_SETTING_TIMEOUT) {
 			double d_ref = fabs(XPLMGetDataf(drs.baro_set) -
 			    STD_BARO_REF);
 			dbg_log("altimeter", 1, "fl check; d_ref: %.1f", d_ref);
@@ -3530,7 +3553,7 @@ altimeter_setting(void)
 				ND_alert(ND_ALERT_ALTM_SETTING,
 				    ND_ALERT_CAUTION, NULL, NAN);
 			}
-			TATL_transition = -1;
+			state.TATL_transition = -1;
 		}
 	}
 }
@@ -3542,19 +3565,19 @@ static void
 xfer_elec_bus(int busnr)
 {
 	int xbusnr = (busnr + 1) % 2;
-	if (bus_loaded == xbusnr) {
+	if (state.bus_loaded == xbusnr) {
 		float val;
 		XPLMGetDatavf(drs.plug_bus_load, &val, xbusnr, 1);
 		val -= BUS_LOAD_AMPS;
 		XPLMSetDatavf(drs.plug_bus_load, &val, xbusnr, 1);
-		bus_loaded = -1;
+		state.bus_loaded = -1;
 	}
-	if (bus_loaded == -1) {
+	if (state.bus_loaded == -1) {
 		float val;
 		XPLMGetDatavf(drs.plug_bus_load, &val, busnr, 1);
 		val += BUS_LOAD_AMPS;
 		XPLMSetDatavf(drs.plug_bus_load, &val, busnr, 1);
-		bus_loaded = busnr;
+		state.bus_loaded = busnr;
 	}
 }
 
@@ -3581,16 +3604,16 @@ is_on(void)
 			xfer_elec_bus(1);
 		else
 			xfer_elec_bus(0);
-	} else if (bus_loaded != -1) {
+	} else if (state.bus_loaded != -1) {
 		float bus_load;
-		XPLMGetDatavf(drs.plug_bus_load, &bus_load, bus_loaded, 1);
+		XPLMGetDatavf(drs.plug_bus_load, &bus_load, state.bus_loaded, 1);
 		bus_load -= BUS_LOAD_AMPS;
-		XPLMSetDatavf(drs.plug_bus_load, &bus_load, bus_loaded, 1);
-		bus_loaded = -1;
+		XPLMSetDatavf(drs.plug_bus_load, &bus_load, state.bus_loaded, 1);
+		state.bus_loaded = -1;
 	}
 
-	return ((turned_on || override_electrical) &&
-	    (XPLMGetDatai(drs.replay_mode) == 0 || override_replay));
+	return ((turned_on || state.override_electrical) &&
+	    (XPLMGetDatai(drs.replay_mode) == 0 || state.override_replay));
 }
 
 static void
@@ -3606,11 +3629,11 @@ raas_exec(void)
 	 * needed for proper init are unstable, so we'll give them an
 	 * extra second to fix themselves.
 	 */
-	if (now - start_time < SEC2USEC(STARTUP_DELAY) ||
-	    now - last_exec_time < SEC2USEC(EXEC_INTVAL))
+	if (now - state.start_time < SEC2USEC(STARTUP_DELAY) ||
+	    now - state.last_exec_time < SEC2USEC(EXEC_INTVAL))
 		return;
 
-	last_exec_time = now;
+	state.last_exec_time = now;
 	if (!is_on()) {
 		dbg_log("power_state", 1, "is_on = false");
 		return;
@@ -3619,12 +3642,12 @@ raas_exec(void)
 #if 0
 	/* TODO: implement ND alerts */
 	if dr.ND_alert[0] > 0 and
-	    now - raas.ND_alert_start_time > RAAS_ND_alert_timeout then
+	    now - raas.ND_alert_state.start_time > RAAS_ND_alert_timeout then
 		if raas.GPWS_has_priority() then
 			-- If GPWS priority has overridden us, keep the
 			-- alert displayed until after the priority
 			-- has been lifted.
-			raas.ND_alert_start_time = now
+			raas.ND_alert_state.start_time = now
 		else
 			dr.ND_alert[0] = 0
 		end
@@ -3634,31 +3657,31 @@ raas_exec(void)
 	load_nearest_airports();
 
 	if (XPLMGetDataf(drs.rad_alt) > RADALT_FLARE_THRESH) {
-		if (!departed) {
-			departed = B_TRUE;
-			dbg_log("flt_state", 1, "departed = true");
+		if (!state.departed) {
+			state.departed = B_TRUE;
+			dbg_log("flt_state", 1, "state.departed = true");
 		}
-		if (!arriving) {
-			arriving = B_TRUE;
-			dbg_log("flt_state", 1, "arriving = true");
+		if (!state.arriving) {
+			state.arriving = B_TRUE;
+			dbg_log("flt_state", 1, "state.arriving = true");
 		}
-		if (long_landing_ann) {
-			dbg_log("ann_state", 1, "long_landing_ann = false");
-			long_landing_ann = B_FALSE;
+		if (state.long_landing_ann) {
+			dbg_log("ann_state", 1, "state.long_landing_ann = false");
+			state.long_landing_ann = B_FALSE;
 		}
 	} else if (XPLMGetDataf(drs.rad_alt) < RADALT_GRD_THRESH) {
-		if (departed) {
-			dbg_log("flt_state", 1, "landing = true");
-			dbg_log("flt_state", 1, "departed = false");
-			landing = B_TRUE;
+		if (state.departed) {
+			dbg_log("flt_state", 1, "state.landing = true");
+			dbg_log("flt_state", 1, "state.departed = false");
+			state.landing = B_TRUE;
 		}
-		departed = B_FALSE;
+		state.departed = B_FALSE;
 		if (XPLMGetDataf(drs.gs) < SPEED_THRESH)
-			arriving = B_FALSE;
+			state.arriving = B_FALSE;
 	}
-	if (XPLMGetDataf(drs.gs) < SPEED_THRESH && long_landing_ann) {
-		dbg_log("ann_state", 1, "long_landing_ann = false");
-		long_landing_ann = B_FALSE;
+	if (XPLMGetDataf(drs.gs) < SPEED_THRESH && state.long_landing_ann) {
+		dbg_log("ann_state", 1, "state.long_landing_ann = false");
+		state.long_landing_ann = B_FALSE;
 	}
 
 #if 0
@@ -3681,8 +3704,8 @@ raas_exec(void)
 	end
 #endif
 
-	last_elev = XPLMGetDatad(drs.elev);
-	last_gs = XPLMGetDataf(drs.gs);
+	state.last_elev = XPLMGetDatad(drs.elev);
+	state.last_gs = XPLMGetDataf(drs.gs);
 }
 
 static float
@@ -3745,8 +3768,8 @@ log_init_msg(bool_t display, int timeout, int man_sect_number,
 
 	logMsg("%s", msg);
 	if (display) {
-		init_msg = msg;
-		init_msg_end = microclock() + SEC2USEC(timeout);
+		state.init_msg = msg;
+		state.init_msg_end = microclock() + SEC2USEC(timeout);
 	} else {
 		free(msg);
 	}
@@ -3764,23 +3787,23 @@ snd_sched_cb(float elapsed_since_last_call, float elapsed_since_last_floop,
 	UNUSED(counter);
 	UNUSED(refcon);
 
-	ann = list_head(&playback_queue);
+	ann = list_head(&state.playback_queue);
 	if (ann == NULL)
 		return (-1.0);
 	now = microclock();
 
 	ASSERT(ann->cur_msg < ann->num_msgs);
-	if (ann->cur_msg == -1 ||
-	    now - ann->started > voice_msgs[ann->cur_msg].wav->duration) {
+	if (ann->cur_msg == -1 || now - ann->started >
+	    SEC2USEC(voice_msgs[ann->msgs[ann->cur_msg]].wav->duration)) {
 		if (ann->cur_msg >= 0)
-			xraas_wav_stop(voice_msgs[ann->cur_msg].wav);
+			wav_stop(voice_msgs[ann->msgs[ann->cur_msg]].wav);
 		ann->cur_msg++;
 		if (ann->cur_msg < ann->num_msgs) {
 			ann->started = now;
-			xraas_wav_play(voice_msgs[ann->cur_msg].wav,
-			    voice_volume);
+			wav_play(voice_msgs[ann->msgs[ann->cur_msg]].wav,
+			    state.voice_volume);
 		} else {
-			list_remove(&playback_queue, ann);
+			list_remove(&state.playback_queue, ann);
 			free(ann->msgs);
 			free(ann);
 		}
@@ -3792,9 +3815,9 @@ snd_sched_cb(float elapsed_since_last_call, float elapsed_since_last_floop,
 static bool_t
 snd_sys_init(void)
 {
-	char *gender_dir = (voice_female ? "female" : "male");
+	char *gender_dir = (state.voice_female ? "female" : "male");
 
-	if (use_tts)
+	if (state.use_tts)
 		return (B_TRUE);
 
 	for (msg_type_t msg = 0; msg < NUM_MSGS; msg++) {
@@ -3805,13 +3828,13 @@ snd_sys_init(void)
 		snprintf(fname, sizeof (fname), "%s.wav", voice_msgs[msg].name);
 		pathname = mkpathname(plugindir, "msgs", gender_dir, fname,
 		    NULL);
-		voice_msgs[msg].wav = xraas_wav_load(pathname);
+		voice_msgs[msg].wav = wav_load(pathname, voice_msgs[msg].name);
 		free(pathname);
 		if (voice_msgs[msg].wav == NULL)
 			return (B_FALSE);
 	}
 
-	list_create(&playback_queue, sizeof (ann_t), offsetof(ann_t, node));
+	list_create(&state.playback_queue, sizeof (ann_t), offsetof(ann_t, node));
 	XPLMRegisterFlightLoopCallback(snd_sched_cb, -1.0, NULL);
 
 	return (B_TRUE);
@@ -3820,23 +3843,26 @@ snd_sys_init(void)
 static void
 snd_sys_fini(void)
 {
-	if (use_tts)
+	if (state.use_tts)
 		return;
 
-	for (ann_t *ann = list_head(&playback_queue); ann != NULL;
-	    ann = list_head(&playback_queue)) {
-		list_remove(&playback_queue, ann);
+	for (ann_t *ann = list_head(&state.playback_queue); ann != NULL;
+	    ann = list_head(&state.playback_queue)) {
+		list_remove(&state.playback_queue, ann);
 		free(ann->msgs);
 		free(ann);
 	}
 
 	XPLMUnregisterFlightLoopCallback(snd_sched_cb, NULL);
-	list_destroy(&playback_queue);
+	list_destroy(&state.playback_queue);
 
 	for (msg_type_t msg = 0; msg < NUM_MSGS; msg++) {
-		xraas_wav_free(voice_msgs[msg].wav);
+		wav_free(voice_msgs[msg].wav);
 		voice_msgs[msg].wav = NULL;
 	}
+
+	/* no more OpenAL/WAV calls after this */
+	audio_fini();
 }
 
 /*
@@ -3873,46 +3899,48 @@ chk_acf_is_helo(void)
 static void
 reset_config(void)
 {
-	enabled = B_TRUE;
-	allow_helos = B_FALSE;
-	min_engines = 2;
-	min_mtow = 5700;
-	auto_disable_notify = B_TRUE;
-	startup_notify = B_TRUE;
-	use_imperial = B_TRUE;
-	voice_female = B_TRUE;
-	voice_volume = 1.0;
-	use_tts = B_FALSE;
-	us_runway_numbers = B_FALSE;
-	min_takeoff_dist = 1000;
-	min_landing_dist = 800;
-	min_rotation_dist = 400;
-	min_rotation_angle = 3;
-	stop_dist_cutoff = 1600;
-	min_landing_flap = 0.5;
-	min_takeoff_flap = 0.1;
-	max_takeoff_flap = 0.75;
-	on_rwy_warn_initial = 60;
-	on_rwy_warn_repeat = 120;
-	on_rwy_warn_max_n = 3;
-	too_high_enabled = B_TRUE;
-	too_fast_enabled = B_TRUE;
-	gpa_limit_mult = 2;
-	gpa_limit_max = 8;
-	alt_setting_enabled = B_TRUE;
-	qnh_alt_enabled = B_TRUE;
-	qfe_alt_enabled = B_FALSE;
-	disable_ext_view = B_TRUE;
-	override_electrical = B_FALSE;
-	override_replay = B_FALSE;
-	speak_units = B_TRUE;
-	long_land_lim_abs = 610;	/* 2000 feet */
-	long_land_lim_fract = 0.25;
-	nd_alerts_enabled = B_TRUE;
-	nd_alert_filter = ND_ALERT_ROUTINE;
-	nd_alert_overlay_enabled = B_TRUE;
-	nd_alert_overlay_force = B_FALSE;
-	nd_alert_timeout = 7;
+	state.enabled = B_TRUE;
+	state.allow_helos = B_FALSE;
+	state.min_engines = 2;
+	state.min_mtow = 5700;
+	state.auto_disable_notify = B_TRUE;
+	state.startup_notify = B_TRUE;
+	state.use_imperial = B_TRUE;
+	state.voice_female = B_TRUE;
+	state.voice_volume = 1.0;
+	state.use_tts = B_FALSE;
+	state.us_runway_numbers = B_FALSE;
+	state.min_takeoff_dist = 1000;
+	state.min_landing_dist = 800;
+	state.min_rotation_dist = 400;
+	state.min_rotation_angle = 3;
+	state.stop_dist_cutoff = 1600;
+	state.min_landing_flap = 0.5;
+	state.min_takeoff_flap = 0.1;
+	state.max_takeoff_flap = 0.75;
+	state.on_rwy_warn_initial = 60;
+	state.on_rwy_warn_repeat = 120;
+	state.on_rwy_warn_max_n = 3;
+	state.too_high_enabled = B_TRUE;
+	state.too_fast_enabled = B_TRUE;
+	state.gpa_limit_mult = 2;
+	state.gpa_limit_max = 8;
+	state.alt_setting_enabled = B_TRUE;
+	state.qnh_alt_enabled = B_TRUE;
+	state.qfe_alt_enabled = B_FALSE;
+	state.disable_ext_view = B_TRUE;
+	state.override_electrical = B_FALSE;
+	state.override_replay = B_FALSE;
+	state.speak_units = B_TRUE;
+	state.long_land_lim_abs = 610;	/* 2000 feet */
+	state.long_land_lim_fract = 0.25;
+	state.nd_alerts_enabled = B_TRUE;
+	state.nd_alert_filter = ND_ALERT_ROUTINE;
+	state.nd_alert_overlay_enabled = B_TRUE;
+	state.nd_alert_overlay_force = B_FALSE;
+	state.nd_alert_timeout = 7;
+
+	audio_set_shared_ctx(B_FALSE);
 
 	xraas_debug = 0;
 }
@@ -3920,51 +3948,60 @@ reset_config(void)
 static void
 process_conf(conf_t *conf)
 {
+	bool_t shared_ctx = B_FALSE;
+
 #define	GET_CONF(type, varname) \
-	(void) xraas_conf_get_ ## type(conf, "raas_" #varname, &varname)
-	GET_CONF(b, enabled);
-	GET_CONF(b, allow_helos);
-	GET_CONF(i, min_engines);
-	GET_CONF(i, min_mtow);
-	GET_CONF(b, auto_disable_notify);
-	GET_CONF(b, startup_notify);
-	GET_CONF(b, use_imperial);
-	GET_CONF(b, voice_female);
-	GET_CONF(d, voice_volume);
-	GET_CONF(b, use_tts);
-	GET_CONF(b, us_runway_numbers);
-	GET_CONF(i, min_takeoff_dist);
-	GET_CONF(i, min_landing_dist);
-	GET_CONF(i, min_rotation_dist);
-	GET_CONF(d, min_rotation_angle);
-	GET_CONF(i, stop_dist_cutoff);
-	GET_CONF(d, min_landing_flap);
-	GET_CONF(d, min_takeoff_flap);
-	GET_CONF(d, max_takeoff_flap);
-	GET_CONF(i, on_rwy_warn_initial);
-	GET_CONF(i, on_rwy_warn_repeat);
-	GET_CONF(i, on_rwy_warn_max_n);
-	GET_CONF(b, too_high_enabled);
-	GET_CONF(b, too_fast_enabled);
-	GET_CONF(d, gpa_limit_mult);
-	GET_CONF(d, gpa_limit_max);
-	GET_CONF(b, alt_setting_enabled);
-	GET_CONF(b, qnh_alt_enabled);
-	GET_CONF(b, qfe_alt_enabled);
-	GET_CONF(b, disable_ext_view);
-	GET_CONF(b, override_electrical);
-	GET_CONF(b, override_replay);
-	GET_CONF(b, speak_units);
-	GET_CONF(i, long_land_lim_abs);
-	GET_CONF(d, long_land_lim_fract);
-	GET_CONF(b, nd_alerts_enabled);
-	GET_CONF(i, nd_alert_filter);
-	GET_CONF(b, nd_alert_overlay_enabled);
-	GET_CONF(b, nd_alert_overlay_force);
-	GET_CONF(i, nd_alert_timeout);
+	do { \
+		/* first try the new name, then the old one */ \
+		if (!conf_get_ ## type(conf, #varname, &varname)) \
+			(void) conf_get_ ## type(conf, "raas_" #varname, \
+			    &varname); \
+	} while (0)
+	GET_CONF(b, state.enabled);
+	GET_CONF(b, state.allow_helos);
+	GET_CONF(i, state.min_engines);
+	GET_CONF(i, state.min_mtow);
+	GET_CONF(b, state.auto_disable_notify);
+	GET_CONF(b, state.startup_notify);
+	GET_CONF(b, state.use_imperial);
+	GET_CONF(b, state.voice_female);
+	GET_CONF(d, state.voice_volume);
+	GET_CONF(b, state.use_tts);
+	GET_CONF(b, state.us_runway_numbers);
+	GET_CONF(i, state.min_takeoff_dist);
+	GET_CONF(i, state.min_landing_dist);
+	GET_CONF(i, state.min_rotation_dist);
+	GET_CONF(d, state.min_rotation_angle);
+	GET_CONF(i, state.stop_dist_cutoff);
+	GET_CONF(d, state.min_landing_flap);
+	GET_CONF(d, state.min_takeoff_flap);
+	GET_CONF(d, state.max_takeoff_flap);
+	GET_CONF(ll, state.on_rwy_warn_initial);
+	GET_CONF(ll, state.on_rwy_warn_repeat);
+	GET_CONF(i, state.on_rwy_warn_max_n);
+	GET_CONF(b, state.too_high_enabled);
+	GET_CONF(b, state.too_fast_enabled);
+	GET_CONF(d, state.gpa_limit_mult);
+	GET_CONF(d, state.gpa_limit_max);
+	GET_CONF(b, state.alt_setting_enabled);
+	GET_CONF(b, state.qnh_alt_enabled);
+	GET_CONF(b, state.qfe_alt_enabled);
+	GET_CONF(b, state.disable_ext_view);
+	GET_CONF(b, state.override_electrical);
+	GET_CONF(b, state.override_replay);
+	GET_CONF(b, state.speak_units);
+	GET_CONF(i, state.long_land_lim_abs);
+	GET_CONF(d, state.long_land_lim_fract);
+	GET_CONF(b, state.nd_alerts_enabled);
+	GET_CONF(i, state.nd_alert_filter);
+	GET_CONF(b, state.nd_alert_overlay_enabled);
+	GET_CONF(b, state.nd_alert_overlay_force);
+	GET_CONF(i, state.nd_alert_timeout);
 #undef	GET_CONF
 
-	xraas_conf_get_i(conf, "raas_debug", &xraas_debug);
+	conf_get_i(conf, "debug", &xraas_debug);
+	conf_get_b(conf, "shared_audio_ctx", &shared_ctx);
+	audio_set_shared_ctx(shared_ctx);
 }
 
 /*
@@ -3990,7 +4027,7 @@ load_config(bool_t global_cfg)
 		int errline;
 
 		dbg_log("config", 1, "loading config file: %s", cfgname);
-		if ((conf = xraas_parse_conf(cfg_f, &errline)) == NULL) {
+		if ((conf = parse_conf(cfg_f, &errline)) == NULL) {
 			log_init_msg(B_TRUE, INIT_ERR_MSG_TIMEOUT,
 			    5, "Configuration", "X-RAAS startup error: syntax "
 			    "error on line %d in config file:\n%s\n"
@@ -4001,7 +4038,7 @@ load_config(bool_t global_cfg)
 			return (B_FALSE);
 		}
 		process_conf(conf);
-		xraas_free_conf(conf);
+		free_conf(conf);
 		fclose(cfg_f);
 	}
 	free(cfgname);
@@ -4024,17 +4061,40 @@ load_configs(void)
 }
 
 static void
+state_reset(void)
+{
+	memset(&state, 0, sizeof (state));
+
+	state.enabled = B_TRUE;
+
+	state.GPWS_priority_dataref = "sim/cockpit2/annunciators/GPWS";
+	state.GPWS_inop_dataref = "sim/cockpit/warnings/annunciators/GPWS";
+
+	state.on_rwy_timer = -1;
+
+	state.TATL_field_elev = TATL_FIELD_ELEV_UNSET;
+	state.TATL_transition = -1;
+	state.bus_loaded = -1;
+}
+
+static void
 xraas_init(void)
 {
+	state_reset();
+
+	state.init_called = B_TRUE;
+
 	/* these must go ahead of config parsing */
-	start_time = microclock();
+	state.start_time = microclock();
 	XPLMGetNthAircraftModel(0, acf_filename, acf_path);
 
 	if (!load_configs())
 		return;
 
-	if (!enabled)
+	if (!state.enabled)
 		return;
+
+	dbg_log("startup", 1, "xraas_init");
 
 	raas_dr_reset();
 	snd_sys_init();
@@ -4044,44 +4104,44 @@ xraas_init(void)
 #define	GEO_TABLE_SZ		128
 #define	ICAO_SZ			4
 
-	avl_create(&apt_dat, apt_dat_compar, sizeof (airport_t),
+	avl_create(&state.apt_dat, apt_dat_compar, sizeof (airport_t),
 	    offsetof(airport_t, apt_dat_node));
-	avl_create(&airport_geo_tree, airport_geo_tree_compar,
+	avl_create(&state.airport_geo_tree, airport_geo_tree_compar,
 	    sizeof (tile_t), offsetof(tile_t, node));
 
-	rwy_key_tbl_create(&accel_stop_max_spd);
-	rwy_key_tbl_create(&on_rwy_ann);
-	rwy_key_tbl_create(&apch_rwy_ann);
-	rwy_key_tbl_create(&air_apch_rwy_ann);
-	rwy_key_tbl_create(&air_apch_flap1_ann);
-	rwy_key_tbl_create(&air_apch_flap2_ann);
-	rwy_key_tbl_create(&air_apch_flap3_ann);
-	rwy_key_tbl_create(&air_apch_gpa1_ann);
-	rwy_key_tbl_create(&air_apch_gpa2_ann);
-	rwy_key_tbl_create(&air_apch_gpa3_ann);
-	rwy_key_tbl_create(&air_apch_spd1_ann);
-	rwy_key_tbl_create(&air_apch_spd2_ann);
-	rwy_key_tbl_create(&air_apch_spd3_ann);
+	rwy_key_tbl_create(&state.accel_stop_max_spd);
+	rwy_key_tbl_create(&state.on_rwy_ann);
+	rwy_key_tbl_create(&state.apch_rwy_ann);
+	rwy_key_tbl_create(&state.air_apch_rwy_ann);
+	rwy_key_tbl_create(&state.air_apch_flap1_ann);
+	rwy_key_tbl_create(&state.air_apch_flap2_ann);
+	rwy_key_tbl_create(&state.air_apch_flap3_ann);
+	rwy_key_tbl_create(&state.air_apch_gpa1_ann);
+	rwy_key_tbl_create(&state.air_apch_gpa2_ann);
+	rwy_key_tbl_create(&state.air_apch_gpa3_ann);
+	rwy_key_tbl_create(&state.air_apch_spd1_ann);
+	rwy_key_tbl_create(&state.air_apch_spd2_ann);
+	rwy_key_tbl_create(&state.air_apch_spd3_ann);
 
 	if (!recreate_apt_dat_cache())
 		return;
 
 	XPLMRegisterFlightLoopCallback(raas_exec_cb, EXEC_INTVAL, NULL);
 
-	if (chk_acf_is_helo() && !allow_helos)
+	if (chk_acf_is_helo() && !state.allow_helos)
 		return;
-	if (XPLMGetDatai(drs.num_engines) < min_engines ||
-	    XPLMGetDataf(drs.mtow) < min_mtow) {
+	if (XPLMGetDatai(drs.num_engines) < state.min_engines ||
+	    XPLMGetDataf(drs.mtow) < state.min_mtow) {
 		char icao[8];
 		memset(icao, 0, sizeof (icao));
 		XPLMGetDatab(drs.ICAO, icao, 0, sizeof (icao) - 1);
-		log_init_msg(auto_disable_notify, INIT_ERR_MSG_TIMEOUT,
+		log_init_msg(state.auto_disable_notify, INIT_ERR_MSG_TIMEOUT,
 		    3, "Activating X-RAAS in the aircraft",
 		    "X-RAAS: auto-disabled: aircraft below X-RAAS limits:\n"
 		    "X-RAAS configuration: minimum number of engines: %d; "
 		    "minimum MTOW: %d kg\n"
 		    "Your aircraft: (%s) number of engines: %d; "
-		    "MTOW: %.0f kg\n", min_engines, min_mtow, icao,
+		    "MTOW: %.0f kg\n", state.min_engines, state.min_mtow, icao,
 		    XPLMGetDatai(drs.num_engines), XPLMGetDataf(drs.mtow));
 		return;
 	}
@@ -4090,17 +4150,26 @@ xraas_init(void)
 static void
 xraas_fini(void)
 {
-	if (!enabled)
+	if (!state.init_called)
 		return;
+
+	state.init_called = B_FALSE;
+
+	if (!state.enabled)
+		return;
+
+	dbg_log("startup", 1, "xraas_fini");
 
 	snd_sys_fini();
 
-	if (bus_loaded != -1) {
+	if (state.bus_loaded != -1) {
 		float bus_load;
-		XPLMGetDatavf(drs.plug_bus_load, &bus_load, bus_loaded, 1);
+		XPLMGetDatavf(drs.plug_bus_load, &bus_load, state.bus_loaded,
+		    1);
 		bus_load -= BUS_LOAD_AMPS;
-		XPLMSetDatavf(drs.plug_bus_load, &bus_load, bus_loaded, 1);
-		bus_loaded = -1;
+		XPLMSetDatavf(drs.plug_bus_load, &bus_load, state.bus_loaded,
+		    1);
+		state.bus_loaded = -1;
 	}
 #if 0
 	if raas.cur_msg["snd"] ~= nil then
@@ -4109,37 +4178,40 @@ xraas_fini(void)
 	end
 #endif
 
-	if (cur_arpts != NULL) {
-		free_nearest_airport_list(cur_arpts);
-		cur_arpts = NULL;
+	if (state.cur_arpts != NULL) {
+		free_nearest_airport_list(state.cur_arpts);
+		state.cur_arpts = NULL;
 	}
 
 	tile_t *tile;
 	void *cookie = NULL;
 
 	/* airports are freed in the free_tile function */
-	while ((tile = avl_destroy_nodes(&airport_geo_tree, &cookie)) != NULL)
+	while ((tile = avl_destroy_nodes(&state.airport_geo_tree, &cookie)) !=
+	    NULL)
 		free_tile(tile);
-	avl_destroy(&airport_geo_tree);
-	avl_destroy(&apt_dat);
+	avl_destroy(&state.airport_geo_tree);
+	avl_destroy(&state.apt_dat);
 
-	rwy_key_tbl_destroy(&accel_stop_max_spd);
-	rwy_key_tbl_destroy(&on_rwy_ann);
-	rwy_key_tbl_destroy(&apch_rwy_ann);
-	rwy_key_tbl_destroy(&air_apch_rwy_ann);
-	rwy_key_tbl_destroy(&air_apch_flap1_ann);
-	rwy_key_tbl_destroy(&air_apch_flap2_ann);
-	rwy_key_tbl_destroy(&air_apch_flap3_ann);
-	rwy_key_tbl_destroy(&air_apch_gpa1_ann);
-	rwy_key_tbl_destroy(&air_apch_gpa2_ann);
-	rwy_key_tbl_destroy(&air_apch_gpa3_ann);
-	rwy_key_tbl_destroy(&air_apch_spd1_ann);
-	rwy_key_tbl_destroy(&air_apch_spd2_ann);
-	rwy_key_tbl_destroy(&air_apch_spd3_ann);
+	rwy_key_tbl_destroy(&state.accel_stop_max_spd);
+	rwy_key_tbl_destroy(&state.on_rwy_ann);
+	rwy_key_tbl_destroy(&state.apch_rwy_ann);
+	rwy_key_tbl_destroy(&state.air_apch_rwy_ann);
+	rwy_key_tbl_destroy(&state.air_apch_flap1_ann);
+	rwy_key_tbl_destroy(&state.air_apch_flap2_ann);
+	rwy_key_tbl_destroy(&state.air_apch_flap3_ann);
+	rwy_key_tbl_destroy(&state.air_apch_gpa1_ann);
+	rwy_key_tbl_destroy(&state.air_apch_gpa2_ann);
+	rwy_key_tbl_destroy(&state.air_apch_gpa3_ann);
+	rwy_key_tbl_destroy(&state.air_apch_spd1_ann);
+	rwy_key_tbl_destroy(&state.air_apch_spd2_ann);
+	rwy_key_tbl_destroy(&state.air_apch_spd3_ann);
 
-	if (init_msg != NULL) {
-		free(init_msg);
-		init_msg = NULL;
+	state.last_airport_reload = 0;
+
+	if (state.init_msg != NULL) {
+		free(state.init_msg);
+		state.init_msg = NULL;
 	}
 
 	XPLMUnregisterFlightLoopCallback(raas_exec_cb, NULL);

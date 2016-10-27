@@ -59,7 +59,7 @@ conf_key_compar(const void *a, const void *b)
 }
 
 conf_t *
-xraas_parse_conf(FILE *fp, int *errline)
+parse_conf(FILE *fp, int *errline)
 {
 	conf_t *conf;
 	char *line = NULL;
@@ -95,7 +95,7 @@ xraas_parse_conf(FILE *fp, int *errline)
 
 		sep = strstr(line, "=");
 		if (sep == NULL) {
-			xraas_free_conf(conf);
+			free_conf(conf);
 			if (errline != NULL)
 				*errline = linenum;
 			return (NULL);
@@ -122,7 +122,7 @@ xraas_parse_conf(FILE *fp, int *errline)
 }
 
 void
-xraas_free_conf(conf_t *conf)
+free_conf(conf_t *conf)
 {
 	void *cookie = NULL;
 	conf_key_t *ck;
@@ -142,7 +142,7 @@ conf_find(const conf_t *conf, const char *key)
 }
 
 bool_t
-xraas_conf_get_str(const conf_t *conf, const char *key, const char **value)
+conf_get_str(const conf_t *conf, const char *key, const char **value)
 {
 	const conf_key_t *ck = conf_find(conf, key);
 	if (ck == NULL)
@@ -152,7 +152,7 @@ xraas_conf_get_str(const conf_t *conf, const char *key, const char **value)
 }
 
 bool_t
-xraas_conf_get_i(const conf_t *conf, const char *key, int *value)
+conf_get_i(const conf_t *conf, const char *key, int *value)
 {
 	const conf_key_t *ck = conf_find(conf, key);
 	if (ck == NULL)
@@ -163,7 +163,7 @@ xraas_conf_get_i(const conf_t *conf, const char *key, int *value)
 }
 
 bool_t
-xraas_conf_get_d(const conf_t *conf, const char *key, double *value)
+conf_get_d(const conf_t *conf, const char *key, double *value)
 {
 	const conf_key_t *ck = conf_find(conf, key);
 	if (ck == NULL)
@@ -173,7 +173,7 @@ xraas_conf_get_d(const conf_t *conf, const char *key, double *value)
 }
 
 bool_t
-xraas_conf_get_ll(const conf_t *conf, const char *key, long long *value)
+conf_get_ll(const conf_t *conf, const char *key, long long *value)
 {
 	const conf_key_t *ck = conf_find(conf, key);
 	if (ck == NULL)
@@ -183,7 +183,7 @@ xraas_conf_get_ll(const conf_t *conf, const char *key, long long *value)
 }
 
 bool_t
-xraas_conf_get_b(const conf_t *conf, const char *key, bool_t *value)
+conf_get_b(const conf_t *conf, const char *key, bool_t *value)
 {
 	const conf_key_t *ck = conf_find(conf, key);
 	if (ck == NULL)

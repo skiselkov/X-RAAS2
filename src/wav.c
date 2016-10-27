@@ -33,178 +33,118 @@
 #include "assert.h"
 #include "list.h"
 #include "log.h"
+#include "riff.h"
 #include "types.h"
 
 #include "wav.h"
 
-struct riff_chunk {
-	bool_t		bswap;
-	uint32_t	fourcc;
-	uint8_t		*data;
-	uint32_t	sz;
-
-	/* populated if fourcc is RIFF_ID or LIST_ID */
-	uint32_t	listcc;
-	list_t		subchunks;
-
-	list_node_t	node;
-};
-
-#define	RIFF_ID	0x46464952u	/* 'RIFF' */
-#define	LIST_ID	0x54534C49u	/* 'LIST' */
 #define	WAVE_ID	0x45564157u	/* 'WAVE' */
 #define	FMT_ID	0x20746D66u	/* 'FMT ' */
 #define	DATA_ID	0x61746164u	/* 'DATA' */
 
-void
-riff_free_chunk(riff_chunk_t *c)
-{
-	if (c->fourcc == RIFF_ID || c->fourcc == LIST_ID) {
-		for (riff_chunk_t *sc = list_head(&c->subchunks); sc != NULL;
-		    sc = list_head(&c->subchunks)) {
-			list_remove(&c->subchunks, sc);
-			riff_free_chunk(sc);
-		}
-		list_destroy(&c->subchunks);
-	}
-	free(c);
-}
-
-static riff_chunk_t *
-riff_parse_chunk(uint8_t *buf, size_t bufsz, bool_t bswap)
-{
-	riff_chunk_t *c = calloc(1, sizeof (*c));
-
-	memcpy(&c->fourcc, buf, sizeof (c->fourcc));
-	memcpy(&c->sz, buf + 4, sizeof (c->sz));
-	if (bswap) {
-		c->fourcc = BSWAP32(c->fourcc);
-		c->sz = BSWAP32(c->sz);
-		c->bswap = B_TRUE;
-	}
-	if (c->sz > bufsz - 8) {
-		free(c);
-		return (NULL);
-	}
-	if (c->fourcc == RIFF_ID || c->fourcc == LIST_ID) {
-		size_t consumed = 0;
-		uint8_t *subbuf;
-
-		/* check there's enough data for a listcc field */
-		if (c->sz < 4) {
-			free(c);
-			return (NULL);
-		}
-		memcpy(&c->listcc, buf + 8, sizeof (c->listcc));
-		if (bswap)
-			c->listcc = BSWAP32(c->listcc);
-		/* we exclude the listcc field from our data pointer */
-		c->data = buf + 12;
-		list_create(&c->subchunks, sizeof (riff_chunk_t),
-		    offsetof(riff_chunk_t, node));
-
-		subbuf = c->data;
-		while (consumed != c->sz - 4) {
-			riff_chunk_t *sc = riff_parse_chunk(subbuf,
-			    c->sz - 4 - consumed, bswap);
-
-			if (sc == NULL) {
-				riff_free_chunk(c);
-				return (NULL);
-			}
-			list_insert_tail(&c->subchunks, sc);
-			consumed += sc->sz + 8;
-			subbuf += sc->sz + 8;
-			if (consumed & 1) {
-				/* realign to two-byte boundary */
-				consumed++;
-				subbuf++;
-			}
-			ASSERT(consumed <= c->sz - 4);
-			ASSERT(subbuf <= buf + bufsz);
-		}
-	} else {
-		/* plain data chunk */
-		c->data = buf + 8;
-	}
-
-	return (c);
-}
-
-static riff_chunk_t *
-riff_parse(uint32_t filetype, uint8_t *buf, size_t bufsz)
-{
-	bool_t bswap;
-	const uint32_t *buf32 = (uint32_t *)buf;
-	uint32_t ftype;
-
-	/* check the buffer isn't too small to be a valid RIFF file */
-	if (bufsz < 3 * sizeof (uint32_t))
-		return (NULL);
-
-	/* make sure the header signature matches & determine endianness */
-	if (((uint32_t *)buf)[0] == RIFF_ID)
-		bswap = B_FALSE;
-	else if (buf32[0] == BSWAP32(RIFF_ID))
-		bswap = B_TRUE;
-	else
-		return (NULL);
-
-	/* check the file size fits in our buffer */
-	if ((bswap ? BSWAP32(buf32[1]) : buf32[1]) > bufsz - 8)
-		return (NULL);
-	/* check the file type requested by the caller */
-	ftype = (bswap ? BSWAP32(buf32[2]) : buf32[2]);
-	if (ftype != filetype)
-		return (NULL);
-
-	/* now we can be reasonably sure that this is a somewhat valid file */
-	return (riff_parse_chunk(buf, bufsz, bswap));
-}
+static ALCdevice *dev = NULL;
+static ALCcontext *old_ctx = NULL, *my_ctx = NULL;
+static bool_t use_shared = B_FALSE;
+static bool_t ctx_saved = B_FALSE;
+static bool_t inited = B_FALSE;
 
 /*
- * Locates a specific chunk in a RIFF file. In `topchunk' pass the top-level
- * RIFF file chunk. The `chunksz' will be filled with the size of the chunk
- * being searched for (if found). The remaining arguments must be a
- * 0-terminated list of uint32_t FourCCs of the nested chunks. Don't include
- * the top-level chunk ID.
- * Returns a pointer to the body of the chunk (if found, and chunksz will be
- * populated with the amount of data in the chunk), or NULL if not found.
+ * ctx_save/ctx_restore must be used to bracket all OpenAL calls. This makes
+ * sure private contexts are handled properly (when in use). If shared
+ * contexts are used, these functions are no-ops.
  */
-static uint8_t *
-riff_find_chunk(riff_chunk_t *topchunk, size_t *chunksz, ...)
+static void
+ctx_save(void)
 {
-	va_list ap;
-	uint32_t fourcc;
+	if (use_shared)
+		return;
 
-	ASSERT(topchunk != NULL);
-	ASSERT(topchunk->fourcc == RIFF_ID);
-	ASSERT(chunksz != NULL);
+	ASSERT(!ctx_saved);
+	dbg_log("wav", 1, "ctx_save()");
+	old_ctx = alcGetCurrentContext();
+	alcMakeContextCurrent(my_ctx);
+	ctx_saved = B_TRUE;
+}
 
-	va_start(ap, chunksz);
-	while ((fourcc = va_arg(ap, uint32_t)) != 0) {
-		riff_chunk_t *sc;
+static void
+ctx_restore(void)
+{
+	if (use_shared)
+		return;
 
-		ASSERT(fourcc != LIST_ID && fourcc != RIFF_ID);
-		if (topchunk->fourcc != LIST_ID &&
-		    topchunk->fourcc != RIFF_ID)
-			return (NULL);
-		for (sc = list_head(&topchunk->subchunks); sc != NULL;
-		    sc = list_next(&topchunk->subchunks, sc)) {
-			if (sc->fourcc == fourcc || (sc->listcc == fourcc &&
-			    (sc->fourcc == LIST_ID || sc->fourcc == RIFF_ID)))
-				break;
+	ASSERT(ctx_saved);
+	dbg_log("wav", 1, "ctx_restore()");
+	if (old_ctx != NULL)
+		alcMakeContextCurrent(old_ctx);
+	ctx_saved = B_FALSE;
+}
+
+static bool_t
+audio_init(void)
+{
+	if (inited)
+		return (B_TRUE);
+
+	dbg_log("wav", 1, "audio_init");
+
+	ctx_save();
+
+	if (!use_shared) {
+		dev = alcOpenDevice(NULL);
+		if (dev == NULL) {
+			logMsg("Cannot init audio system: device open "
+			    "failed (%d)."
+#if	IBM
+			    "\nTry to configure X-RAAS with "
+			    "\"RAAS_shared_audio_ctx = true\" and retest."
+#endif	/* IBM */
+			    , alGetError());
+			ctx_restore();
+			return (B_FALSE);
 		}
-		if (sc == NULL)
-			return (NULL);
-		topchunk = sc;
+		my_ctx = alcCreateContext(dev, NULL);
+		if (my_ctx == NULL) {
+			logMsg("Cannot init audio system: create context "
+			    "failed (%d)"
+#if	IBM
+			    "\nTry to configure X-RAAS with "
+			    "\"RAAS_shared_audio_ctx = true\" and retest."
+#endif	/* IBM */
+			    , alGetError());
+			alcCloseDevice(dev);
+			ctx_restore();
+			return (B_FALSE);
+		}
 	}
-	va_end(ap);
 
-	ASSERT(topchunk != NULL);
+	ctx_restore();
 
-	*chunksz = topchunk->sz;
-	return (topchunk->data);
+	inited = B_TRUE;
+
+	return (B_TRUE);
+}
+
+void
+audio_set_shared_ctx(bool_t flag)
+{
+	ASSERT(!inited);
+	dbg_log("wav", 1, "set_shared_ctx = %d", flag);
+	use_shared = flag;
+}
+
+void
+audio_fini()
+{
+	if (!inited)
+		return;
+	dbg_log("wav", 1, "audio_fini");
+	if (!use_shared) {
+		alcDestroyContext(my_ctx);
+		alcCloseDevice(dev);
+		my_ctx = NULL;
+		dev = NULL;
+	}
+	inited = B_FALSE;
 }
 
 /*
@@ -213,10 +153,10 @@ riff_find_chunk(riff_chunk_t *topchunk, size_t *chunksz, ...)
  * stereo raw PCM (uncompressed) WAV files.
  */
 wav_t *
-xraas_wav_load(const char *filename)
+wav_load(const char *filename, const char *descr_name)
 {
 	wav_t *wav = NULL;
-	FILE *fp = fopen(filename, "rb");
+	FILE *fp;
 	size_t filesz;
 	riff_chunk_t *riff = NULL;
 	uint8_t *filebuf = NULL;
@@ -225,8 +165,14 @@ xraas_wav_load(const char *filename)
 	int sample_sz;
 	ALuint err;
 
-	if (fp == NULL) {
-		logMsg("Error loading WAV file %s: can't open file.", filename);
+	if (!audio_init())
+		return (NULL);
+
+	dbg_log("wav", 1, "Loading wav file %s", filename);
+
+	if ((fp = fopen(filename, "rb")) == NULL) {
+		logMsg("Error loading WAV file \"%s\": can't open file.",
+		    filename);
 		return (NULL);
 	}
 
@@ -241,14 +187,16 @@ xraas_wav_load(const char *filename)
 	if (fread(filebuf, 1, filesz, fp) != filesz)
 		goto errout;
 	if ((riff = riff_parse(WAVE_ID, filebuf, filesz)) == NULL) {
-		logMsg("Error loading WAV file %s: file doesn't appear to "
+		logMsg("Error loading WAV file \"%s\": file doesn't appear to "
 		    "be valid RIFF.", filename);
 		goto errout;
 	}
 
+	wav->name = strdup(descr_name);
+
 	chunkp = riff_find_chunk(riff, &chunksz, FMT_ID, 0);
 	if (chunkp == NULL || chunksz != sizeof (wav->fmt)) {
-		logMsg("Error loading WAV file %s: file missing FMT chunk.",
+		logMsg("Error loading WAV file \"%s\": file missing FMT chunk.",
 		    filename);
 		goto errout;
 	}
@@ -265,8 +213,8 @@ xraas_wav_load(const char *filename)
 	if (wav->fmt.datafmt != 1 ||
 	    (wav->fmt.n_channels != 1 && wav->fmt.n_channels != 2) ||
 	    (wav->fmt.bps != 8 && wav->fmt.bps != 16)) {
-		logMsg("Error loading WAV file %s: unsupported audio format.",
-		    filename);
+		logMsg("Error loading WAV file \"%s\": unsupported audio "
+		    "format.", filename);
 		goto errout;
 	}
 
@@ -292,10 +240,12 @@ xraas_wav_load(const char *filename)
 			*s = BSWAP16(*s);
 	}
 
+	ctx_save();
 	alGenBuffers(1, &wav->albuf);
 	if ((err = alGetError()) != AL_NO_ERROR) {
-		logMsg("Error loading WAV file %s: cannot generate AL "
-		    "buffer (%d).", filename, err);
+		logMsg("Error loading WAV file %s: alGenBuffers failed (%d).",
+		    filename, err);
+		ctx_restore();
 		goto errout;
 	}
 	if (wav->fmt.bps == 16)
@@ -308,10 +258,14 @@ xraas_wav_load(const char *filename)
 		    chunkp, chunksz, wav->fmt.srate);
 
 	if ((err = alGetError()) != AL_NO_ERROR) {
-		logMsg("Error loading WAV file %s: cannot buffer data (%d).",
+		logMsg("Error loading WAV file %s: alBufferData failed (%d).",
 		    filename, err);
+		ctx_restore();
 		goto errout;
 	}
+	ctx_restore();
+
+	dbg_log("wav", 1, "wav load complete, duration %.2fs", wav->duration);
 
 	riff_free_chunk(riff);
 	free(filebuf);
@@ -324,89 +278,99 @@ errout:
 		free(filebuf);
 	if (riff != NULL)
 		riff_free_chunk(riff);
-	xraas_wav_free(wav);
+	wav_free(wav);
 	fclose(fp);
 
 	return (NULL);
 }
 
 /*
- * Destroys a WAV file as returned by xraas_wav_load().
+ * Destroys a WAV file as returned by wav_load().
  */
 void
-xraas_wav_free(wav_t *wav)
+wav_free(wav_t *wav)
 {
-	if (wav != NULL) {
-		if (wav->alsrc != 0) {
-			alSourceStop(wav->alsrc);
-			alDeleteSources(1, &wav->alsrc);
-		}
-		if (wav->albuf != 0)
-			alDeleteBuffers(1, &wav->albuf);
-		free(wav);
+	if (wav == NULL)
+		return;
+
+	dbg_log("wav", 1, "wav_free %s", wav->name);
+
+	ASSERT(inited);
+
+	ctx_save();
+	free(wav->name);
+	if (wav->alsrc != 0) {
+		alSourceStop(wav->alsrc);
+		alDeleteSources(1, &wav->alsrc);
 	}
-}
+	if (wav->albuf != 0)
+		alDeleteBuffers(1, &wav->albuf);
+	ctx_restore();
 
-static bool_t
-audio_init(void)
-{
-	ALCcontext *ctx = alcGetCurrentContext();
-
-	if (ctx == NULL) {
-		ALCdevice *dev = alcOpenDevice(NULL);
-
-		if (dev == NULL) {
-			logMsg("Cannot init audio system: device open "
-			    "failed (%d)", alGetError());
-			return (B_FALSE);
-		}
-		ctx = alcCreateContext(dev, NULL);
-		if (ctx == NULL) {
-			logMsg("Cannot init audio system: create context "
-			    "failed (%d)", alGetError());
-			alcCloseDevice(dev);
-			return (B_FALSE);
-		}
-		alcMakeContextCurrent(ctx);
-	}
-
-	return (B_TRUE);
+	free(wav);
 }
 
 void
-xraas_wav_play(wav_t *wav, double gain)
+wav_play(wav_t *wav, double gain)
 {
 	ALuint err;
+
+	dbg_log("wav", 1, "wav_play %s @ %.2f", wav->name, gain);
 
 	if (!audio_init)
 		return;
 
+	ctx_save();
+
 	if (wav->alsrc == 0) {
 		ALfloat zeroes[3] = { 0.0, 0.0, 0.0 };
+
+		dbg_log("wav", 1, "wav %s generating source at gain %.2f",
+		    wav->name, gain);
 
 		alGenSources(1, &wav->alsrc);
 		if ((err = alGetError()) != AL_NO_ERROR) {
 			logMsg("Can't play sound: alGenSources failed (%d).",
 			    err);
+			ctx_restore();
 			return;
 		}
-		alSourcei(wav->alsrc, AL_BUFFER, wav->albuf);
-		alSourcef(wav->alsrc, AL_PITCH, 1.0);
-		alSourcef(wav->alsrc, AL_GAIN, gain);
-		alSourcei(wav->alsrc, AL_LOOPING, 0);
-		alSourcefv(wav->alsrc, AL_POSITION, zeroes);
-		alSourcefv(wav->alsrc, AL_VELOCITY, zeroes);
+#define	CHECK_ERROR(stmt) \
+	do { \
+		stmt; \
+		if ((err = alGetError()) != AL_NO_ERROR) { \
+			logMsg("Can't play sound, statement \"%s\" failed: %d",\
+			    #stmt, err); \
+			alDeleteSources(1, &wav->alsrc); \
+			wav->alsrc = 0; \
+			return; \
+		} \
+	} while (0)
+		CHECK_ERROR(alSourcei(wav->alsrc, AL_BUFFER, wav->albuf));
+		CHECK_ERROR(alSourcef(wav->alsrc, AL_PITCH, 1.0));
+		CHECK_ERROR(alSourcef(wav->alsrc, AL_GAIN, gain));
+		CHECK_ERROR(alSourcei(wav->alsrc, AL_LOOPING, 0));
+		CHECK_ERROR(alSourcefv(wav->alsrc, AL_POSITION, zeroes));
+		CHECK_ERROR(alSourcefv(wav->alsrc, AL_VELOCITY, zeroes));
 	}
 
 	alSourcePlay(wav->alsrc);
 	if ((err = alGetError()) != AL_NO_ERROR)
 		logMsg("Can't play sound: alSourcePlay failed (%d).", err);
+
+	ctx_restore();
 }
 
 void
-xraas_wav_stop(wav_t *wav)
+wav_stop(wav_t *wav)
 {
+	dbg_log("wav", 1, "wav_stop %s", wav->name);
+
 	if (wav->alsrc == 0)
 		return;
+
+	ASSERT(inited);
+	ctx_save();
 	alSourceStop(wav->alsrc);
+	ctx_restore();
 }

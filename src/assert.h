@@ -47,7 +47,7 @@ extern "C" {
 	do { \
 		if (!(x)) { \
 			logMsg("assertion \"%s\" failed\n", #x); \
-			xraas_log_backtrace(); \
+			log_backtrace(); \
 			abort(); \
 		} \
 	} while (0)

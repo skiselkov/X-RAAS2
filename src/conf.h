@@ -36,15 +36,14 @@ extern "C" {
 #endif
 
 typedef struct conf conf_t;
-conf_t *xraas_parse_conf(FILE *fp, int *errline);
-void xraas_free_conf(conf_t *conf);
+conf_t *parse_conf(FILE *fp, int *errline);
+void free_conf(conf_t *conf);
 
-bool_t xraas_conf_get_str(const conf_t *conf, const char *key,
-    const char **value);
-bool_t xraas_conf_get_i(const conf_t *conf, const char *key, int *value);
-bool_t xraas_conf_get_d(const conf_t *conf, const char *key, double *value);
-bool_t xraas_conf_get_ll(const conf_t *conf, const char *key, long long *value);
-bool_t xraas_conf_get_b(const conf_t *conf, const char *key, bool_t *value);
+bool_t conf_get_str(const conf_t *conf, const char *key, const char **value);
+bool_t conf_get_i(const conf_t *conf, const char *key, int *value);
+bool_t conf_get_d(const conf_t *conf, const char *key, double *value);
+bool_t conf_get_ll(const conf_t *conf, const char *key, long long *value);
+bool_t conf_get_b(const conf_t *conf, const char *key, bool_t *value);
 
 #ifdef	__cplusplus
 }

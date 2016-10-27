@@ -48,7 +48,7 @@ extern "C" {
 #define	BSWAP32(x)	__builtin_bswap32((x))
 #define	BSWAP64(x)	__builtin_bswap64((x))
 #endif	/* BSWAP32 */
-#else	/* __GNUC */
+#else	/* !__GNUC__ && !__clang__ */
 #define	PRINTF_ATTR(x)
 #ifndef	BSWAP32
 #define	BSWAP16(x)	\
@@ -69,7 +69,7 @@ extern "C" {
 	(((x) & 0x00ff000000000000llu) >> 40) | \
 	(((x) & 0xff00000000000000llu) << 56))
 #endif	/* BSWAP32 */
-#endif	/* __GNUC */
+#endif	/* !__GNUC__ && !__clang__ */
 
 #ifdef	WINDOWS
 #define	PATHSEP	"\\"

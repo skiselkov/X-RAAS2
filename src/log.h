@@ -33,24 +33,23 @@ extern "C" {
  * below just chops it out at compile time.
  */
 #if	defined(__GNUC__) || defined(__clang__)
-#define	xraas_log_basename(f) (__builtin_strrchr(f, DIRSEP) ? \
+#define	log_basename(f) (__builtin_strrchr(f, DIRSEP) ? \
 	__builtin_strrchr(f, DIRSEP) + 1 : f)
 #else	/* !__GNUC__ && !__clang__ */
-const char *xraas_log_basename(const char *filename);
+const char *log_basename(const char *filename);
 #endif	/* !__GNUC__ && !__clang__ */
 
 #define	logMsg(...) \
-	xraas_log(xraas_log_basename(__FILE__), __LINE__, __VA_ARGS__)
-#define	dbg_log(...) \
-	xraas_dbg_log(xraas_log_basename(__FILE__), __LINE__, __VA_ARGS__)
-
-void xraas_log(const char *filename, int line, const char *fmt, ...)
+	log_impl(log_basename(__FILE__), __LINE__, __VA_ARGS__)
+void log_impl(const char *filename, int line, const char *fmt, ...)
     PRINTF_ATTR(3);
-void xraas_log_v(const char *filename, int line, const char *fmt, va_list ap);
-void xraas_log_backtrace(void);
+void log_impl_v(const char *filename, int line, const char *fmt, va_list ap);
+void log_backtrace(void);
 
+#define	dbg_log(...) \
+	dbg_log_impl(log_basename(__FILE__), __LINE__, __VA_ARGS__)
 extern int xraas_debug;
-void xraas_dbg_log(const char *filename, int line, const char *name, int level,
+void dbg_log_impl(const char *filename, int line, const char *name, int level,
     const char *fmt, ...) PRINTF_ATTR(5);
 
 #ifdef __cplusplus
