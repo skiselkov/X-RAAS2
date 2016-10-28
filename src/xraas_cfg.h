@@ -21,7 +21,15 @@
 #include "xraas2.h"
 #include "conf.h"
 
+#ifdef	__cplusplus
+extern "C" {
+#endif
+
 bool_t load_configs(xraas_state_t *state, const char *plugindir,
     const char *acf_path);
+
+#ifdef	__cplusplus
+}
+#endif
 
 #endif	/* _XRAAS_CFG_H_ */
