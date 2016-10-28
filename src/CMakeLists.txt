@@ -17,9 +17,9 @@ cmake_minimum_required(VERSION 2.8.3)
 project(plugin C)
 
 SET(SRC xraas2.c geom.c math.c helpers.c perf.c log.c list.c avl.c conf.c
-    riff.c wav.c airportdb.c rwy_key_tbl.c xraas_cfg.c annun.c)
+    riff.c wav.c airportdb.c rwy_key_tbl.c xraas_cfg.c snd_sys.c)
 SET(HDR geom.h math.h types.h helpers.h perf.h log.h list.h avl.h avl_impl.h
-    conf.h riff.h wav.h airportdb.h rwy_key_tbl.h xraas_cfg.h annun.h)
+    conf.h riff.h wav.h airportdb.h rwy_key_tbl.h xraas_cfg.h snd_sys.h)
 
 SET(ALL_SRC ${SRC} ${HDR})
 LIST(SORT ALL_SRC)

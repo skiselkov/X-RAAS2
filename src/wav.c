@@ -164,6 +164,7 @@ wav_load(const char *filename, const char *descr_name)
 	size_t chunksz;
 	int sample_sz;
 	ALuint err;
+	ALfloat zeroes[3] = { 0.0, 0.0, 0.0 };
 
 	if (!audio_init())
 		return (NULL);
@@ -263,6 +264,33 @@ wav_load(const char *filename, const char *descr_name)
 		ctx_restore();
 		goto errout;
 	}
+
+	alGenSources(1, &wav->alsrc);
+	if ((err = alGetError()) != AL_NO_ERROR) {
+		logMsg("Error loading WAV file %s: alGenSources failed (%d).",
+		    filename, err);
+		ctx_restore();
+		goto errout;
+	}
+#define	CHECK_ERROR(stmt) \
+	do { \
+		stmt; \
+		if ((err = alGetError()) != AL_NO_ERROR) { \
+			logMsg("Error loading WAV file %s, \"%s\" failed " \
+			    "with error %d", filename, #stmt, err); \
+			alDeleteSources(1, &wav->alsrc); \
+			wav->alsrc = 0; \
+			ctx_restore(); \
+			goto errout; \
+		} \
+	} while (0)
+	CHECK_ERROR(alSourcei(wav->alsrc, AL_BUFFER, wav->albuf));
+	CHECK_ERROR(alSourcef(wav->alsrc, AL_PITCH, 1.0));
+	CHECK_ERROR(alSourcef(wav->alsrc, AL_GAIN, 1.0));
+	CHECK_ERROR(alSourcei(wav->alsrc, AL_LOOPING, 0));
+	CHECK_ERROR(alSourcefv(wav->alsrc, AL_POSITION, zeroes));
+	CHECK_ERROR(alSourcefv(wav->alsrc, AL_VELOCITY, zeroes));
+
 	ctx_restore();
 
 	dbg_log("wav", 1, "wav load complete, duration %.2fs", wav->duration);
@@ -310,49 +338,49 @@ wav_free(wav_t *wav)
 	free(wav);
 }
 
+/*
+ * Sets the audio gain (volume) of a WAV file from 0.0 (silent) to 1.0
+ * (full volume).
+ */
 void
-wav_play(wav_t *wav, double gain)
+wav_set_gain(wav_t *wav, float gain)
 {
 	ALuint err;
 
-	dbg_log("wav", 1, "wav_play %s @ %.2f", wav->name, gain);
-
-	if (!audio_init())
+	if (wav == NULL || wav->alsrc == 0)
 		return;
+
+	dbg_log("wav", 1, "wav_set_gain %s %f", wav->name, (double)gain);
+
+	ASSERT(inited);
 
 	ctx_save();
 
-	if (wav->alsrc == 0) {
-		ALfloat zeroes[3] = { 0.0, 0.0, 0.0 };
+	alSourcef(wav->alsrc, AL_GAIN, gain);
+	if ((err = alGetError()) != AL_NO_ERROR)
+		logMsg("Error changing gain of WAV %s, error %d.",
+		    wav->name, err);
 
-		dbg_log("wav", 1, "wav %s generating source at gain %.2f",
-		    wav->name, gain);
+	ctx_restore();
+}
 
-		alGenSources(1, &wav->alsrc);
-		if ((err = alGetError()) != AL_NO_ERROR) {
-			logMsg("Can't play sound: alGenSources failed (%d).",
-			    err);
-			ctx_restore();
-			return;
-		}
-#define	CHECK_ERROR(stmt) \
-	do { \
-		stmt; \
-		if ((err = alGetError()) != AL_NO_ERROR) { \
-			logMsg("Can't play sound, statement \"%s\" failed: %d",\
-			    #stmt, err); \
-			alDeleteSources(1, &wav->alsrc); \
-			wav->alsrc = 0; \
-			return; \
-		} \
-	} while (0)
-		CHECK_ERROR(alSourcei(wav->alsrc, AL_BUFFER, wav->albuf));
-		CHECK_ERROR(alSourcef(wav->alsrc, AL_PITCH, 1.0));
-		CHECK_ERROR(alSourcef(wav->alsrc, AL_GAIN, gain));
-		CHECK_ERROR(alSourcei(wav->alsrc, AL_LOOPING, 0));
-		CHECK_ERROR(alSourcefv(wav->alsrc, AL_POSITION, zeroes));
-		CHECK_ERROR(alSourcefv(wav->alsrc, AL_VELOCITY, zeroes));
-	}
+/*
+ * Starts playback of a WAV file loaded through wav_load. Playback volume
+ * is full (1.0) or the last value set by wav_set_gain.
+ */
+void
+wav_play(wav_t *wav)
+{
+	ALuint err;
+
+	if (wav == NULL)
+		return;
+
+	dbg_log("wav", 1, "wav_play %s", wav->name);
+
+	ASSERT(inited);
+
+	ctx_save();
 
 	alSourcePlay(wav->alsrc);
 	if ((err = alGetError()) != AL_NO_ERROR)
@@ -361,9 +389,16 @@ wav_play(wav_t *wav, double gain)
 	ctx_restore();
 }
 
+/*
+ * Stops playback of a WAV file started via wav_play and resets the playback
+ * position back to the start of the file.
+ */
 void
 wav_stop(wav_t *wav)
 {
+	if (wav == NULL)
+		return;
+
 	dbg_log("wav", 1, "wav_stop %s", wav->name);
 
 	if (wav->alsrc == 0)

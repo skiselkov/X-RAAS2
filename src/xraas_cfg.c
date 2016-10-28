@@ -18,6 +18,7 @@
 #include <string.h>
 #include <stdlib.h>
 
+#include "helpers.h"
 #include "log.h"
 #include "wav.h"
 
@@ -79,8 +80,12 @@ reset_state(xraas_state_t *state)
 
 	state->enabled = B_TRUE;
 
-	state->GPWS_priority_dataref = "sim/cockpit2/annunciators/GPWS";
-	state->GPWS_inop_dataref = "sim/cockpit/warnings/annunciators/GPWS";
+	my_strlcpy(state->GPWS_priority_dataref,
+	    "sim/cockpit2/annunciators/GPWS",
+	    sizeof (state->GPWS_priority_dataref));
+	my_strlcpy(state->GPWS_inop_dataref,
+	    "sim/cockpit/warnings/annunciators/GPWS",
+	    sizeof (state->GPWS_inop_dataref));
 
 	state->on_rwy_timer = -1;
 
@@ -95,6 +100,7 @@ static void
 process_conf(xraas_state_t *state, conf_t *conf)
 {
 	bool_t shared_ctx = B_FALSE;
+	const char *str;
 
 #define	GET_CONF(type, varname) \
 	do { \
@@ -146,8 +152,15 @@ process_conf(xraas_state_t *state, conf_t *conf)
 #undef	GET_CONF
 
 	conf_get_i(conf, "debug", &xraas_debug);
-	conf_get_b(conf, "shared_audio_ctx", &shared_ctx);
-	audio_set_shared_ctx(shared_ctx);
+	if (conf_get_b(conf, "shared_audio_ctx", &shared_ctx))
+		audio_set_shared_ctx(shared_ctx);
+
+	if (conf_get_str(conf, "gpws_prio_dr", &str))
+		my_strlcpy(state->GPWS_priority_dataref, str,
+		    sizeof (state->GPWS_priority_dataref));
+	if (conf_get_str(conf, "gpws_inop_dr", &str))
+		my_strlcpy(state->GPWS_inop_dataref, str,
+		    sizeof (state->GPWS_inop_dataref));
 }
 
 /*

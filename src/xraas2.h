@@ -42,7 +42,6 @@ typedef enum nd_alert_level {
 } nd_alert_level_t;
 
 typedef struct xraas_state {
-	bool_t		init_called;
 	bool_t		enabled;
 	int		min_engines;		/* count */
 	int		min_mtow;		/* kg */
@@ -82,8 +81,8 @@ typedef struct xraas_state {
 	double		gpa_limit_mult;			/* multiplier */
 	double		gpa_limit_max;			/* degrees */
 
-	const char	*GPWS_priority_dataref;
-	const char	*GPWS_inop_dataref;
+	char		GPWS_priority_dataref[128];
+	char		GPWS_inop_dataref[128];
 
 	bool_t		alt_setting_enabled;
 	bool_t		qnh_alt_enabled;
@@ -153,6 +152,10 @@ typedef struct xraas_state {
 #define	INIT_ERR_MSG_TIMEOUT		25		/* seconds */
 void log_init_msg(bool_t display, int timeout, int man_sect_number,
     const char *man_sect_name, const char *fmt, ...) PRINTF_ATTR(5);
+
+bool_t xraas_is_on(void);
+bool_t view_is_external(void);
+bool_t GPWS_has_priority(void);
 
 #ifdef	__cplusplus
 }

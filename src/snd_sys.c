@@ -25,7 +25,7 @@
 #include "list.h"
 #include "wav.h"
 
-#include "annun.h"
+#include "snd_sys.h"
 
 typedef struct {
 	msg_type_t	*msgs;
@@ -82,8 +82,16 @@ static msg_t voice_msgs[NUM_MSGS] = {
 
 static bool_t inited = B_FALSE;
 static const xraas_state_t *state;
-
+static bool_t view_is_ext = B_FALSE;
 static list_t playback_queue;
+
+static void
+set_sound_on(bool_t flag)
+{
+	for (int i = 0; i < NUM_MSGS; i++)
+		wav_set_gain(voice_msgs[i].wav,
+		    flag ? state->voice_volume : 0);
+}
 
 void
 play_msg(msg_type_t *msg, size_t msg_len, msg_prio_t prio)
@@ -157,6 +165,48 @@ snd_sched_cb(float elapsed_since_last_call, float elapsed_since_last_floop,
 	ann = list_head(&playback_queue);
 	if (ann == NULL)
 		return (-1.0);
+
+	/*
+	 * Make sure our messages are only audible when we're inside
+	 * the cockpit and AC power is on.
+	 */
+	if (view_is_ext && (!view_is_external() || !state->disable_ext_view)) {
+		dbg_log("snd_sched", 1, "view has moved inside, unmuting");
+		set_sound_on(B_TRUE);
+		view_is_ext = B_FALSE;
+	} else if (!view_is_ext && view_is_external() &&
+	    state->disable_ext_view) {
+		dbg_log("snd_sched", 1, "view has moved outside, muting");
+		set_sound_on(B_FALSE);
+		view_is_ext = B_TRUE;
+	}
+
+	/*
+	 * Stop audio when GPWS is overriding us - we'll restart the
+	 * annunciation once it's over.
+	 */
+	if (GPWS_has_priority()) {
+		if (ann->cur_msg >= 0) {
+			dbg_log("snd", 1, "GPWS priority override, pausing");
+			wav_stop(voice_msgs[ann->msgs[ann->cur_msg]].wav);
+			ann->cur_msg = -1;
+		}
+		return (-1.0);
+	}
+
+	/* Stop audio when power is down and drain the queue. */
+	if (!xraas_is_on()) {
+		dbg_log("snd_sched", 1, "lost power, stopping sound");
+		if (ann->cur_msg >= 0)
+			wav_stop(voice_msgs[ann->msgs[ann->cur_msg]].wav);
+		do {
+			list_remove(&playback_queue, ann);
+			free(ann->msgs);
+			free(ann);
+		} while ((ann = list_head(&playback_queue)) != NULL);
+		return (-1.0);
+	}
+
 	now = microclock();
 
 	ASSERT(ann->cur_msg < ann->num_msgs);
@@ -167,8 +217,7 @@ snd_sched_cb(float elapsed_since_last_call, float elapsed_since_last_floop,
 		ann->cur_msg++;
 		if (ann->cur_msg < ann->num_msgs) {
 			ann->started = now;
-			wav_play(voice_msgs[ann->msgs[ann->cur_msg]].wav,
-			    state->voice_volume);
+			wav_play(voice_msgs[ann->msgs[ann->cur_msg]].wav);
 		} else {
 			list_remove(&playback_queue, ann);
 			free(ann->msgs);
@@ -201,6 +250,7 @@ snd_sys_init(const char *plugindir, const xraas_state_t *global_conf)
 		pathname = mkpathname(plugindir, "msgs", gender_dir, fname,
 		    NULL);
 		voice_msgs[msg].wav = wav_load(pathname, voice_msgs[msg].name);
+		wav_set_gain(voice_msgs[msg].wav, global_conf->voice_volume);
 		free(pathname);
 		if (voice_msgs[msg].wav == NULL)
 			return (B_FALSE);

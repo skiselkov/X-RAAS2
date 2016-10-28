@@ -31,7 +31,6 @@
 #include <XPLMPlugin.h>
 
 #include "airportdb.h"
-#include "annun.h"
 #include "assert.h"
 #include "avl.h"
 #include "conf.h"
@@ -42,6 +41,7 @@
 #include "math.h"
 #include "perf.h"
 #include "rwy_key_tbl.h"
+#include "snd_sys.h"
 #include "types.h"
 #include "wav.h"
 #include "xraas2.h"
@@ -182,6 +182,7 @@ typedef enum nd_alert_msg_type {
     ND_ALERT_LONG_LAND = 10
 } nd_alert_msg_type_t;
 
+static bool_t init_called = B_FALSE;
 static xraas_state_t state;
 
 static char xpdir[512] = { 0 };
@@ -213,7 +214,7 @@ static struct {
 	XPLMDataRef gear_type;
 	XPLMDataRef baro_set;
 	XPLMDataRef baro_sl;
-	XPLMDataRef ext_view;
+	XPLMDataRef view_is_ext;
 	XPLMDataRef bus_volt;
 	XPLMDataRef avionics_on;
 	XPLMDataRef num_engines;
@@ -277,7 +278,7 @@ raas_dr_reset(void)
 	drs.gear_type = dr_get("sim/aircraft/parts/acf_gear_type");
 	drs.baro_set = dr_get("sim/cockpit/misc/barometer_setting");
 	drs.baro_sl = dr_get("sim/weather/barometer_sealevel_inhg");
-	drs.ext_view = dr_get("sim/graphics/view/view_is_external");
+	drs.view_is_ext = dr_get("sim/graphics/view/view_is_external");
 	drs.bus_volt = dr_get("sim/cockpit2/electrical/bus_volts");
 	drs.avionics_on = dr_get("sim/cockpit/electrical/avionics_on");
 	drs.num_engines = dr_get("sim/aircraft/engine/acf_num_engines");
@@ -344,13 +345,17 @@ gear_is_up(void)
 	return (B_TRUE);
 }
 
-#if 0
-static bool_t
+bool_t
+view_is_external(void)
+{
+	return (XPLMGetDatai(drs.view_is_ext) != 0);
+}
+
+bool_t
 GPWS_has_priority(void)
 {
 	return (drs.gpws_prio ? XPLMGetDatai(drs.gpws_prio) != 0 : B_FALSE);
 }
-#endif
 
 static bool_t
 chk_acf_dr(const char **icaos, const char *drname)
@@ -632,19 +637,21 @@ do_approaching_rwy(const airport_t *arpt, const runway_t *rwy,
     int end, bool_t on_ground)
 {
 	const runway_end_t *rwy_end;
+	const char *rwy_id;
 
 	ASSERT(arpt != NULL);
 	ASSERT(rwy != NULL);
 	ASSERT(end == 0 || end == 1);
 
 	rwy_end = &rwy->ends[end];
+	rwy_id = rwy_end->id;
 
 	if ((on_ground &&
 	    (rwy_key_tbl_get(&state.apch_rwy_ann, arpt->icao, rwy->joint_id) ||
 	    rwy_key_tbl_get(&state.on_rwy_ann, arpt->icao, rwy->ends[0].id) ||
 	    rwy_key_tbl_get(&state.on_rwy_ann, arpt->icao, rwy->ends[1].id))) ||
 	    (!on_ground && rwy_key_tbl_get(&state.air_apch_rwy_ann, arpt->icao,
-	    rwy->joint_id) != 0))
+	    rwy_id) != 0))
 		return;
 
 	if (!on_ground || XPLMGetDataf(drs.gs) < SPEED_THRESH) {
@@ -657,6 +664,8 @@ do_approaching_rwy(const airport_t *arpt, const runway_t *rwy,
 		    (!on_ground && state.air_apch_rwys_ann))
 			return;
 
+	/* TODO: implement approaching multiple runways */
+#if 0
 		/* Multiple runways being approached? */
 		if ((on_ground && avl_numnodes(&state.apch_rwy_ann) != 0) ||
 		    (!on_ground && avl_numnodes(&state.air_apch_rwy_ann) !=
@@ -679,8 +688,6 @@ do_approaching_rwy(const airport_t *arpt, const runway_t *rwy,
 			 * previous runway is still playing, try to modify
 			 * it to say "approaching runways".
 			 */
-#if 0
-			/* TODO: implement this */
 			if raas.cur_msg["msg"] ~= nil and
 			    raas.cur_msg["msg"][1] == "apch" and
 			    raas.cur_msg["playing"] <= 1 then
@@ -690,23 +697,22 @@ do_approaching_rwy(const airport_t *arpt, const runway_t *rwy,
 				raas.ND_alert(ND_ALERT_APP, ND_ALERT_ROUTINE,
 				    "37")
 			end
-#endif
 			if (on_ground)
 				rwy_key_tbl_set(&state.apch_rwy_ann,
 				    arpt->icao, rwy->joint_id, B_TRUE);
 			else
 				rwy_key_tbl_set(&state.air_apch_rwy_ann,
-				    arpt->icao, rwy->joint_id, B_TRUE);
+				    arpt->icao, rwy_id, B_TRUE);
 
 			if (annunciated_rwys)
 				return;
 		}
+#endif	/* multiple runway approach */
 
 		if ((on_ground && rwy_key_tbl_get(&state.apch_rwy_ann,
 		    arpt->icao, rwy->joint_id) == 0) ||
 		    (!on_ground && rwy_key_tbl_get(&state.air_apch_rwy_ann,
-		    arpt->icao, rwy->joint_id) == 0) ||
-		    !annunciated_rwys) {
+		    arpt->icao, rwy_id) == 0) || !annunciated_rwys) {
 			double dist_ND = NAN;
 			nd_alert_level_t level = ND_ALERT_ROUTINE;
 
@@ -733,7 +739,7 @@ do_approaching_rwy(const airport_t *arpt, const runway_t *rwy,
 		    rwy->joint_id, B_TRUE);
 	else
 		rwy_key_tbl_set(&state.air_apch_rwy_ann, arpt->icao,
-		    rwy->joint_id, B_TRUE);
+		    rwy_id, B_TRUE);
 }
 
 static bool_t
@@ -1564,7 +1570,7 @@ air_runway_approach_arpt_rwy(const airport_t *arpt, const runway_t *rwy,
 		/* If we are below 700 ft AFE and we haven't annunciated yet */
 		if (alt - telev < RWY_APCH_ALT_MAX &&
 		    rwy_key_tbl_get(&state.air_apch_rwy_ann, arpt_id,
-		    rwy->joint_id) == 0 &&
+		    rwy_id) == 0 &&
 		    !number_in_rngs(XPLMGetDataf(drs.rad_alt),
 		    RWY_APCH_SUPP_WINDOWS, NUM_RWY_APCH_SUPP_WINDOWS)) {
 			/* Don't annunciate if we are too low */
@@ -1572,7 +1578,7 @@ air_runway_approach_arpt_rwy(const airport_t *arpt, const runway_t *rwy,
 				do_approaching_rwy(arpt, rwy,
 				    closest_rwy_end(pos_v, rwy), B_FALSE);
 			rwy_key_tbl_set(&state.air_apch_rwy_ann, arpt_id,
-			    rwy->joint_id, B_TRUE);
+			    rwy_id, B_TRUE);
 		}
 
 		if (alt - telev < SHORT_RWY_APCH_ALT_MAX &&
@@ -1593,8 +1599,7 @@ air_runway_approach_arpt_rwy(const airport_t *arpt, const runway_t *rwy,
 
 		return (B_TRUE);
 	} else if (!in_prox_bbox) {
-		rwy_key_tbl_remove(&state.air_apch_rwy_ann, arpt_id,
-		    rwy->joint_id);
+		rwy_key_tbl_remove(&state.air_apch_rwy_ann, arpt_id, rwy_id);
 	}
 
 	return (B_FALSE);
@@ -1921,8 +1926,8 @@ xfer_elec_bus(int busnr)
 /*
  * Returns true if X-RAAS has electrical power from the aircraft.
  */
-static bool_t
-is_on(void)
+bool_t
+xraas_is_on(void)
 {
 	float bus_volts[2];
 	bool_t turned_on;
@@ -1957,9 +1962,6 @@ static void
 raas_exec(void)
 {
 	int64_t now = microclock();
-#if 0
-	int64_t time_s, time_e;
-#endif
 
 	/*
 	 * Before we start, wait a set delay, because X-Plane's datarefs
@@ -1971,7 +1973,7 @@ raas_exec(void)
 		return;
 
 	state.last_exec_time = now;
-	if (!is_on()) {
+	if (!xraas_is_on()) {
 		dbg_log("power_state", 1, "is_on = false");
 		return;
 	}
@@ -2021,25 +2023,10 @@ raas_exec(void)
 		state.long_landing_ann = B_FALSE;
 	}
 
-#if 0
-	if RAAS_debug["profile"] ~= nil then
-		time_s = raas.time()
-	end
-#endif
-
 	ground_runway_approach();
 	ground_on_runway_aligned();
 	air_runway_approach();
 	altimeter_setting();
-
-#if 0
-	if RAAS_debug["profile"] ~= nil then
-		time_e = raas.time()
-		raas.dbg.log("profile", 1, string.format("raas.exec: " ..
-		    "%.03f ms [Lua: %d kB]", ((time_e - time_s) * 1000),
-		    collectgarbage("count")))
-	end
-#endif
 
 	state.last_elev = XPLMGetDatad(drs.elev);
 	state.last_gs = XPLMGetDataf(drs.gs);
@@ -2139,7 +2126,8 @@ chk_acf_is_helo(void)
 static void
 xraas_init(void)
 {
-	state.init_called = B_TRUE;
+	ASSERT(!init_called);
+	init_called = B_TRUE;
 
 	/* these must go ahead of config parsing */
 	state.start_time = microclock();
@@ -2155,11 +2143,6 @@ xraas_init(void)
 
 	raas_dr_reset();
 	snd_sys_init(plugindir, &state);
-
-#define	AIRPORT_TABLE_SZ	512
-#define	RUNWAY_TABLE_SZ		128
-#define	GEO_TABLE_SZ		128
-#define	ICAO_SZ			4
 
 	airportdb_create(&state.airportdb, xpdir, xpprefsdir);
 
@@ -2204,10 +2187,9 @@ xraas_init(void)
 static void
 xraas_fini(void)
 {
-	if (!state.init_called)
-		return;
+	ASSERT(init_called);
 
-	state.init_called = B_FALSE;
+	init_called = B_FALSE;
 
 	if (!state.enabled)
 		return;
@@ -2225,12 +2207,6 @@ xraas_fini(void)
 		    1);
 		state.bus_loaded = -1;
 	}
-#if 0
-	if raas.cur_msg["snd"] ~= nil then
-		stop_sound(raas.cur_msg["snd"])
-		raas.cur_msg = {}
-	end
-#endif
 
 	if (state.cur_arpts != NULL) {
 		free_nearest_airport_list(state.cur_arpts);

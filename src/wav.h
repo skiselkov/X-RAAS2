@@ -57,7 +57,9 @@ void audio_fini();
 
 wav_t *wav_load(const char *filename, const char *descr_name);
 void wav_free(wav_t *wav);
-void wav_play(wav_t *wav, double gain);
+
+void wav_set_gain(wav_t *wav, float gain);
+void wav_play(wav_t *wav);
 void wav_stop(wav_t *wav);
 
 #ifdef	__cplusplus
