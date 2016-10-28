@@ -31,6 +31,7 @@
 #include <XPLMPlugin.h>
 
 #include "airportdb.h"
+#include "annun.h"
 #include "assert.h"
 #include "avl.h"
 #include "conf.h"
@@ -181,103 +182,6 @@ typedef enum nd_alert_msg_type {
     ND_ALERT_LONG_LAND = 10
 } nd_alert_msg_type_t;
 
-typedef enum msg_prio {
-    MSG_PRIO_LOW = 1,
-    MSG_PRIO_MED = 2,
-    MSG_PRIO_HIGH = 3
-} msg_prio_t;
-
-typedef enum {
-	ZERO_MSG,
-	ONE_MSG,
-	TWO_MSG,
-	THREE_MSG,
-	FOUR_MSG,
-	FIVE_MSG,
-	SIX_MSG,
-	SEVEN_MSG,
-	EIGHT_MSG,
-	NINE_MSG,
-	THIRTY_MSG,
-	ALT_SET_MSG,
-	APCH_MSG,
-	AVAIL_MSG,
-	CAUTION_MSG,
-	CENTER_MSG,
-	FEET_MSG,
-	FLAPS_MSG,
-	HUNDRED_MSG,
-	LEFT_MSG,
-	LONG_LAND_MSG,
-	METERS_MSG,
-	ON_RWY_MSG,
-	ON_TWY_MSG,
-	RIGHT_MSG,
-	RMNG_MSG,
-	RWYS_MSG,
-	PAUSE_MSG,
-	SHORT_RWY_MSG,
-	THOUSAND_MSG,
-	TOO_FAST_MSG,
-	TOO_HIGH_MSG,
-	TWY_MSG,
-	UNSTABLE_MSG,
-	NUM_MSGS
-} msg_type_t;
-
-typedef struct {
-	msg_type_t	*msgs;
-	int		num_msgs;
-	int		cur_msg;
-	msg_prio_t	prio;
-	int64_t		started;
-
-	list_node_t	node;
-} ann_t;
-
-typedef struct msg {
-	const char *name;
-	const char *text;
-	wav_t *wav;
-} msg_t;
-
-static msg_t voice_msgs[NUM_MSGS] = {
-	{ .name = "0", .text = "Zero, ", .wav = NULL },
-	{ .name = "1", .text = "One, ", .wav = NULL },
-	{ .name = "2", .text = "Two, ", .wav = NULL },
-	{ .name = "3", .text = "Three, ", .wav = NULL },
-	{ .name = "4", .text = "Four, ", .wav = NULL },
-	{ .name = "5", .text = "Five, ", .wav = NULL },
-	{ .name = "6", .text = "Six, ", .wav = NULL },
-	{ .name = "7", .text = "Seven, ", .wav = NULL },
-	{ .name = "8", .text = "Eight, ", .wav = NULL },
-	{ .name = "9", .text = "Nine, ", .wav = NULL },
-	{ .name = "30", .text = "Thirty, ", .wav = NULL },
-	{ .name = "alt_set", .text = "Altimeter setting, ", .wav = NULL },
-	{ .name = "apch", .text = "Approaching, ", .wav = NULL },
-	{ .name = "avail", .text = "Available, ", .wav = NULL },
-	{ .name = "caution", .text = "Caution! ", .wav = NULL },
-	{ .name = "center", .text = "Center, ", .wav = NULL },
-	{ .name = "feet", .text = "Feet, ", .wav = NULL },
-	{ .name = "flaps", .text = "Flaps! ", .wav = NULL },
-	{ .name = "hundred", .text = "Hundred, ", .wav = NULL },
-	{ .name = "left", .text = "Left, ", .wav = NULL },
-	{ .name = "long_land", .text = "Long landing! ", .wav = NULL },
-	{ .name = "meters", .text = "Meters, ", .wav = NULL },
-	{ .name = "on_rwy", .text = "On runway, ", .wav = NULL },
-	{ .name = "on_twy", .text = "On taxiway, ", .wav = NULL },
-	{ .name = "right", .text = "Right, ", .wav = NULL },
-	{ .name = "rmng", .text = "Remaining, ", .wav = NULL },
-	{ .name = "rwys", .text = "Runways, ", .wav = NULL },
-	{ .name = "pause", .text = " , , , ", .wav = NULL },
-	{ .name = "short_rwy", .text = "Short runway! ", .wav = NULL },
-	{ .name = "thousand", .text = "Thousand, ", .wav = NULL },
-	{ .name = "too_fast", .text = "Too fast! ", .wav = NULL },
-	{ .name = "too_high", .text = "Too high! ", .wav = NULL },
-	{ .name = "twy", .text = "Taxiway! ", .wav = NULL },
-	{ .name = "unstable", .text = "Unstable! ", .wav = NULL }
-};
-
 static xraas_state_t state;
 
 static char xpdir[512] = { 0 };
@@ -407,59 +311,6 @@ static double
 conv_per_min(double x)
 {
 	return (x * (60 / EXEC_INTVAL));
-}
-
-static void
-play_msg(msg_type_t *msg, size_t msg_len, msg_prio_t prio)
-{
-	ann_t *ann;
-
-	if (state.use_tts) {
-		char *buf;
-		size_t buflen = 0;
-		for (size_t i = 0; i < msg_len; i++)
-			buflen += strlen(voice_msgs[msg[i]].text);
-		buf = malloc(buflen + 1);
-		for (size_t i = 0; i < msg_len; i++)
-			strcat(buf, voice_msgs[msg[i]].text);
-		dbg_log("tts", 1, "TTS: \"%s\"", buf);
-		XPLMSpeakString(buf);
-		free(buf);
-		return;
-	}
-
-top:
-	ann = list_head(&state.playback_queue);
-	if (ann != NULL) {
-		if (ann->prio > prio) {
-			/* current message overrides us, be quiet */
-			dbg_log("snd", 1, "priority too low, suppressing.");
-			free(msg);
-			return;
-		}
-		if (ann->prio < prio) {
-			/* we override the queue head, remove it and retry */
-			dbg_log("snd", 1, "priority higher, stopping "
-			    "current annunciation.");
-			list_remove(&state.playback_queue, ann);
-			if (ann->cur_msg != -1)
-				wav_stop(
-				    voice_msgs[ann->msgs[ann->cur_msg]].wav);
-			free(ann->msgs);
-			free(ann);
-			goto top;
-		}
-	}
-	/*
-	 * At this point the queue only contains messages of equal priotity
-	 * to our own, queue up at the end.
-	 */
-	ann = calloc(1, sizeof (*ann));
-	ann->msgs = msg;
-	ann->num_msgs = msg_len;
-	ann->prio = prio;
-	ann->cur_msg = -1;
-	list_insert_tail(&state.playback_queue, ann);
 }
 
 static void
@@ -2254,96 +2105,6 @@ log_init_msg(bool_t display, int timeout, int man_sect_number,
 	}
 }
 
-static float
-snd_sched_cb(float elapsed_since_last_call, float elapsed_since_last_floop,
-    int counter, void *refcon)
-{
-	int64_t now;
-	ann_t *ann;
-
-	UNUSED(elapsed_since_last_call);
-	UNUSED(elapsed_since_last_floop);
-	UNUSED(counter);
-	UNUSED(refcon);
-
-	ann = list_head(&state.playback_queue);
-	if (ann == NULL)
-		return (-1.0);
-	now = microclock();
-
-	ASSERT(ann->cur_msg < ann->num_msgs);
-	if (ann->cur_msg == -1 || now - ann->started >
-	    SEC2USEC(voice_msgs[ann->msgs[ann->cur_msg]].wav->duration)) {
-		if (ann->cur_msg >= 0)
-			wav_stop(voice_msgs[ann->msgs[ann->cur_msg]].wav);
-		ann->cur_msg++;
-		if (ann->cur_msg < ann->num_msgs) {
-			ann->started = now;
-			wav_play(voice_msgs[ann->msgs[ann->cur_msg]].wav,
-			    state.voice_volume);
-		} else {
-			list_remove(&state.playback_queue, ann);
-			free(ann->msgs);
-			free(ann);
-		}
-	}
-
-	return (-1.0);
-}
-
-static bool_t
-snd_sys_init(void)
-{
-	char *gender_dir = (state.voice_female ? "female" : "male");
-
-	if (state.use_tts)
-		return (B_TRUE);
-
-	for (msg_type_t msg = 0; msg < NUM_MSGS; msg++) {
-		char fname[32];
-		char *pathname;
-
-		ASSERT(voice_msgs[msg].wav == NULL);
-		snprintf(fname, sizeof (fname), "%s.wav", voice_msgs[msg].name);
-		pathname = mkpathname(plugindir, "msgs", gender_dir, fname,
-		    NULL);
-		voice_msgs[msg].wav = wav_load(pathname, voice_msgs[msg].name);
-		free(pathname);
-		if (voice_msgs[msg].wav == NULL)
-			return (B_FALSE);
-	}
-
-	list_create(&state.playback_queue, sizeof (ann_t), offsetof(ann_t, node));
-	XPLMRegisterFlightLoopCallback(snd_sched_cb, -1.0, NULL);
-
-	return (B_TRUE);
-}
-
-static void
-snd_sys_fini(void)
-{
-	if (state.use_tts)
-		return;
-
-	for (ann_t *ann = list_head(&state.playback_queue); ann != NULL;
-	    ann = list_head(&state.playback_queue)) {
-		list_remove(&state.playback_queue, ann);
-		free(ann->msgs);
-		free(ann);
-	}
-
-	XPLMUnregisterFlightLoopCallback(snd_sched_cb, NULL);
-	list_destroy(&state.playback_queue);
-
-	for (msg_type_t msg = 0; msg < NUM_MSGS; msg++) {
-		wav_free(voice_msgs[msg].wav);
-		voice_msgs[msg].wav = NULL;
-	}
-
-	/* no more OpenAL/WAV calls after this */
-	audio_fini();
-}
-
 /*
  * Check if the aircraft is a helicopter (or at least says it flies like one).
  */
@@ -2393,7 +2154,7 @@ xraas_init(void)
 	dbg_log("startup", 1, "xraas_init");
 
 	raas_dr_reset();
-	snd_sys_init();
+	snd_sys_init(plugindir, &state);
 
 #define	AIRPORT_TABLE_SZ	512
 #define	RUNWAY_TABLE_SZ		128

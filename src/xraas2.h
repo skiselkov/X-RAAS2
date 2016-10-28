@@ -42,8 +42,6 @@ typedef enum nd_alert_level {
 } nd_alert_level_t;
 
 typedef struct xraas_state {
-	list_t		playback_queue;
-
 	bool_t		init_called;
 	bool_t		enabled;
 	int		min_engines;		/* count */
