@@ -1449,11 +1449,29 @@ static bool_t
 create_directory(const char *dirname)
 {
 	ASSERT(dirname != NULL);
+#if	IBM
+	DWORD err;
+	int len = strlen(dirname);
+	TCHAR dirnameW[len + 1];
+	MultiByteToWideChar(CP_UTF8, 0, dirname, -1, dirnameW, len + 1);
+	if (!CreateDirectoryW(dirnameW, NULL) &&
+	    (err = GetLastError()) != ERROR_ALREADY_EXISTS) {
+		LPSTR msgbuf = NULL;
+		(void) FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER |
+		    FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+		    NULL, err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+		    (LPSTR)&msgbuf, 0, NULL);
+		logMsg("Error creating directory %s: %s", dirname, msgbuf);
+		LocalFree(msgbuf);
+		return (B_FALSE);
+	}
+#else	/* !IBM */
 	if (mkdir(dirname, 0777) != 0 && errno != EEXIST) {
 		logMsg("Error creating directory %s: %s", dirname,
 		    strerror(errno));
 		return (B_FALSE);
 	}
+#endif	/* !IBM */
 	return (B_TRUE);
 }
 
@@ -3015,6 +3033,7 @@ get_land_spd(bool_t *vref)
 	double val;
 
 	ASSERT(vref != NULL);
+	*vref = B_FALSE;
 
 	/* FlightFactor 777 */
 	if (chk_acf_dr(FF777, "T7Avionics/fms/vref")) {
@@ -4361,7 +4380,7 @@ XPluginReceiveMessage(XPLMPluginID src, int msg, void *param)
 	switch(msg) {
 	case XPLM_MSG_PLANE_LOADED:
 		/* only respond to user aircraft reloads */
-		if ((long int)param != 0)
+		if (param != 0)
 			break;
 		xraas_fini();
 		xraas_init();

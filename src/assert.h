@@ -37,10 +37,8 @@ extern "C" {
 
 #ifdef	DEBUG
 #define	ASSERT(x)		VERIFY(x)
-#define	UNUSED_NODEBUG(x)
 #else	/* !DEBUG */
-#define	ASSERT(x)
-#define	UNUSED_NODEBUG(x)	UNUSED(x)
+#define	ASSERT(x)		UNUSED(x)
 #endif	/* !DEBUG */
 
 #define	VERIFY(x) \

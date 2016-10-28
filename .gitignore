@@ -6,3 +6,10 @@ src/CMakeFiles
 src/Makefile
 src/cmake_install.cmake
 bin
+qmake/Makefile.Debug
+qmake/Makefile.Release
+qmake/object_script.win.xpl.Debug
+qmake/object_script.win.xpl.Release
+qmake/release
+qmake/win.xpl_resource.rc
+qmake/output

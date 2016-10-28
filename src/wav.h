@@ -27,7 +27,7 @@
 #define	_XRAAS_WAV_H_
 
 #include <stdint.h>
-#include <OpenAL/al.h>
+#include <al.h>
 
 #ifdef	__cplusplus
 extern "C" {

@@ -28,7 +28,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <OpenAL/alc.h>
+#include <alc.h>
 
 #include "assert.h"
 #include "list.h"

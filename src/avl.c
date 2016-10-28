@@ -87,6 +87,7 @@
  *	  than the value of the indicated "avl_node_t *".
  */
 
+#include <string.h>
 #include <stdlib.h>
 #include "assert.h"
 #include "avl.h"
@@ -625,11 +626,12 @@ avl_add(avl_tree_t *tree, void *new_node)
 	 * in libc or else the rtld build process gets confused.  So, all we can
 	 * do in userland is resort to a normal ASSERT().
 	 */
+	memset(&where, 0, sizeof (where));
 	if (avl_find(tree, new_node, &where) != NULL)
 #ifdef _KERNEL
 		panic("avl_find() succeeded inside avl_add()");
 #else
-		ASSERT(0);
+		abort();
 #endif
 	avl_insert(tree, new_node, where);
 }
