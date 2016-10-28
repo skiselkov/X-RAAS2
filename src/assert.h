@@ -27,6 +27,7 @@
 #define	_XRAAS_ASSERT_H_
 
 #include <assert.h>
+#include <stdlib.h>
 
 #include "helpers.h"
 #include "log.h"

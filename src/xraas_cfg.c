@@ -20,6 +20,7 @@
 
 #include "helpers.h"
 #include "log.h"
+#include "nd_alert.h"
 #include "wav.h"
 
 #include "xraas_cfg.h"

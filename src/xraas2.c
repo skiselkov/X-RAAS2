@@ -39,6 +39,7 @@
 #include "list.h"
 #include "log.h"
 #include "math.h"
+#include "nd_alert.h"
 #include "perf.h"
 #include "rwy_key_tbl.h"
 #include "snd_sys.h"
@@ -144,44 +145,6 @@ static accel_stop_dist_t accel_stop_distances[] = {
     { .max = NAN, .min = NAN, .ann = -1 }         /* list terminator */
 };
 
-/*
- * This is what we set our ND alert dataref to when we want to communicate
- * to the aircraft's FMS that it should display a message on the ND. Value
- * '0' is reserved for 'nothing'.
- *
- * Since the dataref is an int and we need to annunciate various messages,
- * we split this int into several bitfields:
- * bits 0 - 7  (8 bits):	message ID
- * bits 8 - 13 (6 bits):	numeric runway ID:
- *				'00' means 'taxiway'
- *				'01' through '36' means a runway ID
- *				'37' means 'RWYS' (i.e. multiple runways)
- * bits 14 - 15 (2 bits):	'0' means 'no suffix'
- *				'1' means 'RIGHT'
- *				'2' means 'LEFT'
- *				'3' means 'CENTER'
- * bits 16 - 23 (8 bits):	Runway length available to the nearest 100
- *				feet or meters. '0' means 'do not display'.
- * Bits 8 through 23 are only used by the ND_ALERT_APP and ND_ALERT_ON messages
- */
-typedef enum nd_alert_msg_type {
-    ND_ALERT_FLAPS = 1,		/* 'FLAPS' message on ND */
-    ND_ALERT_TOO_HIGH = 2,	/* 'TOO HIGH' message on ND */
-    ND_ALERT_TOO_FAST = 3,	/* 'TOO FAST' message on ND */
-    ND_ALERT_UNSTABLE = 4,	/* 'UNSTABLE' message on ND */
-    ND_ALERT_TWY = 5,		/* 'TAXIWAY' message on ND */
-    ND_ALERT_SHORT_RWY = 6,	/* 'SHORT RUNWAY' message on ND */
-    ND_ALERT_ALTM_SETTING = 7,	/* 'ALTM SETTING' message on ND */
-    /* These two messages encode what we're apch/on in bits 8 through 15 */
-    ND_ALERT_APP = 8,		/* 'APP XX' or 'APP XX ZZ' messages. */
-				/* 'XX' means runway ID (bits 8 - 15). */
-				/* 'ZZ' means runway length (bits 16 - 23). */
-    ND_ALERT_ON = 9,		/* 'ON XX' or 'ON XX ZZ' messages. */
-				/* 'XX' means runway ID (bits 8 - 15). */
-				/* 'ZZ' means runway length (bits 16 - 23). */
-    ND_ALERT_LONG_LAND = 10
-} nd_alert_msg_type_t;
-
 static bool_t init_called = B_FALSE;
 static xraas_state_t state;
 
@@ -222,7 +185,6 @@ static struct {
 	XPLMDataRef ICAO;
 	XPLMDataRef gpws_prio;
 	XPLMDataRef gpws_inop;
-	XPLMDataRef ND_alert;
 	XPLMDataRef replay_mode;
 	XPLMDataRef plug_bus_load;
 } drs;
@@ -288,9 +250,6 @@ raas_dr_reset(void)
 	drs.gpws_prio = dr_get(state.GPWS_priority_dataref);
 	drs.gpws_inop = dr_get(state.GPWS_inop_dataref);
 
-//	drs.ND_alert = dr_get(
-//	    "sim/multiplayer/position/plane19_taxi_light_on")
-
 	drs.replay_mode = dr_get("sim/operation/prefs/replay_mode");
 	/*
 	 * Unfortunately at this moment electrical loading is broken,
@@ -312,16 +271,6 @@ static double
 conv_per_min(double x)
 {
 	return (x * (60 / EXEC_INTVAL));
-}
-
-static void
-ND_alert(nd_alert_msg_type_t msg_type, nd_alert_level_t level,
-    const char *rwy_id, double distance_rmng)
-{
-	UNUSED(msg_type);
-	UNUSED(level);
-	UNUSED(rwy_id);
-	UNUSED(distance_rmng);
 }
 
 /*
@@ -694,8 +643,8 @@ do_approaching_rwy(const airport_t *arpt, const runway_t *rwy,
 				raas.cur_msg["msg"] = {"apch", "rwys"}
 				raas.cur_msg["prio"] = raas.const.MSG_PRIO_MED
 				annunciated_rwys = true
-				raas.ND_alert(ND_ALERT_APP, ND_ALERT_ROUTINE,
-				    "37")
+				ND_alert(ND_ALERT_APP, ND_ALERT_ROUTINE, "37",
+				    -1)
 			end
 			if (on_ground)
 				rwy_key_tbl_set(&state.apch_rwy_ann,
@@ -838,7 +787,7 @@ perform_on_rwy_ann(const char *rwy_id, vect2_t pos_v, vect2_t opp_thr_v,
 			append_msglist(&msg, &msg_len, FLAPS_MSG);
 			append_msglist(&msg, &msg_len, FLAPS_MSG);
 			allow_on_rwy_ND_alert = B_FALSE;
-			ND_alert(ND_ALERT_FLAPS, ND_ALERT_CAUTION, NULL, NAN);
+			ND_alert(ND_ALERT_FLAPS, ND_ALERT_CAUTION, NULL, -1);
 		}
 	}
 
@@ -920,7 +869,7 @@ takeoff_rwy_dist_check(vect2_t opp_thr_v, vect2_t pos_v)
 		append_msglist(&msg, &msg_len, SHORT_RWY_MSG);
 		append_msglist(&msg, &msg_len, SHORT_RWY_MSG);
 		play_msg(msg, msg_len, MSG_PRIO_HIGH);
-		ND_alert(ND_ALERT_SHORT_RWY, ND_ALERT_CAUTION, NULL, NAN);
+		ND_alert(ND_ALERT_SHORT_RWY, ND_ALERT_CAUTION, NULL, -1);
 	}
 	state.short_rwy_takeoff_chk = B_TRUE;
 }
@@ -1060,7 +1009,7 @@ stop_check(const runway_t *rwy, int end, double hdg, vect2_t pos_v)
 					    "state.long_landing_ann = true");
 					state.long_landing_ann = B_TRUE;
 					ND_alert(ND_ALERT_LONG_LAND,
-					    ND_ALERT_CAUTION, NULL, NAN);
+					    ND_ALERT_CAUTION, NULL, -1);
 				}
 				perform_rwy_dist_remaining_callouts(opp_thr_v,
 				    pos_v, B_TRUE);
@@ -1202,7 +1151,7 @@ ground_on_runway_aligned(void)
 			append_msglist(&msg, &msg_len, ON_TWY_MSG);
 			append_msglist(&msg, &msg_len, ON_TWY_MSG);
 			play_msg(msg, msg_len, MSG_PRIO_HIGH);
-			ND_alert(ND_ALERT_ON, ND_ALERT_CAUTION, NULL, NAN);
+			ND_alert(ND_ALERT_ON, ND_ALERT_CAUTION, NULL, -1);
 		}
 	} else if (XPLMGetDataf(drs.gs) < SPEED_THRESH ||
 	    XPLMGetDataf(drs.rad_alt) >= RADALT_GRD_THRESH) {
@@ -1430,14 +1379,14 @@ apch_config_chk(const char *arpt_id, const char *rwy_id, double height_abv_thr,
 						    PAUSE_MSG);
 					append_msglist(msg, msg_len, FLAPS_MSG);
 					ND_alert(ND_ALERT_FLAPS,
-					    ND_ALERT_CAUTION, NULL, NAN);
+					    ND_ALERT_CAUTION, NULL, -1);
 				} else {
 					append_msglist(msg, msg_len,
 					    UNSTABLE_MSG);
 					append_msglist(msg, msg_len,
 					    UNSTABLE_MSG);
 					ND_alert(ND_ALERT_UNSTABLE,
-					    ND_ALERT_CAUTION, NULL, NAN);
+					    ND_ALERT_CAUTION, NULL, -1);
 				}
 			}
 			rwy_key_tbl_set(flap_ann_table, arpt_id, rwy_id,
@@ -1462,14 +1411,14 @@ apch_config_chk(const char *arpt_id, const char *rwy_id, double height_abv_thr,
 					append_msglist(msg, msg_len,
 					    TOO_HIGH_MSG);
 					ND_alert(ND_ALERT_TOO_HIGH,
-					    ND_ALERT_CAUTION, NULL, NAN);
+					    ND_ALERT_CAUTION, NULL, -1);
 				} else {
 					append_msglist(msg, msg_len,
 					    UNSTABLE_MSG);
 					append_msglist(msg, msg_len,
 					    UNSTABLE_MSG);
 					ND_alert(ND_ALERT_UNSTABLE,
-					    ND_ALERT_CAUTION, NULL, NAN);
+					    ND_ALERT_CAUTION, NULL, -1);
 				}
 			}
 			rwy_key_tbl_set(gpa_ann_table, arpt_id, rwy_id, B_TRUE);
@@ -1497,14 +1446,14 @@ apch_config_chk(const char *arpt_id, const char *rwy_id, double height_abv_thr,
 					append_msglist(msg, msg_len,
 					    TOO_FAST_MSG);
 					ND_alert(ND_ALERT_TOO_FAST,
-					    ND_ALERT_CAUTION, NULL, NAN);
+					    ND_ALERT_CAUTION, NULL, -1);
 				} else {
 					append_msglist(msg, msg_len,
 					    UNSTABLE_MSG);
 					append_msglist(msg, msg_len,
 					    UNSTABLE_MSG);
 					ND_alert(ND_ALERT_UNSTABLE,
-					    ND_ALERT_CAUTION, NULL, NAN);
+					    ND_ALERT_CAUTION, NULL, -1);
 				}
 			}
 			rwy_key_tbl_set(spd_ann_table, arpt_id, rwy_id, B_TRUE);
@@ -1591,7 +1540,7 @@ air_runway_approach_arpt_rwy(const airport_t *arpt, const runway_t *rwy,
 			msg_prio = MSG_PRIO_HIGH;
 			state.air_apch_short_rwy_ann = B_TRUE;
 			ND_alert(ND_ALERT_SHORT_RWY, ND_ALERT_CAUTION,
-			    NULL, NAN);
+			    NULL, -1);
 		}
 
 		if (msg_len > 0)
@@ -1697,7 +1646,7 @@ air_runway_approach(void)
 				append_msglist(&msg, &msg_len, TWY_MSG);
 				play_msg(msg, msg_len, MSG_PRIO_HIGH);
 				ND_alert(ND_ALERT_TWY, ND_ALERT_CAUTION,
-				    NULL, NAN);
+				    NULL, -1);
 			}
 			state.off_rwy_ann = B_TRUE;
 		} else {
@@ -1879,7 +1828,7 @@ altimeter_setting(void)
 				append_msglist(&msg, &msg_len, ALT_SET_MSG);
 				play_msg(msg, msg_len, MSG_PRIO_LOW);
 				ND_alert(ND_ALERT_ALTM_SETTING,
-				    ND_ALERT_CAUTION, NULL, NAN);
+				    ND_ALERT_CAUTION, NULL, -1);
 			}
 			state.TATL_transition = -1;
 		} else if (state.TATL_state == TATL_STATE_FL &&
@@ -1893,7 +1842,7 @@ altimeter_setting(void)
 				append_msglist(&msg, &msg_len, ALT_SET_MSG);
 				play_msg(msg, msg_len, MSG_PRIO_LOW);
 				ND_alert(ND_ALERT_ALTM_SETTING,
-				    ND_ALERT_CAUTION, NULL, NAN);
+				    ND_ALERT_CAUTION, NULL, -1);
 			}
 			state.TATL_transition = -1;
 		}

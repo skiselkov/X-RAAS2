@@ -34,13 +34,6 @@ typedef enum TATL_state_e {
 	TATL_STATE_FL
 } TATL_state_t;
 
-/* ND alert severity */
-typedef enum nd_alert_level {
-	ND_ALERT_ROUTINE = 0,
-	ND_ALERT_NONROUTINE = 1,
-	ND_ALERT_CAUTION = 2
-} nd_alert_level_t;
-
 typedef struct xraas_state {
 	bool_t		enabled;
 	int		min_engines;		/* count */
