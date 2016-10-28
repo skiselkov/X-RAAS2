@@ -1890,6 +1890,7 @@ reset_airport_approach_table(avl_tree_t *tbl, const airport_t *arpt)
 	    rwy = AVL_NEXT(&arpt->rwys, rwy)) {
 		rwy_key_tbl_remove(tbl, arpt->icao, rwy->ends[0].id);
 		rwy_key_tbl_remove(tbl, arpt->icao, rwy->ends[1].id);
+		rwy_key_tbl_remove(tbl, arpt->icao, rwy->joint_id);
 	}
 }
 
