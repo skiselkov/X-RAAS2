@@ -165,10 +165,13 @@ bool_t is_valid_rwy_ID(const char *rwy_ID);
 /* CSV file & string processing helpers */
 ssize_t parser_get_next_line(FILE *fp, char **linep, size_t *linecap,
     size_t *linenum);
-ssize_t explode_line(char *line, char delim, char **comps, size_t capacity);
+char **strsplit(const char *input, char *sep, bool_t skip_empty, size_t *num);
+void free_strlist(char **comps, size_t len);
 void strip_space(char *line);
 void append_format(char **str, size_t *sz, const char *format, ...)
     PRINTF_ATTR(3);
+
+char *mkpathname(const char *comp, ...);
 
 void my_strlcpy(char *restrict dest, const char *restrict src, size_t cap);
 #if     IBM
@@ -192,8 +195,13 @@ size_t getline(char **lineptr, size_t *n, FILE *stream);
 #define	AVG(x, y)	(((x) + (y)) / 2)
 #endif	/* MIN or MAX */
 
+long long microclock(void);
 #define	USEC2SEC(usec)	(usec / 1000000ll)
 #define	SEC2USEC(sec)	(sec * 1000000ll)
+
+/* directory manipulation */
+bool_t create_directory(const char *dirname);
+void remove_directory(const char *dirname);
 
 #ifdef	__cplusplus
 }

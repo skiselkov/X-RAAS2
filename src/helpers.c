@@ -23,16 +23,19 @@
  * Copyright 2015 Saso Kiselkov. All rights reserved.
  */
 
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <math.h>
 #include <ctype.h>
 
-/* OS X: we use this to convert our file path. */
-#if	APL
-#include <Carbon/Carbon.h>
-#endif	/* !APL */
+#if	IBM
+#include <windows.h>
+#else	/* !IBM */
+#include <sys/time.h>
+#include <sys/stat.h>
+#endif	/* !IBM */
 
 #include "assert.h"
 #include "helpers.h"
@@ -173,44 +176,63 @@ parser_get_next_line(FILE *fp, char **linep, size_t *linecap, size_t *linenum)
 	}
 }
 
-/*
- * Breaks up a line into components delimited by a character.
- *
- * @param line The input line to break up. The buffer will be modified
- *	to insert NULs in between the components so that they can each
- *	be treated as a separate string.
- * @param delim The delimiter character (e.g. ',').
- * @param comps A list of pointers that will be set to point to the
- *	start of each substring.
- * @param capacity The component capacity of `comps'. If more input
- *	components are encountered than is space in `comps', the array
- *	is not overflown.
- *
- * @return The number of components in the input string (at least 1).
- *	If the `comps' array was too small, returns the number of
- *	components that would have been needed to process the input
- *	string fully as a negative value.
- */
-ssize_t
-explode_line(char *line, char delim, char **comps, size_t capacity)
+char **
+strsplit(const char *input, char *sep, bool_t skip_empty, size_t *num)
 {
-	ssize_t	i = 1;
-	bool_t	toomany = B_FALSE;
+	char **result;
+	size_t i = 0, n = 0;
+	size_t seplen = strlen(sep);
 
-	ASSERT(capacity != 0);
-	comps[0] = line;
-	for (char *p = line; *p != 0; p++) {
-		if (*p == delim) {
-			*p = 0;
-			if (i < (ssize_t)capacity)
-				comps[i] = p + 1;
-			else
-				toomany = B_TRUE;
-			i++;
+	for (const char *a = input, *b = strstr(a, sep);
+	    a != NULL; a = b + seplen, b = strstr(a, sep)) {
+		if (b == NULL) {
+			b = input + strlen(input);
+			if (a != b || !skip_empty)
+				n++;
+			break;
 		}
+		if (a == b && skip_empty)
+			continue;
+		n++;
 	}
 
-	return (toomany ? -i : i);
+	result = calloc(n, sizeof (char *));
+
+	for (const char *a = input, *b = strstr(a, sep);
+	    a != NULL; a = b + seplen, b = strstr(a, sep)) {
+		if (b == NULL) {
+			b = input + strlen(input);
+			if (a != b || !skip_empty) {
+				result[i] = calloc(b - a + 1, sizeof (char));
+				memcpy(result[i], a, b - a);
+			}
+			break;
+		}
+		if (a == b && skip_empty)
+			continue;
+		ASSERT(i < n);
+		result[i] = calloc(b - a + 1, sizeof (char));
+		memcpy(result[i], a, b - a);
+		i++;
+	}
+
+	if (num != NULL)
+		*num = n;
+
+	return (result);
+}
+
+/*
+ * Frees a string array returned by strsplit.
+ */
+void
+free_strlist(char **comps, size_t len)
+{
+	if (comps == NULL)
+		return;
+	for (size_t i = 0; i < len; i++)
+		free(comps[i]);
+	free(comps);
 }
 
 /*
@@ -315,3 +337,86 @@ getline(char **lineptr, size_t *n, FILE *stream)
 }
 
 #endif  /* IBM */
+
+char *
+mkpathname(const char *comp, ...)
+{
+	size_t n = 0, len = 0;
+	char *str;
+	va_list ap;
+
+	if (comp == NULL)
+		return (strdup(""));
+
+	va_start(ap, comp);
+	len = strlen(comp);
+	for (const char *c = va_arg(ap, const char *); c != NULL;
+	    c = va_arg(ap, const char *)) {
+		len += 1 + strlen(c);
+	}
+	va_end(ap);
+
+	str = malloc(len + 1);
+	va_start(ap, comp);
+	n += sprintf(str, "%s", comp);
+	for (const char *c = va_arg(ap, const char *); c != NULL;
+	    c = va_arg(ap, const char *)) {
+		ASSERT(n < len);
+		n += sprintf(&str[n], "%c%s", DIRSEP, c);
+	}
+	va_end(ap);
+
+	return (str);
+}
+
+long long
+microclock(void)
+{
+#if	IBM
+	LARGE_INTEGER val, freq;
+	QueryPerformanceFrequency(&freq);
+	QueryPerformanceCounter(&val);
+	return ((val.QuadPart * 1000000ll) / freq.QuadPart);
+#else	/* !IBM */
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+	return ((tv.tv_sec * 1000000ll) + tv.tv_usec);
+#endif	/* !IBM */
+}
+
+bool_t
+create_directory(const char *dirname)
+{
+	ASSERT(dirname != NULL);
+#if	IBM
+	DWORD err;
+	int len = strlen(dirname);
+	TCHAR dirnameW[len + 1];
+	MultiByteToWideChar(CP_UTF8, 0, dirname, -1, dirnameW, len + 1);
+	if (!CreateDirectoryW(dirnameW, NULL) &&
+	    (err = GetLastError()) != ERROR_ALREADY_EXISTS) {
+		LPSTR msgbuf = NULL;
+		(void) FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER |
+		    FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+		    NULL, err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+		    (LPSTR)&msgbuf, 0, NULL);
+		logMsg("Error creating directory %s: %s", dirname, msgbuf);
+		LocalFree(msgbuf);
+		return (B_FALSE);
+	}
+#else	/* !IBM */
+	if (mkdir(dirname, 0777) != 0 && errno != EEXIST) {
+		logMsg("Error creating directory %s: %s", dirname,
+		    strerror(errno));
+		return (B_FALSE);
+	}
+#endif	/* !IBM */
+	return (B_TRUE);
+}
+
+void
+remove_directory(const char *dirname)
+{
+	/* TODO: implement recursive directory removal */
+	UNUSED(dirname);
+}
