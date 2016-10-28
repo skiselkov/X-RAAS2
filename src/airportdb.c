@@ -30,12 +30,12 @@
 #include "log.h"
 #include "math.h"
 #include "types.h"
+#include "xraas2.h"
 
 #include "airportdb.h"
 
 #define	RWY_PROXIMITY_LAT_FRACT		3
 #define	RWY_PROXIMITY_LON_DISPL		609.57		/* meters, 2000 ft */
-#define	INIT_ERR_MSG_TIMEOUT		25		/* seconds */
 
 #define	RWY_APCH_PROXIMITY_LAT_ANGLE	3.3	/* degrees */
 #define	RWY_APCH_PROXIMITY_LON_DISPL	5500	/* meters */
@@ -47,9 +47,6 @@
 #define	ARPT_LOAD_LIMIT			(8 * 1852)	/* meters, 8nm */
 
 #define	TILE_NAME_FMT			"%+03.0f%+04.0f"
-
-void log_init_msg(bool_t display, int timeout, int man_sect_number,
-    const char *man_sect_name, const char *fmt, ...) PRINTF_ATTR(5);
 
 static airport_t *apt_dat_lookup(avl_tree_t *apt_dat, const char *icao);
 static void apt_dat_insert(avl_tree_t *apt_dat, airport_t *arpt);

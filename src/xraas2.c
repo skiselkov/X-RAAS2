@@ -43,6 +43,8 @@
 #include "rwy_key_tbl.h"
 #include "types.h"
 #include "wav.h"
+#include "xraas2.h"
+#include "xraas_cfg.h"
 
 #define	XRAAS2_VERSION			"2.0"
 #define	XRAAS2_PLUGIN_NAME		"X-RAAS " XRAAS2_VERSION
@@ -65,7 +67,6 @@
 #define	RADALT_DEPART_THRESH		100		/* feet */
 #define	STARTUP_DELAY			3		/* seconds */
 #define	STARTUP_MSG_TIMEOUT		4		/* seconds */
-#define	INIT_ERR_MSG_TIMEOUT		25		/* seconds */
 #define	ARPT_RELOAD_INTVAL		10		/* seconds */
 #define	ARPT_LOAD_LIMIT			(8 * 1852)	/* meters, 8nm */
 #define	ACCEL_STOP_SPD_THRESH		2.6		/* m/s, 5 knots */
@@ -180,13 +181,6 @@ typedef enum nd_alert_msg_type {
     ND_ALERT_LONG_LAND = 10
 } nd_alert_msg_type_t;
 
-/* ND alert severity */
-typedef enum nd_alert_level {
-    ND_ALERT_ROUTINE = 0,
-    ND_ALERT_NONROUTINE = 1,
-    ND_ALERT_CAUTION = 2
-} nd_alert_level_t;
-
 typedef enum msg_prio {
     MSG_PRIO_LOW = 1,
     MSG_PRIO_MED = 2,
@@ -284,124 +278,6 @@ static msg_t voice_msgs[NUM_MSGS] = {
 	{ .name = "unstable", .text = "Unstable! ", .wav = NULL }
 };
 
-typedef enum TATL_state_e {
-	TATL_STATE_ALT,
-	TATL_STATE_FL
-} TATL_state_t;
-
-#define TATL_FIELD_ELEV_UNSET -1000000
-
-typedef struct xraas_state {
-	list_t		playback_queue;
-
-	bool_t		init_called;
-	bool_t		enabled;
-	int		min_engines;		/* count */
-	int		min_mtow;		/* kg */
-	bool_t		allow_helos;
-	bool_t		auto_disable_notify;
-	bool_t		startup_notify;
-	bool_t		override_electrical;
-	bool_t		override_replay;
-	bool_t		use_tts;
-	bool_t		speak_units;
-
-	bool_t		use_imperial;
-	int		min_takeoff_dist;		/* meters */
-	int		min_landing_dist;		/* meters */
-	int		min_rotation_dist;		/* meters */
-	double		min_rotation_angle;		/* degrees */
-	int		stop_dist_cutoff;		/* meters */
-	bool_t		voice_female;
-	double		voice_volume;
-	bool_t		disable_ext_view;
-	double		min_landing_flap;		/* ratio, 0-1 */
-	double		min_takeoff_flap;		/* ratio, 0-1 */
-	double		max_takeoff_flap;		/* ratio, 0-1 */
-
-	bool_t		nd_alerts_enabled;
-	int		nd_alert_filter;		/* nd_alert_level_t */
-	bool_t		nd_alert_overlay_enabled;
-	bool_t		nd_alert_overlay_force;
-	int		nd_alert_timeout;		/* seconds */
-
-	int64_t		on_rwy_warn_initial;		/* seconds */
-	int64_t		on_rwy_warn_repeat;		/* seconds */
-	int		on_rwy_warn_max_n;		/* count */
-
-	bool_t		too_high_enabled;
-	bool_t		too_fast_enabled;
-	double		gpa_limit_mult;			/* multiplier */
-	double		gpa_limit_max;			/* degrees */
-
-	const char	*GPWS_priority_dataref;
-	const char	*GPWS_inop_dataref;
-
-	bool_t		alt_setting_enabled;
-	bool_t		qnh_alt_enabled;
-	bool_t		qfe_alt_enabled;
-
-	bool_t		us_runway_numbers;
-
-	int		long_land_lim_abs;		/* meters */
-	double		long_land_lim_fract;		/* fraction, 0-1 */
-
-	bool_t		debug_graphical;
-	int		debug_graphical_bg;
-	bool_t		debug;
-
-	avl_tree_t	on_rwy_ann;
-	avl_tree_t	apch_rwy_ann;
-	bool_t		apch_rwys_ann;		/* when multiple met criteria */
-	avl_tree_t	air_apch_rwy_ann;
-	bool_t		air_apch_rwys_ann;	/* when multiple met criteria */
-	bool_t		air_apch_short_rwy_ann;
-	avl_tree_t	air_apch_flap1_ann;
-	avl_tree_t	air_apch_flap2_ann;
-	avl_tree_t	air_apch_flap3_ann;
-	avl_tree_t	air_apch_gpa1_ann;
-	avl_tree_t	air_apch_gpa2_ann;
-	avl_tree_t	air_apch_gpa3_ann;
-	avl_tree_t	air_apch_spd1_ann;
-	avl_tree_t	air_apch_spd2_ann;
-	avl_tree_t	air_apch_spd3_ann;
-	bool_t		on_twy_ann;
-	bool_t		long_landing_ann;
-	bool_t		short_rwy_takeoff_chk;
-	int64_t		on_rwy_timer;
-	int		on_rwy_warnings;
-	bool_t		off_rwy_ann;
-	char		rejected_takeoff[8];
-
-	avl_tree_t	accel_stop_max_spd;
-	int		accel_stop_ann_initial;
-
-	bool_t		departed;
-	bool_t		arriving;
-	bool_t		landing;
-	int		TA;
-	int		TL;
-	int		TATL_field_elev;
-	TATL_state_t	TATL_state;
-	int64_t		TATL_transition;
-	char		TATL_source[8];
-
-	bool_t		view_is_ext;
-	int		bus_loaded;
-	int		last_elev;
-	double		last_gs;			/* in m/s */
-	uint64_t	last_units_call;
-
-	list_t		*cur_arpts;
-	airportdb_t	airportdb;
-	int64_t		start_time;
-	int64_t		last_exec_time;
-	int64_t		last_airport_reload;
-
-	char		*init_msg;
-	int64_t		init_msg_end;
-} xraas_state_t;
-
 static xraas_state_t state;
 
 static char xpdir[512] = { 0 };
@@ -445,10 +321,6 @@ static struct {
 	XPLMDataRef replay_mode;
 	XPLMDataRef plug_bus_load;
 } drs;
-
-static void state_reset(void);
-void log_init_msg(bool_t display, int timeout, int man_sect_number,
-    const char *man_sect_name, const char *fmt, ...) PRINTF_ATTR(5);
 
 /*
  * Returns true if `x' is within the numerical ranges in `rngs'.
@@ -2504,198 +2376,15 @@ chk_acf_is_helo(void)
 }
 
 static void
-reset_config(void)
-{
-	state.enabled = B_TRUE;
-	state.allow_helos = B_FALSE;
-	state.min_engines = 2;
-	state.min_mtow = 5700;
-	state.auto_disable_notify = B_TRUE;
-	state.startup_notify = B_TRUE;
-	state.use_imperial = B_TRUE;
-	state.voice_female = B_TRUE;
-	state.voice_volume = 1.0;
-	state.use_tts = B_FALSE;
-	state.us_runway_numbers = B_FALSE;
-	state.min_takeoff_dist = 1000;
-	state.min_landing_dist = 800;
-	state.min_rotation_dist = 400;
-	state.min_rotation_angle = 3;
-	state.stop_dist_cutoff = 1600;
-	state.min_landing_flap = 0.5;
-	state.min_takeoff_flap = 0.1;
-	state.max_takeoff_flap = 0.75;
-	state.on_rwy_warn_initial = 60;
-	state.on_rwy_warn_repeat = 120;
-	state.on_rwy_warn_max_n = 3;
-	state.too_high_enabled = B_TRUE;
-	state.too_fast_enabled = B_TRUE;
-	state.gpa_limit_mult = 2;
-	state.gpa_limit_max = 8;
-	state.alt_setting_enabled = B_TRUE;
-	state.qnh_alt_enabled = B_TRUE;
-	state.qfe_alt_enabled = B_FALSE;
-	state.disable_ext_view = B_TRUE;
-	state.override_electrical = B_FALSE;
-	state.override_replay = B_FALSE;
-	state.speak_units = B_TRUE;
-	state.long_land_lim_abs = 610;	/* 2000 feet */
-	state.long_land_lim_fract = 0.25;
-	state.nd_alerts_enabled = B_TRUE;
-	state.nd_alert_filter = ND_ALERT_ROUTINE;
-	state.nd_alert_overlay_enabled = B_TRUE;
-	state.nd_alert_overlay_force = B_FALSE;
-	state.nd_alert_timeout = 7;
-
-	audio_set_shared_ctx(B_FALSE);
-
-	xraas_debug = 0;
-}
-
-static void
-process_conf(conf_t *conf)
-{
-	bool_t shared_ctx = B_FALSE;
-
-#define	GET_CONF(type, varname) \
-	do { \
-		/* first try the new name, then the old one */ \
-		if (!conf_get_ ## type(conf, #varname, &state.varname)) \
-			(void) conf_get_ ## type(conf, "raas_" #varname, \
-			    &state.varname); \
-	} while (0)
-	GET_CONF(b, enabled);
-	GET_CONF(b, allow_helos);
-	GET_CONF(i, min_engines);
-	GET_CONF(i, min_mtow);
-	GET_CONF(b, auto_disable_notify);
-	GET_CONF(b, startup_notify);
-	GET_CONF(b, use_imperial);
-	GET_CONF(b, voice_female);
-	GET_CONF(d, voice_volume);
-	GET_CONF(b, use_tts);
-	GET_CONF(b, us_runway_numbers);
-	GET_CONF(i, min_takeoff_dist);
-	GET_CONF(i, min_landing_dist);
-	GET_CONF(i, min_rotation_dist);
-	GET_CONF(d, min_rotation_angle);
-	GET_CONF(i, stop_dist_cutoff);
-	GET_CONF(d, min_landing_flap);
-	GET_CONF(d, min_takeoff_flap);
-	GET_CONF(d, max_takeoff_flap);
-	GET_CONF(ll, on_rwy_warn_initial);
-	GET_CONF(ll, on_rwy_warn_repeat);
-	GET_CONF(i, on_rwy_warn_max_n);
-	GET_CONF(b, too_high_enabled);
-	GET_CONF(b, too_fast_enabled);
-	GET_CONF(d, gpa_limit_mult);
-	GET_CONF(d, gpa_limit_max);
-	GET_CONF(b, alt_setting_enabled);
-	GET_CONF(b, qnh_alt_enabled);
-	GET_CONF(b, qfe_alt_enabled);
-	GET_CONF(b, disable_ext_view);
-	GET_CONF(b, override_electrical);
-	GET_CONF(b, override_replay);
-	GET_CONF(b, speak_units);
-	GET_CONF(i, long_land_lim_abs);
-	GET_CONF(d, long_land_lim_fract);
-	GET_CONF(b, nd_alerts_enabled);
-	GET_CONF(i, nd_alert_filter);
-	GET_CONF(b, nd_alert_overlay_enabled);
-	GET_CONF(b, nd_alert_overlay_force);
-	GET_CONF(i, nd_alert_timeout);
-#undef	GET_CONF
-
-	conf_get_i(conf, "debug", &xraas_debug);
-	conf_get_b(conf, "shared_audio_ctx", &shared_ctx);
-	audio_set_shared_ctx(shared_ctx);
-}
-
-/*
- * Loads a config file at path `cfgname' if it exists. If the file doesn't
- * exist, this function just returns true. If the config file contains errors,
- * this function shows an init message and returns false, otherwise it returns
- * true.
- */
-static bool_t
-load_config(bool_t global_cfg)
-{
-	char *cfgname;
-	FILE *cfg_f;
-
-	if (global_cfg)
-		cfgname = mkpathname(acf_path, "X-RAAS.cfg", NULL);
-	else
-		cfgname = mkpathname(plugindir, "X-RAAS.cfg", NULL);
-
-	cfg_f = fopen(cfgname, "r");
-	if (cfg_f != NULL) {
-		conf_t *conf;
-		int errline;
-
-		dbg_log("config", 1, "loading config file: %s", cfgname);
-		if ((conf = parse_conf(cfg_f, &errline)) == NULL) {
-			log_init_msg(B_TRUE, INIT_ERR_MSG_TIMEOUT,
-			    5, "Configuration", "X-RAAS startup error: syntax "
-			    "error on line %d in config file:\n%s\n"
-			    "Please correct this and then hit Plugins "
-			    "-> Admin, Disable & Enable X-RAAS.", errline,
-			    cfgname);
-			fclose(cfg_f);
-			return (B_FALSE);
-		}
-		process_conf(conf);
-		free_conf(conf);
-		fclose(cfg_f);
-	}
-	free(cfgname);
-	return (B_TRUE);
-}
-
-/*
- * Loads the global and aircraft-specific X-RAAS config files.
- */
-static bool_t
-load_configs(void)
-{
-	/* order is important here, first load the global one */
-	reset_config();
-	if (!load_config(B_TRUE))
-		return (B_FALSE);
-	if (!load_config(B_FALSE))
-		return (B_FALSE);
-	return (B_TRUE);
-}
-
-static void
-state_reset(void)
-{
-	memset(&state, 0, sizeof (state));
-
-	state.enabled = B_TRUE;
-
-	state.GPWS_priority_dataref = "sim/cockpit2/annunciators/GPWS";
-	state.GPWS_inop_dataref = "sim/cockpit/warnings/annunciators/GPWS";
-
-	state.on_rwy_timer = -1;
-
-	state.TATL_field_elev = TATL_FIELD_ELEV_UNSET;
-	state.TATL_transition = -1;
-	state.bus_loaded = -1;
-}
-
-static void
 xraas_init(void)
 {
-	state_reset();
-
 	state.init_called = B_TRUE;
 
 	/* these must go ahead of config parsing */
 	state.start_time = microclock();
 	XPLMGetNthAircraftModel(0, acf_filename, acf_path);
 
-	if (!load_configs())
+	if (!load_configs(&state, plugindir, acf_path))
 		return;
 
 	if (!state.enabled)

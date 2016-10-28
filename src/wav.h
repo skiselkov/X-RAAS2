@@ -29,6 +29,8 @@
 #include <stdint.h>
 #include <al.h>
 
+#include "types.h"
+
 #ifdef	__cplusplus
 extern "C" {
 #endif
