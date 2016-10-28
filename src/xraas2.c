@@ -40,6 +40,7 @@
 #include "log.h"
 #include "math.h"
 #include "perf.h"
+#include "rwy_key_tbl.h"
 #include "types.h"
 #include "wav.h"
 
@@ -96,7 +97,6 @@
 #define	XRAAS_apt_dat_cache_version	3
 #define	UNITS_APPEND_INTVAL		120	/* seconds */
 
-#define	RWY_ID_KEY_SZ			16
 #define	TILE_NAME_FMT			"%+03.0f%+04.0f"
 
 typedef struct {
@@ -112,12 +112,6 @@ typedef struct {
 typedef struct {
 	double min, max;
 } range_t;
-
-typedef struct rwy_key_s {
-	char		key[RWY_ID_KEY_SZ];
-	int		value;
-	avl_node_t	node;
-} rwy_key_t;
 
 /* Suppress 'approaching' annunciations in these altitude windows */
 #define	NUM_RWY_APCH_SUPP_WINDOWS 2
@@ -908,96 +902,6 @@ dist_to_msg(double dist, msg_type_t **msg, size_t *len, bool_t div_by_100)
 			append_msglist(msg, len, METERS_MSG);
 	}
 	state.last_units_call = now;
-}
-
-static int
-rwy_id_key_compar(const void *a, const void *b)
-{
-	const rwy_key_t *ka = a, *kb = b;
-	int res = strcmp(ka->key, kb->key);
-	if (res < 0)
-		return (-1);
-	else if (res == 0)
-		return (0);
-	else
-		return (1);
-}
-
-static void
-rwy_key_tbl_create(avl_tree_t *tree)
-{
-	avl_create(tree, rwy_id_key_compar, sizeof (rwy_key_t),
-	    offsetof(rwy_key_t, node));
-}
-
-static void
-rwy_key_tbl_destroy(avl_tree_t *tree)
-{
-	void *cookie = NULL;
-	rwy_key_t *key;
-
-	while ((key = avl_destroy_nodes(tree, &cookie)) != NULL)
-		free(key);
-	avl_destroy(tree);
-}
-
-static void
-rwy_key_tbl_empty(avl_tree_t *tree)
-{
-	for (rwy_key_t *key; (key = avl_first(tree)) != NULL;) {
-		avl_remove(tree, key);
-		free(key);
-	}
-}
-
-#define rwy_key_tbl_remove(tree, arpt_id, rwy_id) \
-        rwy_key_tbl_remove_impl(tree, #tree, arpt_id, rwy_id)
-static void
-rwy_key_tbl_remove_impl(avl_tree_t *tree, const char *name,
-    const char *arpt_id, const char *rwy_id)
-{
-	rwy_key_t srch, *key;
-
-	snprintf(srch.key, sizeof (srch.key), "%s/%s", arpt_id, rwy_id);
-	if ((key = avl_find(tree, &srch, NULL)) != NULL) {
-	        dbg_log("rwy_key", 1, "%s[%s/%s] = nil", name, arpt_id, rwy_id);
-		avl_remove(tree, key);
-		free(key);
-	}
-}
-
-#define rwy_key_tbl_set(tree, arpt_id, rwy_id, value) \
-        rwy_key_tbl_set_impl(tree, #tree, arpt_id, rwy_id, value)
-static void
-rwy_key_tbl_set_impl(avl_tree_t *tree, const char *name,
-    const char *arpt_id, const char *rwy_id, int value)
-{
-	rwy_key_t srch, *key;
-	avl_index_t where;
-
-	snprintf(srch.key, sizeof (srch.key), "%s/%s", arpt_id, rwy_id);
-	if ((key = avl_find(tree, &srch, &where)) == NULL) {
-		key = calloc(1, sizeof (*key));
-		snprintf(key->key, sizeof (key->key), "%s/%s", arpt_id, rwy_id);
-		avl_insert(tree, key, where);
-	}
-	if (key->value != value) {
-		dbg_log("rwy_key", 1, "%s[%s/%s] = %d", name, arpt_id, rwy_id,
-		    value);
-		key->value = value;
-        }
-}
-
-static int
-rwy_key_tbl_get(avl_tree_t *tree, const char *arpt_id, const char *rwy_id)
-{
-	rwy_key_t srch, *key;
-	avl_index_t where;
-
-	snprintf(srch.key, sizeof (srch.key), "%s/%s", arpt_id, rwy_id);
-	if ((key = avl_find(tree, &srch, &where)) == NULL)
-		return (0);
-	return (key->value);
 }
 
 static void
