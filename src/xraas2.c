@@ -2664,7 +2664,8 @@ takeoff_rwy_dist_check(vect2_t opp_thr_v, vect2_t pos_v)
 }
 
 static void
-perform_rwy_dist_remaining_callouts(vect2_t opp_thr_v, vect2_t pos_v)
+perform_rwy_dist_remaining_callouts(vect2_t opp_thr_v, vect2_t pos_v,
+    bool_t try_hard)
 {
 	ASSERT(!IS_NULL_VECT(opp_thr_v));
 	ASSERT(!IS_NULL_VECT(pos_v));
@@ -2681,7 +2682,8 @@ perform_rwy_dist_remaining_callouts(vect2_t opp_thr_v, vect2_t pos_v)
 			the_asd = asd;
 			break;
 		}
-		if (dist > asd->min && dist - asd->min < maxdelta) {
+		if (try_hard && the_asd == NULL && dist > asd->min &&
+		    dist - asd->min < maxdelta) {
 			the_asd = asd;
 			maxdelta = dist - asd->min;
 		}
@@ -2752,7 +2754,8 @@ stop_check(const runway_t *rwy, int end, double hdg, vect2_t pos_v)
 		 */
 		if (dist < IMMEDIATE_STOP_DIST && rhdg < HDG_ALIGN_THRESH &&
 		    gs > SLOW_ROLL_THRESH)
-			perform_rwy_dist_remaining_callouts(opp_thr_v, pos_v);
+			perform_rwy_dist_remaining_callouts(opp_thr_v, pos_v,
+			    B_FALSE);
 		else
 			stop_check_reset(arpt_id, rwy_end->id);
 		return;
@@ -2798,7 +2801,7 @@ stop_check(const runway_t *rwy, int end, double hdg, vect2_t pos_v)
 					    ND_ALERT_CAUTION, NULL, NAN);
 				}
 				perform_rwy_dist_remaining_callouts(opp_thr_v,
-				    pos_v);
+				    pos_v, B_TRUE);
 			}
 		}
 		return;
@@ -2835,7 +2838,7 @@ stop_check(const runway_t *rwy, int end, double hdg, vect2_t pos_v)
 	    (!state.landing && dist < state.min_rotation_dist &&
 	    XPLMGetDataf(drs.rad_alt) < RADALT_GRD_THRESH &&
 	    rpitch < state.min_rotation_angle))
-		perform_rwy_dist_remaining_callouts(opp_thr_v, pos_v);
+		perform_rwy_dist_remaining_callouts(opp_thr_v, pos_v, B_FALSE);
 }
 
 static bool_t
