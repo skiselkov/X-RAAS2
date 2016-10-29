@@ -37,12 +37,10 @@
 #define	RIFF_ID	0x46464952u	/* 'RIFF' */
 #define	LIST_ID	0x54534C49u	/* 'LIST' */
 
-#define	RIFF_ID	0x46464952u	/* 'RIFF' */
-#define	LIST_ID	0x54534C49u	/* 'LIST' */
-#define	WAVE_ID	0x45564157u	/* 'WAVE' */
-#define	FMT_ID	0x20746D66u	/* 'FMT ' */
-#define	DATA_ID	0x61746164u	/* 'DATA' */
-
+/*
+ * Frees a RIFF chunk and all its subchunks. Call this function on the
+ * top-level chunk returned by riff_parse to free the whole structure.
+ */
 void
 riff_free_chunk(riff_chunk_t *c)
 {
@@ -57,6 +55,10 @@ riff_free_chunk(riff_chunk_t *c)
 	free(c);
 }
 
+/*
+ * Recursive chunk parser. This is the actual worker of riff_parse. It is
+ * invoked for every chunk found in the RIFF file.
+ */
 static riff_chunk_t *
 riff_parse_chunk(uint8_t *buf, size_t bufsz, bool_t bswap)
 {
@@ -118,6 +120,18 @@ riff_parse_chunk(uint8_t *buf, size_t bufsz, bool_t bswap)
 	return (c);
 }
 
+/*
+ * Parses a RIFF file and returns its top-level chunk. The parsed structure
+ * contains references to the input buffer, so it must not be freed by the
+ * caller. Chunk's fourcc's are automatically endian-swapped if the file's
+ * endianness is reversed. Chunk contents AREN'T byteswapped.
+ * @param filetype The 32-bit little-endian fourcc code identifying the
+ *	RIFF file type (e.g. 'WAVE').
+ * @param buf Input buffer to parse which contains the entire RIFF file.
+ * @param bufsz Input buffer size.
+ * If the file isn't of the appropriate type or is malformed, NULL is
+ * returned instead.
+ */
 riff_chunk_t *
 riff_parse(uint32_t filetype, uint8_t *buf, size_t bufsz)
 {

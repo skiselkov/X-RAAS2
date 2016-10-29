@@ -70,7 +70,7 @@ reset_config(xraas_state_t *state)
 	state->nd_alert_timeout = 7;
 	state->debug_graphical = B_FALSE;
 
-	audio_set_shared_ctx(B_FALSE);
+	openal_set_shared_ctx(B_FALSE);
 
 	xraas_debug = 0;
 }
@@ -156,7 +156,7 @@ process_conf(xraas_state_t *state, conf_t *conf)
 
 	conf_get_i(conf, "debug", &xraas_debug);
 	if (conf_get_b(conf, "shared_audio_ctx", &shared_ctx))
-		audio_set_shared_ctx(shared_ctx);
+		openal_set_shared_ctx(shared_ctx);
 
 	if (conf_get_str(conf, "gpws_prio_dr", &str))
 		my_strlcpy(state->GPWS_priority_dataref, str,

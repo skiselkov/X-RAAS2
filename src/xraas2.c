@@ -145,7 +145,7 @@ static accel_stop_dist_t accel_stop_distances[] = {
     { .max = NAN, .min = NAN, .ann = -1 }         /* list terminator */
 };
 
-static bool_t init_called = B_FALSE;
+static bool_t inited = B_FALSE;
 static xraas_state_t state;
 
 static char xpdir[512] = { 0 };
@@ -2075,8 +2075,10 @@ chk_acf_is_helo(void)
 static void
 xraas_init(void)
 {
-	ASSERT(!init_called);
-	init_called = B_TRUE;
+	bool_t snd_inited = B_FALSE, dbg_gui_inited = B_FALSE,
+	    airportdb_created = B_FALSE;
+
+	ASSERT(!inited);
 
 	/* these must go ahead of config parsing */
 	state.start_time = microclock();
@@ -2090,17 +2092,40 @@ xraas_init(void)
 
 	dbg_log("startup", 1, "xraas_init");
 
+	if (!(snd_inited = snd_sys_init(plugindir, &state)))
+		goto errout;
 
-	if (state.debug_graphical)
+	if (state.debug_graphical) {
 		dbg_gui_init();
+		dbg_gui_inited = B_TRUE;
+	}
 
 	raas_dr_reset();
-	snd_sys_init(plugindir, &state);
 
 	airportdb_create(&state.airportdb, xpdir, xpprefsdir);
+	airportdb_created = B_TRUE;
 
 	if (!recreate_apt_dat_cache(&state.airportdb))
-		return;
+		goto errout;
+
+	if (chk_acf_is_helo() && !state.allow_helos)
+		goto errout;
+
+	if (XPLMGetDatai(drs.num_engines) < state.min_engines ||
+	    XPLMGetDataf(drs.mtow) < state.min_mtow) {
+		char icao[8];
+		memset(icao, 0, sizeof (icao));
+		XPLMGetDatab(drs.ICAO, icao, 0, sizeof (icao) - 1);
+		log_init_msg(state.auto_disable_notify, INIT_ERR_MSG_TIMEOUT,
+		    3, "Activating X-RAAS in the aircraft",
+		    "X-RAAS: auto-disabled: aircraft below X-RAAS limits:\n"
+		    "X-RAAS configuration: minimum number of engines: %d; "
+		    "minimum MTOW: %d kg\n"
+		    "Your aircraft: (%s) number of engines: %d; "
+		    "MTOW: %.0f kg\n", state.min_engines, state.min_mtow, icao,
+		    XPLMGetDatai(drs.num_engines), XPLMGetDataf(drs.mtow));
+		goto errout;
+	}
 
 	rwy_key_tbl_create(&state.accel_stop_max_spd);
 	rwy_key_tbl_create(&state.on_rwy_ann);
@@ -2118,31 +2143,26 @@ xraas_init(void)
 
 	XPLMRegisterFlightLoopCallback(raas_exec_cb, EXEC_INTVAL, NULL);
 
-	if (chk_acf_is_helo() && !state.allow_helos)
-		return;
-	if (XPLMGetDatai(drs.num_engines) < state.min_engines ||
-	    XPLMGetDataf(drs.mtow) < state.min_mtow) {
-		char icao[8];
-		memset(icao, 0, sizeof (icao));
-		XPLMGetDatab(drs.ICAO, icao, 0, sizeof (icao) - 1);
-		log_init_msg(state.auto_disable_notify, INIT_ERR_MSG_TIMEOUT,
-		    3, "Activating X-RAAS in the aircraft",
-		    "X-RAAS: auto-disabled: aircraft below X-RAAS limits:\n"
-		    "X-RAAS configuration: minimum number of engines: %d; "
-		    "minimum MTOW: %d kg\n"
-		    "Your aircraft: (%s) number of engines: %d; "
-		    "MTOW: %.0f kg\n", state.min_engines, state.min_mtow, icao,
-		    XPLMGetDatai(drs.num_engines), XPLMGetDataf(drs.mtow));
-		return;
-	}
+	inited = B_TRUE;
+
+	return;
+
+errout:
+	if (snd_inited)
+		snd_sys_fini();
+	if (dbg_gui_inited)
+		dbg_gui_fini();
+	if (airportdb_created)
+		airportdb_destroy(&state.airportdb);
+
+	return;
 }
 
 static void
 xraas_fini(void)
 {
-	ASSERT(init_called);
-
-	init_called = B_FALSE;
+	if (!inited)
+		return;
 
 	if (!state.enabled)
 		return;
@@ -2182,8 +2202,6 @@ xraas_fini(void)
 	rwy_key_tbl_destroy(&state.air_apch_spd2_ann);
 	rwy_key_tbl_destroy(&state.air_apch_spd3_ann);
 
-	state.last_airport_reload = 0;
-
 	if (state.init_msg != NULL) {
 		free(state.init_msg);
 		state.init_msg = NULL;
@@ -2193,6 +2211,8 @@ xraas_fini(void)
 
 	if (state.debug_graphical)
 		dbg_gui_fini();
+
+	inited = B_FALSE;
 }
 
 PLUGIN_API int

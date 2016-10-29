@@ -52,8 +52,9 @@ typedef struct wav_s {
 	ALuint		alsrc;
 } wav_t;
 
-void audio_set_shared_ctx(bool_t flag);
-void audio_fini();
+void openal_set_shared_ctx(bool_t flag);
+bool_t openal_init();
+void openal_fini();
 
 wav_t *wav_load(const char *filename, const char *descr_name);
 void wav_free(wav_t *wav);

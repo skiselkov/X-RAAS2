@@ -234,11 +234,15 @@ snd_sys_init(const char *plugindir, const xraas_state_t *global_conf)
 	const char *gender_dir;
 
 	ASSERT(!inited);
-	inited = B_TRUE;
 
 	state = global_conf;
 	if (state->use_tts)
 		return (B_TRUE);
+
+	/* no WAV/OpenAL calls before this */
+	if (!openal_init())
+		return (B_FALSE);
+
 	gender_dir = (state->voice_female ? "female" : "male");
 
 	for (msg_type_t msg = 0; msg < NUM_MSGS; msg++) {
@@ -250,16 +254,28 @@ snd_sys_init(const char *plugindir, const xraas_state_t *global_conf)
 		pathname = mkpathname(plugindir, "msgs", gender_dir, fname,
 		    NULL);
 		voice_msgs[msg].wav = wav_load(pathname, voice_msgs[msg].name);
+		if (voice_msgs[msg].wav == NULL) {
+			free(pathname);
+			goto errout;
+		}
 		wav_set_gain(voice_msgs[msg].wav, global_conf->voice_volume);
 		free(pathname);
-		if (voice_msgs[msg].wav == NULL)
-			return (B_FALSE);
 	}
 
 	list_create(&playback_queue, sizeof (ann_t), offsetof(ann_t, node));
 	XPLMRegisterFlightLoopCallback(snd_sched_cb, -1.0, NULL);
 
+	inited = B_TRUE;
+
 	return (B_TRUE);
+
+errout:
+	for (msg_type_t msg = 0; msg < NUM_MSGS; msg++) {
+		if (voice_msgs[msg].wav != NULL)
+			wav_free(voice_msgs[msg].wav);
+	}
+
+	return (B_FALSE);
 }
 
 void
@@ -282,10 +298,12 @@ snd_sys_fini(void)
 	list_destroy(&playback_queue);
 
 	for (msg_type_t msg = 0; msg < NUM_MSGS; msg++) {
-		wav_free(voice_msgs[msg].wav);
-		voice_msgs[msg].wav = NULL;
+		if (voice_msgs[msg].wav != NULL) {
+			wav_free(voice_msgs[msg].wav);
+			voice_msgs[msg].wav = NULL;
+		}
 	}
 
 	/* no more OpenAL/WAV calls after this */
-	audio_fini();
+	openal_fini();
 }

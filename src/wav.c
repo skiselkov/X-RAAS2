@@ -46,7 +46,7 @@ static ALCdevice *dev = NULL;
 static ALCcontext *old_ctx = NULL, *my_ctx = NULL;
 static bool_t use_shared = B_FALSE;
 static bool_t ctx_saved = B_FALSE;
-static bool_t inited = B_FALSE;
+static bool_t openal_inited = B_FALSE;
 
 /*
  * ctx_save/ctx_restore must be used to bracket all OpenAL calls. This makes
@@ -79,13 +79,20 @@ ctx_restore(void)
 	ctx_saved = B_FALSE;
 }
 
-static bool_t
-audio_init(void)
+void
+openal_set_shared_ctx(bool_t flag)
 {
-	if (inited)
-		return (B_TRUE);
+	ASSERT(!openal_inited);
+	dbg_log("wav", 1, "openal_set_shared_ctx = %d", flag);
+	use_shared = flag;
+}
 
-	dbg_log("wav", 1, "audio_init");
+bool_t
+openal_init(void)
+{
+	ASSERT(!openal_inited);
+
+	dbg_log("wav", 1, "openal_init");
 
 	ctx_save();
 
@@ -96,7 +103,7 @@ audio_init(void)
 			    "failed (%d)."
 #if	IBM
 			    "\nTry to configure X-RAAS with "
-			    "\"RAAS_shared_audio_ctx = true\" and retest."
+			    "\"shared_audio_ctx = true\" and retest."
 #endif	/* IBM */
 			    , alGetError());
 			ctx_restore();
@@ -108,7 +115,7 @@ audio_init(void)
 			    "failed (%d)"
 #if	IBM
 			    "\nTry to configure X-RAAS with "
-			    "\"RAAS_shared_audio_ctx = true\" and retest."
+			    "\"shared_audio_ctx = true\" and retest."
 #endif	/* IBM */
 			    , alGetError());
 			alcCloseDevice(dev);
@@ -119,32 +126,25 @@ audio_init(void)
 
 	ctx_restore();
 
-	inited = B_TRUE;
+	openal_inited = B_TRUE;
 
 	return (B_TRUE);
 }
 
 void
-audio_set_shared_ctx(bool_t flag)
+openal_fini()
 {
-	ASSERT(!inited);
-	dbg_log("wav", 1, "set_shared_ctx = %d", flag);
-	use_shared = flag;
-}
+	ASSERT(openal_inited);
+	openal_inited = B_FALSE;
 
-void
-audio_fini()
-{
-	if (!inited)
-		return;
-	dbg_log("wav", 1, "audio_fini");
+	dbg_log("wav", 1, "openal_fini");
 	if (!use_shared) {
 		alcDestroyContext(my_ctx);
 		alcCloseDevice(dev);
 		my_ctx = NULL;
 		dev = NULL;
 	}
-	inited = B_FALSE;
+	openal_inited = B_FALSE;
 }
 
 /*
@@ -166,8 +166,7 @@ wav_load(const char *filename, const char *descr_name)
 	ALuint err;
 	ALfloat zeroes[3] = { 0.0, 0.0, 0.0 };
 
-	if (!audio_init())
-		return (NULL);
+	ASSERT(openal_inited);
 
 	dbg_log("wav", 1, "Loading wav file %s", filename);
 
@@ -323,7 +322,7 @@ wav_free(wav_t *wav)
 
 	dbg_log("wav", 1, "wav_free %s", wav->name);
 
-	ASSERT(inited);
+	ASSERT(openal_inited);
 
 	ctx_save();
 	free(wav->name);
@@ -352,7 +351,7 @@ wav_set_gain(wav_t *wav, float gain)
 
 	dbg_log("wav", 1, "wav_set_gain %s %f", wav->name, (double)gain);
 
-	ASSERT(inited);
+	ASSERT(openal_inited);
 
 	ctx_save();
 
@@ -378,7 +377,7 @@ wav_play(wav_t *wav)
 
 	dbg_log("wav", 1, "wav_play %s", wav->name);
 
-	ASSERT(inited);
+	ASSERT(openal_inited);
 
 	ctx_save();
 
@@ -404,7 +403,7 @@ wav_stop(wav_t *wav)
 	if (wav->alsrc == 0)
 		return;
 
-	ASSERT(inited);
+	ASSERT(openal_inited);
 	ctx_save();
 	alSourceStop(wav->alsrc);
 	ctx_restore();
