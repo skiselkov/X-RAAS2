@@ -18,11 +18,13 @@
 #include <string.h>
 
 #include <XPLMDataAccess.h>
+#include <XPLMDisplay.h>
 #include <XPLMProcessing.h>
 
 #include "assert.h"
 #include "helpers.h"
 #include "perf.h"
+#include "../api/c/XRAAS_ND_msg_decode.h"
 
 #include "nd_alert.h"
 
@@ -59,6 +61,22 @@ alert_sched_cb(float elapsed_since_last_call, float elapsed_since_last_floop,
 	return (ND_SCHED_INTVAL);
 }
 
+static int
+nd_alert_draw_cb(XPLMDrawingPhase phase, int before, void *refcon)
+{
+	char msg[16];
+	int color;
+
+	UNUSED(phase);
+	UNUSED(before);
+	UNUSED(refcon);
+
+	if (!XRAAS_ND_msg_decode(XPLMGetDatai(dr), msg, &color))
+		return (1);
+
+	return (1);
+}
+
 void
 ND_alerts_init(const xraas_state_t *conf_state)
 {
@@ -70,6 +88,8 @@ ND_alerts_init(const xraas_state_t *conf_state)
 	    NULL, NULL);
 	VERIFY(dr != NULL);
 	XPLMRegisterFlightLoopCallback(alert_sched_cb, ND_SCHED_INTVAL, NULL);
+	XPLMRegisterDrawCallback(nd_alert_draw_cb, xplm_Phase_LastScene, 0,
+	    NULL);
 
 	inited = B_TRUE;
 }
@@ -83,6 +103,8 @@ ND_alerts_fini()
 	XPLMUnregisterDataAccessor(dr);
 	dr = NULL;
 	XPLMUnregisterFlightLoopCallback(alert_sched_cb, NULL);
+	XPLMUnregisterDrawCallback(nd_alert_draw_cb, xplm_Phase_LastScene, 0,
+	    NULL);
 }
 
 void
