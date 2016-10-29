@@ -16,8 +16,7 @@
  */
 
 #if	IBM
-# include <gl/GL.h>
-# include <gl/glut.h>
+# include <gl.h>
 #elif	APL
 # include <OpenGL/gl.h>
 # include <OpenGL/glu.h>

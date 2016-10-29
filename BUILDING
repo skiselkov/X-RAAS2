@@ -1,0 +1,7 @@
+You'll need the following packages on Linux:
+freeglut3-dev libgl1-mesa-dev
+
+For Windows, you'll need libgl1-mesa-dev (we only use the headers from
+/usr/include/GL, the libs are lifted from GL_for_Win/lib).
+
+For Mac, everything you need should be here or included with the OS.
