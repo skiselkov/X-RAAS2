@@ -68,6 +68,7 @@ reset_config(xraas_state_t *state)
 	state->nd_alert_overlay_enabled = B_TRUE;
 	state->nd_alert_overlay_force = B_FALSE;
 	state->nd_alert_timeout = 7;
+	state->debug_graphical = B_FALSE;
 
 	audio_set_shared_ctx(B_FALSE);
 
@@ -150,6 +151,7 @@ process_conf(xraas_state_t *state, conf_t *conf)
 	GET_CONF(b, nd_alert_overlay_enabled);
 	GET_CONF(b, nd_alert_overlay_force);
 	GET_CONF(i, nd_alert_timeout);
+	GET_CONF(b, debug_graphical);
 #undef	GET_CONF
 
 	conf_get_i(conf, "debug", &xraas_debug);

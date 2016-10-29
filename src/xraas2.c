@@ -34,6 +34,7 @@
 #include "assert.h"
 #include "avl.h"
 #include "conf.h"
+#include "dbg_gui.h"
 #include "geom.h"
 #include "helpers.h"
 #include "list.h"
@@ -1663,7 +1664,7 @@ air_runway_approach(void)
 		state.air_apch_rwys_ann = B_FALSE;
 }
 
-static const airport_t *
+const airport_t *
 find_nearest_curarpt(void)
 {
 	double min_dist = ARPT_LOAD_LIMIT;
@@ -2090,6 +2091,10 @@ xraas_init(void)
 
 	dbg_log("startup", 1, "xraas_init");
 
+
+	if (state.debug_graphical)
+		dbg_gui_init();
+
 	raas_dr_reset();
 	snd_sys_init(plugindir, &state);
 
@@ -2186,6 +2191,9 @@ xraas_fini(void)
 	}
 
 	XPLMUnregisterFlightLoopCallback(raas_exec_cb, NULL);
+
+	if (state.debug_graphical)
+		dbg_gui_fini();
 }
 
 PLUGIN_API int
@@ -2217,6 +2225,10 @@ XPluginStart(char *outName, char *outSig, char *outDesc)
 		if (strcmp(p + 1, "64") == 0)
 			*p = '\0';
 	}
+
+	logMsg("xpdir: %s", xpdir);
+	logMsg("prefsdir: %s", xpprefsdir);
+	logMsg("plugindir: %s", plugindir);
 
 	return (1);
 }

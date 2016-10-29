@@ -87,7 +87,6 @@ typedef struct xraas_state {
 	double		long_land_lim_fract;		/* fraction, 0-1 */
 
 	bool_t		debug_graphical;
-	int		debug_graphical_bg;
 	bool_t		debug;
 
 	avl_tree_t	on_rwy_ann;
@@ -149,6 +148,8 @@ void log_init_msg(bool_t display, int timeout, int man_sect_number,
 bool_t xraas_is_on(void);
 bool_t view_is_external(void);
 bool_t GPWS_has_priority(void);
+
+const airport_t *find_nearest_curarpt(void);
 
 #ifdef	__cplusplus
 }
