@@ -2127,6 +2127,8 @@ xraas_init(void)
 		goto errout;
 	}
 
+	ND_alerts_init(&state);
+
 	rwy_key_tbl_create(&state.accel_stop_max_spd);
 	rwy_key_tbl_create(&state.on_rwy_ann);
 	rwy_key_tbl_create(&state.apch_rwy_ann);
@@ -2154,6 +2156,7 @@ errout:
 		dbg_gui_fini();
 	if (airportdb_created)
 		airportdb_destroy(&state.airportdb);
+	ND_alerts_fini();
 
 	return;
 }
@@ -2187,6 +2190,8 @@ xraas_fini(void)
 	}
 
 	airportdb_destroy(&state.airportdb);
+
+	ND_alerts_fini();
 
 	rwy_key_tbl_destroy(&state.accel_stop_max_spd);
 	rwy_key_tbl_destroy(&state.on_rwy_ann);

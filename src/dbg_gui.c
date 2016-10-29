@@ -53,8 +53,8 @@ static void
 draw_line(double x1, double y1, double x2, double y2)
 {
 	glBegin(GL_LINES);
-	glVertex2f(DBG_X(x1), DBG_Y(y1));
-	glVertex2f(DBG_X(x2), DBG_Y(y2));
+	glVertex2f(x1, y1);
+	glVertex2f(x2, y2);
 	glEnd();
 }
 
@@ -105,8 +105,8 @@ draw_cb(XPLMDrawingPhase phase, int before, void *refcon)
 	/* draw center crosshair - this is the airport reference point */
 	glColor4f(1, 0, 0, 1);
 	glLineWidth(2);
-	draw_line(-5, 0, 5, 0);
-	draw_line(0, -5, 0, 5);
+	draw_line(DBG_X(0) - 5, DBG_Y(0), DBG_X(0) + 5, DBG_Y(0));
+	draw_line(DBG_X(0), DBG_Y(0) - 5, DBG_X(0), DBG_Y(0) + 5);
 
 	for (runway_t *rwy = avl_first(&arpt->rwys); rwy != NULL;
 	    rwy = AVL_NEXT(&arpt->rwys, rwy)) {
@@ -124,10 +124,13 @@ draw_cb(XPLMDrawingPhase phase, int before, void *refcon)
 	}
 
 	glColor4f(1, 1, 1, 1);
-	draw_line(pos_v.x - 5, pos_v.y, pos_v.x + 5, pos_v.y);
-	draw_line(pos_v.x, pos_v.y - 5, pos_v.x, pos_v.y + 5);
+	draw_line(DBG_X(pos_v.x) - 5, DBG_Y(pos_v.y),
+	    DBG_X(pos_v.x) + 5, DBG_Y(pos_v.y));
+	draw_line(DBG_X(pos_v.x), DBG_Y(pos_v.y) - 5,
+	    DBG_X(pos_v.x), DBG_Y(pos_v.y) + 5);
 	glColor4f(0, 1, 1, 1);
-	draw_line(pos_v.x, pos_v.y, tgt_v.x, tgt_v.y);
+	draw_line(DBG_X(pos_v.x), DBG_Y(pos_v.y),
+	    DBG_X(tgt_v.x), DBG_Y(tgt_v.y));
 
 	return (1);
 }
