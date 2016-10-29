@@ -63,7 +63,6 @@
 #define	SLOW_ROLL_THRESH		5.15		/* m/s, 10 knots */
 #define	STOPPED_THRESH			2.06		/* m/s, 4 knots */
 
-#define	RWY_PROXIMITY_TIME_FACT		2		/* seconds */
 #define	LANDING_ROLLOUT_TIME_FACT	1		/* seconds */
 #define	RADALT_GRD_THRESH		5		/* feet */
 #define	RADALT_FLARE_THRESH		100		/* feet */
@@ -400,7 +399,7 @@ load_nearest_airports(void)
  * vector is computed as a `time_fact' (in seconds) extra ahead of the
  * actual aircraft's nosewheel position.
  */
-static vect2_t
+vect2_t
 acf_vel_vector(double time_fact)
 {
 	float nw_offset;

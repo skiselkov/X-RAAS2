@@ -20,6 +20,7 @@
 
 #include "airportdb.h"
 #include "avl.h"
+#include "geom.h"
 #include "list.h"
 #include "types.h"
 
@@ -27,7 +28,8 @@
 extern "C" {
 #endif
 
-#define	TATL_FIELD_ELEV_UNSET	-1000000
+#define	TATL_FIELD_ELEV_UNSET		-1000000
+#define	RWY_PROXIMITY_TIME_FACT		2		/* seconds */
 
 typedef enum TATL_state_e {
 	TATL_STATE_ALT,
@@ -148,6 +150,7 @@ void log_init_msg(bool_t display, int timeout, int man_sect_number,
 bool_t xraas_is_on(void);
 bool_t view_is_external(void);
 bool_t GPWS_has_priority(void);
+vect2_t acf_vel_vector(double time_fact);
 
 const airport_t *find_nearest_curarpt(void);
 

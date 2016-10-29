@@ -18,11 +18,10 @@
 #if	IBM
 # include <gl/GL.h>
 # include <gl/glut.h>
-#elif	MAC
+#elif	APL
 # include <OpenGL/gl.h>
 # include <OpenGL/glu.h>
 # include <GLUT/glut.h>
-# include <Carbon/Carbon.h>
 #else	/* LIN */
 # include <GL/gl.h>
 # include <GL/glu.h>
@@ -44,41 +43,52 @@
 
 static bool_t inited = B_FALSE;
 static XPLMDataRef *lat_dr = NULL, *lon_dr = NULL;
+static int screen_x, screen_y;
+static double scale;
+
+#define	DBG_X(coord)	(coord * scale + screen_x / 2)
+#define	DBG_Y(coord)	(coord * scale + screen_y / 2)
 
 static void
 draw_line(double x1, double y1, double x2, double y2)
 {
 	glBegin(GL_LINES);
-	glVertex2f(x1, y1);
-	glVertex2f(x2, y2);
+	glVertex2f(DBG_X(x1), DBG_Y(y1));
+	glVertex2f(DBG_X(x2), DBG_Y(y2));
+	glEnd();
+}
+
+static void
+draw_bbox(const vect2_t *bbox)
+{
+	glBegin(GL_POLYGON);
+	for (int i = 0; !IS_NULL_VECT(bbox[i]); i++)
+		glVertex2f(DBG_X(bbox[i].x), DBG_X(bbox[i].y));
 	glEnd();
 }
 
 static int
 draw_cb(XPLMDrawingPhase phase, int before, void *refcon)
 {
-#define	dbgX(coord)	(coord * draw_scale + screen_x / 2)
-#define	dbgY(coord)	(coord * draw_scale + screen_y / 2)
-
-	int screen_x, screen_y;
-	double draw_scale;
-	vect2_t pos_v;
-	const airport_t *curarpt;
+	vect2_t pos_v, vel_v, tgt_v;
+	const airport_t *arpt;
 
 	UNUSED(phase);
 	UNUSED(before);
 	UNUSED(refcon);
 	ASSERT(inited);
 
-	curarpt = find_nearest_curarpt();
-	if (curarpt == NULL)
+	if ((arpt = find_nearest_curarpt()) == NULL)
 		return (1);
-	ASSERT(curarpt->load_complete);
+	ASSERT(arpt->load_complete);
 
 	pos_v = geo2fpp(GEO_POS2(XPLMGetDatad(lat_dr), XPLMGetDatad(lon_dr)),
-	    &curarpt->fpp);
+	    &arpt->fpp);
+	vel_v = acf_vel_vector(RWY_PROXIMITY_TIME_FACT);
+	tgt_v = vect2_add(pos_v, vel_v);
+
 	XPLMGetScreenSize(&screen_x, &screen_y);
-	draw_scale = MIN(screen_y / (2.0 * vect2_abs(pos_v)), 1.0);
+	scale = MIN(screen_y / (2.0 * vect2_abs(pos_v)), 1.0);
 
 	/*
 	 * Our graphics state:
@@ -95,12 +105,31 @@ draw_cb(XPLMDrawingPhase phase, int before, void *refcon)
 	/* draw center crosshair - this is the airport reference point */
 	glColor4f(1, 0, 0, 1);
 	glLineWidth(2);
-	draw_line(dbgX(-5), dbgY(0), dbgX(5), dbgY(0));
-	draw_line(dbgX(0), dbgY(-5), dbgX(0), dbgY(5));
+	draw_line(-5, 0, 5, 0);
+	draw_line(0, -5, 0, 5);
+
+	for (runway_t *rwy = avl_first(&arpt->rwys); rwy != NULL;
+	    rwy = AVL_NEXT(&arpt->rwys, rwy)) {
+		glColor4f(1, 1, 1, 0.5);
+		draw_bbox(rwy->ends[0].apch_bbox);
+		draw_bbox(rwy->ends[1].apch_bbox);
+		glColor4f(0, 0, 1, 0.67);
+		draw_bbox(rwy->prox_bbox);
+		glColor4f(1, 0, 0, 1);
+		draw_bbox(rwy->asda_bbox);
+		glColor4f(1, 1, 0, 1);
+		draw_bbox(rwy->tora_bbox);
+		glColor4f(0, 1, 0, 1);
+		draw_bbox(rwy->rwy_bbox);
+	}
+
+	glColor4f(1, 1, 1, 1);
+	draw_line(pos_v.x - 5, pos_v.y, pos_v.x + 5, pos_v.y);
+	draw_line(pos_v.x, pos_v.y - 5, pos_v.x, pos_v.y + 5);
+	glColor4f(0, 1, 1, 1);
+	draw_line(pos_v.x, pos_v.y, tgt_v.x, tgt_v.y);
 
 	return (1);
-#undef	dbgX
-#undef	dbgY
 }
 
 void
