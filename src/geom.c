@@ -306,6 +306,28 @@ vect3_mean(vect3_t a, vect3_t b)
 	return (VECT3((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2));
 }
 
+vect3_t
+vect3_rot(vect3_t v, double ax, double ay, double az)
+{
+	ax = DEG2RAD(ax);
+	ay = DEG2RAD(ay);
+	az = DEG2RAD(az);
+
+	if (ax != 0.0)
+		v = VECT3(v.x,
+		    v.y * cos(ax) - v.z * sin(ax),
+		    v.y * sin(ax) + v.z * cos(ax));
+	if (ay != 0.0)
+		v = VECT3(v.x * cos(ay) + v.z * sin(ay),
+		    v.y,
+		    -v.x * sin(ay) + v.z * cos(ay));
+	if (az != 0.0)
+		v = VECT3(v.x * cos(az) - v.y * sin(az),
+		    v.x * sin(az) + v.y * cos(az),
+		    v.z);
+	return (v);
+}
+
 /*
  * Rotates vector `v' by 90 degrees either to the right or left. This is
  * faster than doing full trigonometric calculations in vect2_rot.

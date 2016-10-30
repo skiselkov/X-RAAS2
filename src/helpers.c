@@ -32,9 +32,13 @@
 
 #if	IBM
 #include <windows.h>
+#include <strsafe.h>
 #else	/* !IBM */
+#include <sys/types.h>
 #include <sys/time.h>
 #include <sys/stat.h>
+#include <dirent.h>
+#include <unistd.h>
 #endif	/* !IBM */
 
 #include "assert.h"
@@ -358,11 +362,11 @@ mkpathname(const char *comp, ...)
 
 	str = malloc(len + 1);
 	va_start(ap, comp);
-	n += sprintf(str, "%s", comp);
+	n += snprintf(str, len + 1, "%s", comp);
 	for (const char *c = va_arg(ap, const char *); c != NULL;
 	    c = va_arg(ap, const char *)) {
 		ASSERT(n < len);
-		n += sprintf(&str[n], "%c%s", DIRSEP, c);
+		n += snprintf(&str[n], len - n + 1, "%c%s", DIRSEP, c);
 	}
 	va_end(ap);
 
@@ -384,6 +388,41 @@ microclock(void)
 #endif	/* !IBM */
 }
 
+#if	IBM
+
+static void win_perror(DWORD err, const char *fmt, ...) PRINTF_ATTR(2);
+
+static void
+win_perror(DWORD err, const char *fmt, ...)
+{
+	va_list ap;
+	LPSTR win_msg = NULL;
+	char *caller_msg;
+	int len;
+
+	va_start(ap, fmt);
+	len = vsnprintf(NULL, 0, fmt, ap);
+	va_end(ap);
+	caller_msg = malloc(len + 1);
+	va_start(ap, fmt);
+	vsnprintf(caller_msg, len + 1, fmt, ap);
+	va_end(ap);
+
+	(void) FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER |
+	    FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+	    NULL, err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+	    (LPSTR)&win_msg, 0, NULL);
+	logMsg("%s: %s", caller_msg, win_msg);
+
+	free(caller_msg);
+	LocalFree(win_msg);
+}
+
+#endif
+
+/*
+ * Creates an empty directory at `dirname' with default permissions.
+ */
 bool_t
 create_directory(const char *dirname)
 {
@@ -391,17 +430,12 @@ create_directory(const char *dirname)
 #if	IBM
 	DWORD err;
 	int len = strlen(dirname);
-	TCHAR dirnameW[len + 1];
+	WCHAR dirnameW[len + 1];
+
 	MultiByteToWideChar(CP_UTF8, 0, dirname, -1, dirnameW, len + 1);
-	if (!CreateDirectoryW(dirnameW, NULL) &&
+	if (!CreateDirectory(dirnameW, NULL) &&
 	    (err = GetLastError()) != ERROR_ALREADY_EXISTS) {
-		LPSTR msgbuf = NULL;
-		(void) FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER |
-		    FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-		    NULL, err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-		    (LPSTR)&msgbuf, 0, NULL);
-		logMsg("Error creating directory %s: %s", dirname, msgbuf);
-		LocalFree(msgbuf);
+		win_perror(err, "Error creating directory %s", dirname);
 		return (B_FALSE);
 	}
 #else	/* !IBM */
@@ -414,9 +448,125 @@ create_directory(const char *dirname)
 	return (B_TRUE);
 }
 
-void
+#if	IBM
+
+static bool_t
+win_rmdir(const LPTSTR dirnameT)
+{
+	WIN32_FIND_DATA find_data;
+	HANDLE h_find;
+	int dirname_len = wcslen(dirnameT);
+	TCHAR srchnameT[dirname_len + 4];
+
+	StringCchPrintf(srchnameT, dirname_len, TEXT("%s\\*"), dirnameT);
+	h_find = FindFirstFile(srchnameT, &find_data);
+	do {
+		TCHAR filepathT[MAX_PATH];
+		DWORD attrs;
+
+		if (wcscmp(find_data.cFileName, TEXT(".")) == 0 ||
+		    wcscmp(find_data.cFileName, TEXT("..")) == 0)
+			continue;
+
+		StringCchPrintf(filepathT, MAX_PATH, TEXT("%s\\%s"), dirnameT,
+		    find_data.cFileName);
+		attrs = GetFileAttributes(filepathT);
+
+		if (attrs & FILE_ATTRIBUTE_DIRECTORY) {
+			if (!win_rmdir(filepathT))
+				goto errout;
+		} else {
+			if (!DeleteFile(filepathT)) {
+				char filepath[MAX_PATH];
+				WideCharToMultiByte(CP_UTF8, 0, filepathT, -1,
+				    filepath, sizeof (filepath), NULL, NULL);
+				win_perror(GetLastError(), "Error removing "
+				    "file %s", filepath);
+				goto errout;
+			}
+		}
+	} while (FindNextFile(h_find, &find_data));
+	FindClose(h_find);
+
+	if (!RemoveDirectory(dirnameT)) {
+		char dirname[MAX_PATH];
+		WideCharToMultiByte(CP_UTF8, 0, dirnameT, -1,
+		    dirname, sizeof (dirname), NULL, NULL);
+		win_perror(GetLastError(), "Error removing directory %s",
+		    dirname);
+		return (B_FALSE);
+	}
+
+	return (B_TRUE);
+errout:
+	FindClose(h_find);
+	return (B_FALSE);
+}
+
+#endif	/* IBM */
+
+/*
+ * Recursive directory removal, including all its contents.
+ */
+bool_t
 remove_directory(const char *dirname)
 {
-	/* TODO: implement recursive directory removal */
-	UNUSED(dirname);
+#if	IBM
+	TCHAR dirnameT[strlen(dirname) + 1];
+
+	MultiByteToWideChar(CP_UTF8, 0, dirname, -1, dirnameT,
+	    sizeof (dirnameT));
+	return (win_rmdir(dirnameT));
+#else	/* !IBM */
+	DIR *dp;
+	struct dirent *de;
+
+	if ((dp = opendir(dirname)) == NULL) {
+		if (errno == ENOENT)
+			/* ignore if the directory doesn't exist anyway */
+			return (B_TRUE);
+		logMsg("Error removing directory %s: %s", dirname,
+		    strerror(errno));
+		return (B_FALSE);
+	}
+	while ((de = readdir(dp)) != NULL) {
+		char filename[FILENAME_MAX];
+		int err;
+		struct stat64 st;
+
+		if (strcmp(de->d_name, ".") == 0 ||
+		    strcmp(de->d_name, "..") == 0)
+			continue;
+
+		if (snprintf(filename, sizeof (filename), "%s/%s", dirname,
+		    de->d_name) >= (ssize_t)sizeof (filename)) {
+			logMsg("Error removing directory %s: path too long",
+			    dirname);
+			goto errout;
+		}
+		if (lstat64(filename, &st) < 0) {
+			logMsg("Error removing directory %s: cannot stat "
+			    "file %s: %s", dirname, de->d_name,
+			    strerror(errno));
+			goto errout;
+		}
+		if (S_ISDIR(st.st_mode)) {
+			if (!remove_directory(filename))
+				goto errout;
+			err = rmdir(filename);
+		} else {
+			err = unlink(filename);
+		}
+		if (err != 0) {
+			logMsg("Error removing %s: %s", filename,
+			    strerror(errno));
+			goto errout;
+		}
+	}
+	closedir(dp);
+	return (B_TRUE);
+errout:
+	closedir(dp);
+	return (B_FALSE);
+#endif	/* !IBM */
 }

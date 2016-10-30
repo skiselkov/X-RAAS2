@@ -201,7 +201,7 @@ long long microclock(void);
 
 /* directory manipulation */
 bool_t create_directory(const char *dirname);
-void remove_directory(const char *dirname);
+bool_t remove_directory(const char *dirname);
 
 #ifdef	__cplusplus
 }

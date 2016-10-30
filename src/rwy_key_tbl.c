@@ -28,6 +28,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#include "airportdb.h"
 #include "log.h"
 
 #include "rwy_key_tbl.h"
@@ -113,6 +114,38 @@ rwy_key_tbl_set_impl(avl_tree_t *tree, const char *name,
 		    value);
 		key->value = value;
         }
+}
+
+/*
+ * Removes any runway keys from `tree' which pertain to airports not in
+ * `curarpt_list'. This is to deal with cases where the aircraft quickly
+ * shifts (repositions), the cur_arpts list gets reloaded and so X-RAAS
+ * never gets the opportunity to properly examine whether we've left the
+ * runway proximity areas.
+ */
+void
+rwy_key_tbl_remove_distant_impl(avl_tree_t *tree, const char *name,
+    const list_t *curarpt_list)
+{
+	rwy_key_t *key, *next;
+
+	for (key = avl_first(tree); key != NULL; key = next) {
+		bool_t found = B_FALSE;
+
+		next = AVL_NEXT(tree, key);
+		for (const airport_t *arpt = list_head(curarpt_list);
+		    arpt != NULL; arpt = list_next(curarpt_list, arpt)) {
+			if (strstr(key->key, arpt->icao) == key->key) {
+				found = B_TRUE;
+				break;
+			}
+		}
+		if (!found) {
+			dbg_log("rwy_key", 1, "%s[%s] = nil", name, key->key);
+			avl_remove(tree, key);
+			free(key);
+		}
+	}
 }
 
 int

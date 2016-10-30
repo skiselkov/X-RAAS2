@@ -72,6 +72,7 @@ typedef enum {
 } msg_type_t;
 
 void play_msg(msg_type_t *msg, size_t msg_len, msg_prio_t prio);
+bool_t modify_cur_msg(msg_type_t *msg, size_t msg_len, msg_prio_t prio);
 
 bool_t snd_sys_init(const char *plugindir, const xraas_state_t *conf);
 void snd_sys_fini(void);

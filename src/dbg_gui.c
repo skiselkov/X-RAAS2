@@ -19,12 +19,8 @@
 # include <gl.h>
 #elif	APL
 # include <OpenGL/gl.h>
-# include <OpenGL/glu.h>
-# include <GLUT/glut.h>
 #else	/* LIN */
 # include <GL/gl.h>
-# include <GL/glu.h>
-# include <GL/glut.h>
 #endif	/* LIN */
 
 #include <XPLMDataAccess.h>
@@ -60,9 +56,14 @@ draw_line(double x1, double y1, double x2, double y2)
 static void
 draw_bbox(const vect2_t *bbox)
 {
-	glBegin(GL_POLYGON);
-	for (int i = 0; !IS_NULL_VECT(bbox[i]); i++)
-		glVertex2f(DBG_X(bbox[i].x), DBG_X(bbox[i].y));
+	glBegin(GL_LINES);
+	for (int i = 0; !IS_NULL_VECT(bbox[i]); i++) {
+		glVertex2f(DBG_X(bbox[i].x), DBG_Y(bbox[i].y));
+		if (!IS_NULL_VECT(bbox[i + 1]))
+			glVertex2f(DBG_X(bbox[i + 1].x), DBG_Y(bbox[i + 1].y));
+		else
+			glVertex2f(DBG_X(bbox[0].x), DBG_Y(bbox[0].y));
+	}
 	glEnd();
 }
 
@@ -90,14 +91,14 @@ draw_cb(XPLMDrawingPhase phase, int before, void *refcon)
 	scale = MIN(screen_y / (2.0 * vect2_abs(pos_v)), 1.0);
 
 	/*
-	 * Our graphics state:
-	 * 1) disables fog
-	 * 2) disables multitexturing
-	 * 3) disables GL lighting
-	 * 4) enables per-pixel alpha testing
-	 * 5) enables per-pixel alpha blending
-	 * 6) disables per-pixel bit depth testing
-	 * 7) disables writeback of depth info to the depth buffer
+	 * Graphics state for drawing the debug overlay:
+	 * 1) disable fog
+	 * 2) disable multitexturing
+	 * 3) disable GL lighting
+	 * 4) enable per-pixel alpha testing
+	 * 5) enable per-pixel alpha blending
+	 * 6) disable per-pixel bit depth testing
+	 * 7) disable writeback of depth info to the depth buffer
 	 */
 	XPLMSetGraphicsState(0, 0, 0, 1, 1, 0, 0);
 
@@ -140,7 +141,6 @@ dbg_gui_init(void)
 	dbg_log("dbg_gui", 1, "init");
 
 	ASSERT(!inited);
-	inited = B_TRUE;
 
 	lat_dr = XPLMFindDataRef("sim/flightmodel/position/latitude");
 	VERIFY(lat_dr != NULL);
@@ -148,6 +148,8 @@ dbg_gui_init(void)
 	VERIFY(lon_dr != NULL);
 
 	XPLMRegisterDrawCallback(draw_cb, xplm_Phase_Window, 0, NULL);
+
+	inited = B_TRUE;
 }
 
 void
@@ -155,8 +157,10 @@ dbg_gui_fini(void)
 {
 	dbg_log("dbg_gui", 1, "fini");
 
-	ASSERT(inited);
-	inited = B_FALSE;
+	if (!inited)
+		return;
 
 	XPLMUnregisterDrawCallback(draw_cb, xplm_Phase_Window, 0, NULL);
+
+	inited = B_FALSE;
 }

@@ -48,12 +48,14 @@ win32:contains(CROSS_COMPILE, x86_64-w64-mingw32-){
 	LIBS += -lXPLM_64
 	LIBS += -L../OpenAL/libs/Win64 -lOpenAL32
 	LIBS += -L../GL_for_Win/lib -lopengl32
+	LIBS += -L../GLUT_for_Windows/gl -lglut64
 }
 
 win32:contains(CROSS_COMPILE, i686-w64-mingw32-){
 	LIBS += -lXPLM
 	LIBS += -L../OpenAL/libs/Win32 -lOpenAL32
 	LIBS += -L../GL_for_Win/lib -lopengl32
+	LIBS += -L../GLUT_for_Windows/gl -lglut32
 	DEFINES += __MIDL_user_allocate_free_DEFINED__
 }
 

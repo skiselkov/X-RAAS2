@@ -27,6 +27,7 @@
 #define	_XRAAS_RWY_KEY_TBL_H_
 
 #include "avl.h"
+#include "list.h"
 
 #ifdef	__cplusplus
 extern "C" {
@@ -41,9 +42,13 @@ void rwy_key_tbl_remove_impl(avl_tree_t *tree, const char *name,
     const char *arpt_id, const char *rwy_id);
 #define rwy_key_tbl_set(tree, arpt_id, rwy_id, value) \
 	rwy_key_tbl_set_impl(tree, #tree, arpt_id, rwy_id, value)
-void
-rwy_key_tbl_set_impl(avl_tree_t *tree, const char *name,
+void rwy_key_tbl_set_impl(avl_tree_t *tree, const char *name,
     const char *arpt_id, const char *rwy_id, int value);
+#define rwy_key_tbl_remove_distant(tree, curarpt_list) \
+	rwy_key_tbl_remove_distant_impl(tree, #tree, curarpt_list)
+void rwy_key_tbl_remove_distant_impl(avl_tree_t *tree, const char *name,
+    const list_t *curarpt_list);
+
 int rwy_key_tbl_get(avl_tree_t *tree, const char *arpt_id, const char *rwy_id);
 
 #ifdef	__cplusplus

@@ -158,6 +158,8 @@ double vect2_dotprod(vect2_t a, vect2_t b);
 vect3_t vect3_xprod(vect3_t a, vect3_t b);
 vect3_t vect3_mean(vect3_t a, vect3_t b);
 
+vect3_t vect3_rot(vect3_t v, double x, double y, double z);
+
 vect2_t vect2_norm(vect2_t v, bool_t right);
 vect2_t vect2_rot(vect2_t v, double angle);
 vect2_t vect2_neg(vect2_t v);

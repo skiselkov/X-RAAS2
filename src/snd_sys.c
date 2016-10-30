@@ -93,6 +93,29 @@ set_sound_on(bool_t flag)
 		    flag ? state->voice_volume : 0);
 }
 
+static int
+resolve_priority_ordering(ann_t *ann, msg_prio_t new_prio)
+{
+	if (ann->prio > new_prio) {
+		/* current message overrides us, be quiet */
+		dbg_log("snd", 1, "priority too low, suppressing.");
+		return (-1);
+	}
+	if (ann->prio == new_prio) {
+		/* same priority, append */
+		return (0);
+	}
+
+	/* we override the queue head, remove it and retry */
+	dbg_log("snd", 1, "priority higher, stopping current annunciation.");
+	list_remove(&playback_queue, ann);
+	if (ann->cur_msg != -1)
+		wav_stop(voice_msgs[ann->msgs[ann->cur_msg]].wav);
+	free(ann->msgs);
+	free(ann);
+	return (1);
+}
+
 void
 play_msg(msg_type_t *msg, size_t msg_len, msg_prio_t prio)
 {
@@ -115,24 +138,14 @@ play_msg(msg_type_t *msg, size_t msg_len, msg_prio_t prio)
 	}
 
 top:
-	ann = list_head(&playback_queue);
-	if (ann != NULL) {
-		if (ann->prio > prio) {
-			/* current message overrides us, be quiet */
-			dbg_log("snd", 1, "priority too low, suppressing.");
+	if ((ann = list_head(&playback_queue)) != NULL) {
+		switch (resolve_priority_ordering(ann, prio)) {
+		case -1:
 			free(msg);
 			return;
-		}
-		if (ann->prio < prio) {
-			/* we override the queue head, remove it and retry */
-			dbg_log("snd", 1, "priority higher, stopping "
-			    "current annunciation.");
-			list_remove(&playback_queue, ann);
-			if (ann->cur_msg != -1)
-				wav_stop(
-				    voice_msgs[ann->msgs[ann->cur_msg]].wav);
-			free(ann->msgs);
-			free(ann);
+		case 0:
+			break;
+		case 1:
 			goto top;
 		}
 	}
@@ -146,6 +159,47 @@ top:
 	ann->prio = prio;
 	ann->cur_msg = -1;
 	list_insert_tail(&playback_queue, ann);
+}
+
+bool_t modify_cur_msg(msg_type_t *msg, size_t msg_len, msg_prio_t prio)
+{
+	ann_t *ann;
+
+	ASSERT(inited);
+
+	if (state->use_tts)
+		return (B_FALSE);
+
+top:
+	if ((ann = list_head(&playback_queue)) != NULL) {
+		switch (resolve_priority_ordering(ann, prio)) {
+		case -1:
+			return (B_FALSE);
+		case 0:
+			break;
+		case 1:
+			goto top;
+		}
+	}
+
+	ann = list_head(&playback_queue);
+	if (ann == NULL) {
+		/* nothing to modify, so just play */
+		play_msg(msg, msg_len, prio);
+		return (B_TRUE);
+	} else if (ann->msgs[0] == msg[0] && ann->cur_msg <= 0) {
+		/*
+		 * we're in time to modify the existing annunciation,
+		 * so go for it
+		 */
+		free(ann->msgs);
+		ann->msgs = msg;
+		ann->num_msgs = msg_len;
+		return (B_TRUE);
+	} else {
+		/* messages don't match or we're too late, fail */
+		return (B_FALSE);
+	}
 }
 
 static float
@@ -233,6 +287,8 @@ snd_sys_init(const char *plugindir, const xraas_state_t *global_conf)
 {
 	const char *gender_dir;
 
+	dbg_log("snd_sys", 1, "snd_sys_init");
+
 	ASSERT(!inited);
 
 	state = global_conf;
@@ -281,8 +337,10 @@ errout:
 void
 snd_sys_fini(void)
 {
-	ASSERT(inited);
-	inited = B_FALSE;
+	dbg_log("snd_sys", 1, "snd_sys_fini");
+
+	if (!inited)
+		return;
 
 	if (state->use_tts)
 		return;
@@ -306,4 +364,6 @@ snd_sys_fini(void)
 
 	/* no more OpenAL/WAV calls after this */
 	openal_fini();
+
+	inited = B_FALSE;
 }

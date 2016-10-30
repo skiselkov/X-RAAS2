@@ -52,6 +52,16 @@ static airport_t *apt_dat_lookup(avl_tree_t *apt_dat, const char *icao);
 static void apt_dat_insert(avl_tree_t *apt_dat, airport_t *arpt);
 static void free_airport(airport_t *arpt);
 
+static geo_pos2_t
+geo_pos2tile_pos(geo_pos2_t pos, bool_t div_by_10)
+{
+	if (div_by_10)
+		return (GEO_POS2(floor(pos.lat / 10) * 10,
+		    floor(pos.lon / 10) * 10));
+	else
+		return (GEO_POS2(floor(pos.lat), floor(pos.lon)));
+}
+
 static int
 apt_dat_compar(const void *a, const void *b)
 {
@@ -337,7 +347,8 @@ map_apt_dat(airportdb_t *db, const char *apt_dat_fname, bool_t geo_link)
 				my_strlcpy(rwy->ends[0].id, comps[8 + 0],
 				    sizeof (rwy->ends[0].id));
 				rwy->ends[0].thr = GEO_POS3(atof(comps[8 + 1]),
-				    atof(comps[8 + 2]), NAN);
+				    atof(comps[8 + 2]),
+				    arpt->refpt.elev);
 				rwy->ends[0].displ = atof(comps[8 + 3]);
 				rwy->ends[0].blast = atof(comps[8 + 4]);
 
@@ -345,7 +356,8 @@ map_apt_dat(airportdb_t *db, const char *apt_dat_fname, bool_t geo_link)
 				    sizeof (rwy->ends[1].id));
 				rwy->ends[1].thr = GEO_POS3(
 				    atof(comps[8 + 9 + 1]),
-				    atof(comps[8 + 9 + 2]), NAN);
+				    atof(comps[8 + 9 + 2]),
+				    arpt->refpt.elev);
 				rwy->ends[1].displ = atof(comps[8 + 9 + 3]);
 				rwy->ends[1].blast = atof(comps[8 + 9 + 4]);
 
@@ -474,6 +486,20 @@ find_all_apt_dats(const airportdb_t *db, size_t *num)
 	return (apt_dats);
 }
 
+static bool_t
+rwy_fudge_match(const runway_t *rwy, int endpt, const char *orwy_id,
+    geo_pos2_t orwy_thr)
+{
+	const runway_end_t *rwy_end = &rwy->ends[endpt];
+	vect3_t thr_v = sph2ecef(GEO2_TO_GEO3(rwy_end->thr, 0));
+	vect3_t othr_v = sph2ecef(GEO2_TO_GEO3(orwy_thr, 0));
+	int rwy_idn = atoi(rwy_end->id);
+	int orwy_idn = atoi(orwy_id);
+
+	return (ABS(rwy_idn - orwy_idn) <= 1 &&
+	    vect3_abs(vect3_sub(thr_v, othr_v)) <= rwy->width / 2);
+}
+
 /*
  * Reloads ~/GNS430/navdata/Airports.txt and populates our apt_dat airports
  * with the latest info in it, notably:
@@ -566,13 +592,17 @@ load_airports_txt(airportdb_t *db)
 
 			for (runway_t *rwy = avl_first(&arpt->rwys);
 			    rwy != NULL; rwy = AVL_NEXT(&arpt->rwys, rwy)) {
-				if (strcmp(rwy->ends[0].id, rwy_id) == 0) {
+				if (strcmp(rwy->ends[0].id, rwy_id) == 0 &&
+				    rwy_fudge_match(rwy, 0, rwy_id, GEO_POS2(
+				    atof(comps[8]), atof(comps[8])))) {
 					rwy->ends[0].thr.elev = telev;
 					rwy->ends[0].gpa = gpa;
 					rwy->ends[0].tch = tch;
 					break;
 				} else if (strcmp(rwy->ends[1].id, rwy_id) ==
-				    0) {
+				    0 && rwy_fudge_match(rwy, 1, rwy_id,
+				    GEO_POS2( atof(comps[8]),
+				    atof(comps[8])))) {
 					rwy->ends[1].thr.elev = telev;
 					rwy->ends[1].gpa = gpa;
 					rwy->ends[1].tch = tch;
@@ -595,8 +625,8 @@ apt_dat_cache_dir(const airportdb_t *db, geo_pos2_t pos, const char *suffix)
 	char lat_lon[16];
 
 	VERIFY(!IS_NULL_GEO_POS(pos));
-	snprintf(lat_lon, sizeof (lat_lon), TILE_NAME_FMT,
-	    floor(pos.lat / 10) * 10, floor(pos.lon / 10) * 10);
+	pos = geo_pos2tile_pos(pos, B_TRUE);
+	snprintf(lat_lon, sizeof (lat_lon), TILE_NAME_FMT, pos.lat, pos.lon);
 
 	if (suffix != NULL)
 		return (mkpathname(db->xpprefsdir, "X-RAAS_apt_dat_cache",
@@ -612,9 +642,10 @@ write_apt_dat(const airportdb_t *db, const airport_t *arpt)
 	char lat_lon[16];
 	char *fname;
 	FILE *fp;
+	geo_pos2_t p;
 
-	snprintf(lat_lon, sizeof (lat_lon), TILE_NAME_FMT,
-	    arpt->refpt.lat, arpt->refpt.lon);
+	p = geo_pos2tile_pos(GEO3_TO_GEO2(arpt->refpt), B_FALSE);
+	snprintf(lat_lon, sizeof (lat_lon), TILE_NAME_FMT, p.lat, p.lon);
 	fname = apt_dat_cache_dir(db, GEO3_TO_GEO2(arpt->refpt), lat_lon);
 
 	fp = fopen(fname, "a");
@@ -623,11 +654,19 @@ write_apt_dat(const airportdb_t *db, const airport_t *arpt)
 		return (B_FALSE);
 	}
 
+	ASSERT(!IS_NULL_GEO_POS(arpt->refpt));
+
 	fprintf(fp, "1 %f 0 0 %s TA:%.0f TL:%.0f LAT:%f LON:%f\n",
 	    arpt->refpt.elev, arpt->icao, arpt->TL, arpt->TA,
 	    arpt->refpt.lat, arpt->refpt.lon);
 	for (const runway_t *rwy = avl_first(&arpt->rwys); rwy != NULL;
 	    rwy = AVL_NEXT(&arpt->rwys, rwy)) {
+		ASSERT(!isnan(rwy->ends[0].gpa));
+		ASSERT(!isnan(rwy->ends[1].gpa));
+		ASSERT(!isnan(rwy->ends[0].tch));
+		ASSERT(!isnan(rwy->ends[1].tch));
+		ASSERT(!isnan(rwy->ends[0].thr.elev));
+		ASSERT(!isnan(rwy->ends[1].thr.elev));
 		fprintf(fp, "100 %.2f 1 0 0 0 0 0 "
 		    "%s %f %f %.1f %.1f 0 0 0 0 "
 		    "%s %f %f %.1f %.1f "
@@ -643,6 +682,7 @@ write_apt_dat(const airportdb_t *db, const airport_t *arpt)
 		    rwy->ends[0].tch, rwy->ends[1].tch,
 		    rwy->ends[0].thr.elev, rwy->ends[1].thr.elev);
 	}
+	fprintf(fp, "\n");
 	fclose(fp);
 	free(fname);
 
@@ -1108,6 +1148,7 @@ load_airports_in_tile(airportdb_t *db, geo_pos2_t tile_pos)
 	if (!created)
 		return;
 
+	tile_pos = geo_pos2tile_pos(tile_pos, B_FALSE);
 	cache_dir = apt_dat_cache_dir(db, tile_pos, NULL);
 	snprintf(lat_lon, sizeof (lat_lon), TILE_NAME_FMT,
 	    tile_pos.lat, tile_pos.lon);
@@ -1162,7 +1203,8 @@ lon_delta(double x, double y)
 void
 unload_distant_airport_tiles_i(airportdb_t *db, tile_t *tile, geo_pos2_t my_pos)
 {
-	if (fabs(tile->pos.lat - floor(my_pos.lat)) > 1 ||
+	if (IS_NULL_GEO_POS(my_pos) ||
+	    fabs(tile->pos.lat - floor(my_pos.lat)) > 1 ||
 	    lon_delta(tile->pos.lon, floor(my_pos.lon)) > 1) {
 		dbg_log("tile", 1, "unloading tile %.0f x %.0f",
 		    tile->pos.lat, tile->pos.lon);

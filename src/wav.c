@@ -90,9 +90,9 @@ openal_set_shared_ctx(bool_t flag)
 bool_t
 openal_init(void)
 {
-	ASSERT(!openal_inited);
-
 	dbg_log("wav", 1, "openal_init");
+
+	ASSERT(!openal_inited);
 
 	ctx_save();
 
@@ -134,10 +134,11 @@ openal_init(void)
 void
 openal_fini()
 {
-	ASSERT(openal_inited);
-	openal_inited = B_FALSE;
-
 	dbg_log("wav", 1, "openal_fini");
+
+	if (!openal_inited)
+		return;
+
 	if (!use_shared) {
 		alcDestroyContext(my_ctx);
 		alcCloseDevice(dev);

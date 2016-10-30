@@ -17,8 +17,20 @@
 
 #include <string.h>
 
+#if	IBM
+# include <gl.h>
+# include <glut.h>
+#elif	APL
+# include <OpenGL/gl.h>
+# include <OpenGL/glut.h>
+#else	/* LIN */
+# include <GL/gl.h>
+# include <GL/glut.h>
+#endif	/* LIN */
+
 #include <XPLMDataAccess.h>
 #include <XPLMDisplay.h>
+#include <XPLMGraphics.h>
 #include <XPLMProcessing.h>
 
 #include "assert.h"
@@ -32,17 +44,75 @@
 #define	AMBER_FLAG		0x40
 #define	ND_SCHED_INTVAL		1.0
 
+#define	ND_OVERLAY_FONT		GLUT_BITMAP_HELVETICA_18
+
 static bool_t			inited = B_FALSE;
 static XPLMDataRef		dr = NULL;
 static int			alert_status = 0;
 static long long		alert_start_time = 0;
 static const xraas_state_t	*state = NULL;
 
+static XPLMDataRef		dr_local_x, dr_local_y, dr_local_z;
+static XPLMDataRef		dr_pitch, dr_roll, dr_hdg;
+
 static int
 read_ND_alert(void *refcon)
 {
 	UNUSED(refcon);
 	return (alert_status);
+}
+
+static int
+nd_alert_draw_cb(XPLMDrawingPhase phase, int before, void *refcon)
+{
+	char msg[16];
+	int color, screen_x, screen_y;
+	int width = 0;
+	int val = XPLMGetDatai(dr);
+
+	UNUSED(phase);
+	UNUSED(before);
+	UNUSED(refcon);
+
+	if (!XRAAS_ND_msg_decode(val, msg, &color) ||
+	    !xraas_is_on() || view_is_external())
+		return (1);
+
+	XPLMGetScreenSize(&screen_x, &screen_y);
+
+	/*
+	 * Graphics state for drawing the ND alert overlay:
+	 * 1) disable fog
+	 * 2) disable multitexturing
+	 * 3) disable GL lighting
+	 * 4) enable per-pixel alpha testing
+	 * 5) enable per-pixel alpha blending
+	 * 6) disable per-pixel bit depth testing
+	 * 7) disable writeback of depth info to the depth buffer
+	 */
+	XPLMSetGraphicsState(0, 0, 0, 1, 1, 0, 0);
+
+	for (int i = 0, n = strlen(msg); i < n; i++)
+		width += glutBitmapWidth(ND_OVERLAY_FONT, msg[i]);
+
+	glColor4f(0, 0, 0, 0.67);
+	glBegin(GL_POLYGON);
+	glVertex2f((screen_x - width) / 2 - 8, screen_y * 0.98 - 27);
+	glVertex2f((screen_x - width) / 2 - 8, screen_y * 0.98);
+	glVertex2f((screen_x + width) / 2 + 8, screen_y * 0.98);
+	glVertex2f((screen_x + width) / 2 + 8, screen_y * 0.98 - 27);
+	glEnd();
+
+	if (color == XRAAS_ND_ALERT_GREEN)
+		glColor4f(0, 1, 0, 1);
+	else
+		glColor4f(0.9, 0.9, 0, 1);
+
+	glRasterPos2f((screen_x - width) / 2, screen_y * 0.98 - 20);
+	for (int i = 0, n = strlen(msg); i < n; i++)
+		glutBitmapCharacter(ND_OVERLAY_FONT, msg[i]);
+
+	return (1);
 }
 
 static float
@@ -55,31 +125,17 @@ alert_sched_cb(float elapsed_since_last_call, float elapsed_since_last_floop,
 	UNUSED(refcon);
 
 	if (alert_status != 0 && (microclock() - alert_start_time >
-	    state->nd_alert_timeout))
+	    SEC2USEC(state->nd_alert_timeout)))
 		alert_status = 0;
 
 	return (ND_SCHED_INTVAL);
 }
 
-static int
-nd_alert_draw_cb(XPLMDrawingPhase phase, int before, void *refcon)
-{
-	char msg[16];
-	int color;
-
-	UNUSED(phase);
-	UNUSED(before);
-	UNUSED(refcon);
-
-	if (!XRAAS_ND_msg_decode(XPLMGetDatai(dr), msg, &color))
-		return (1);
-
-	return (1);
-}
-
 void
 ND_alerts_init(const xraas_state_t *conf_state)
 {
+	dbg_log("ND_alert", 1, "ND_alerts_init");
+
 	ASSERT(!inited);
 
 	state = conf_state;
@@ -88,8 +144,21 @@ ND_alerts_init(const xraas_state_t *conf_state)
 	    NULL, NULL);
 	VERIFY(dr != NULL);
 	XPLMRegisterFlightLoopCallback(alert_sched_cb, ND_SCHED_INTVAL, NULL);
-	XPLMRegisterDrawCallback(nd_alert_draw_cb, xplm_Phase_LastScene, 0,
+	XPLMRegisterDrawCallback(nd_alert_draw_cb, xplm_Phase_Window, 0,
 	    NULL);
+
+	dr_local_x = XPLMFindDataRef("sim/flightmodel/position/local_x");
+	VERIFY(dr_local_x != NULL);
+	dr_local_y = XPLMFindDataRef("sim/flightmodel/position/local_y");
+	VERIFY(dr_local_y != NULL);
+	dr_local_z = XPLMFindDataRef("sim/flightmodel/position/local_z");
+	VERIFY(dr_local_z != NULL);
+	dr_pitch = XPLMFindDataRef("sim/flightmodel/position/theta");
+	VERIFY(dr_pitch != NULL);
+	dr_roll = XPLMFindDataRef("sim/flightmodel/position/phi");
+	VERIFY(dr_roll != NULL);
+	dr_hdg = XPLMFindDataRef("sim/flightmodel/position/psi");
+	VERIFY(dr_hdg != NULL);
 
 	inited = B_TRUE;
 }
@@ -97,14 +166,18 @@ ND_alerts_init(const xraas_state_t *conf_state)
 void
 ND_alerts_fini()
 {
-	ASSERT(inited);
-	inited = B_FALSE;
+	dbg_log("ND_alert", 1, "ND_alerts_fini");
+
+	if (!inited)
+		return;
 
 	XPLMUnregisterDataAccessor(dr);
 	dr = NULL;
 	XPLMUnregisterFlightLoopCallback(alert_sched_cb, NULL);
-	XPLMUnregisterDrawCallback(nd_alert_draw_cb, xplm_Phase_LastScene, 0,
+	XPLMUnregisterDrawCallback(nd_alert_draw_cb, xplm_Phase_Window, 0,
 	    NULL);
+
+	inited = B_FALSE;
 }
 
 void
