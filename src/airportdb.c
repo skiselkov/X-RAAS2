@@ -45,7 +45,6 @@
     __builtin_tan(DEG2RAD(RWY_APCH_PROXIMITY_LAT_ANGLE))
 #define	XRAAS_apt_dat_cache_version	3
 #define	ARPT_LOAD_LIMIT			(8 * 1852)	/* meters, 8nm */
-#define	FUZZY_RWY_LON_DISPL_MAX		1000		/* meters */
 
 #define	TILE_NAME_FMT			"%+03.0f%+04.0f"
 
