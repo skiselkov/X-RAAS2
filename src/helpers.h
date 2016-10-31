@@ -36,6 +36,7 @@
 extern "C" {
 #endif
 
+#define	BUILD_DIRSEP	'/'	/* we only build on Unix-like OSes */
 #if	IBM
 #define	DIRSEP '\\'
 #else	/* !IBM */

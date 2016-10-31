@@ -28,7 +28,7 @@ rm -rf release output
 mkdir -p output/64
 
 make distclean > /dev/null
-qmake -spec win32-g++ && qmake -set CROSS_COMPILE x86_64-w64-mingw32- && \
+qmake -set CROSS_COMPILE x86_64-w64-mingw32- ; qmake -spec win32-g++ && \
     make -j $NCPUS && \
     mv release/win.xpl1.dll output/64/win.xpl
 if [ $? != 0 ] ; then
@@ -36,7 +36,7 @@ if [ $? != 0 ] ; then
 fi
 
 make distclean > /dev/null
-qmake -spec win32-g++ && qmake -set CROSS_COMPILE i686-w64-mingw32- && \
+qmake -set CROSS_COMPILE i686-w64-mingw32- && qmake -spec win32-g++ && \
     make -j $NCPUS && \
     mv release/win.xpl1.dll output/win.xpl
 if [ $? != 0 ] ; then
@@ -49,7 +49,6 @@ qmake -spec linux-g++-64 && make -j $NCPUS && \
 if [ $? != 0 ] ; then
   exit
 fi
-
 
 make distclean > /dev/null
 qmake -spec linux-g++-32 && make -j $NCPUS && \

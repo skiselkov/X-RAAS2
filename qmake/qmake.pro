@@ -24,9 +24,9 @@ VERSION = 1.0.0
 
 INCLUDEPATH += ../SDK/CHeaders/XPLM
 
-QMAKE_CFLAGS += -std=c99 -W -Wall -Wextra -Werror -fvisibility=hidden
+QMAKE_CFLAGS += -std=c99 -g -W -Wall -Wextra -Werror -fvisibility=hidden
 
-DEFINES += _GNU_SOURCE
+DEFINES += _GNU_SOURCE DEBUG
 DEFINES += CHECK_RESULT_USED='__attribute__\\(\\(warn_unused_result\\)\\)'
 
 # Defined to use X-Plane SDK 2.0 capabilities - no backward compatibility

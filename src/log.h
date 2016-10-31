@@ -33,8 +33,8 @@ extern "C" {
  * below just chops it out at compile time.
  */
 #if	defined(__GNUC__) || defined(__clang__)
-#define	log_basename(f) (__builtin_strrchr(f, DIRSEP) ? \
-	__builtin_strrchr(f, DIRSEP) + 1 : f)
+#define	log_basename(f) (__builtin_strrchr(f, BUILD_DIRSEP) ? \
+	__builtin_strrchr(f, BUILD_DIRSEP) + 1 : f)
 #else	/* !__GNUC__ && !__clang__ */
 const char *log_basename(const char *filename);
 #endif	/* !__GNUC__ && !__clang__ */
