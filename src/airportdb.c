@@ -434,16 +434,20 @@ find_all_apt_dats(const airportdb_t *db, size_t *num)
 	size_t n = 0;
 	char *fname;
 	FILE *scenery_packs_ini;
-	char *line = NULL;
-	size_t linecap = 0;
 	char **apt_dats = NULL;
+
+	ASSERT(num != NULL);
 
 	fname = mkpathname(db->xpdir, "Custom Scenery", "scenery_packs.ini",
 	    NULL);
 	scenery_packs_ini = fopen(fname, "r");
 	free(fname);
+	fname = NULL;
 
 	if (scenery_packs_ini != NULL) {
+		char *line = NULL;
+		size_t linecap = 0;
+
 		while (!feof(scenery_packs_ini)) {
 			if (getline(&line, &linecap, scenery_packs_ini) <= 0)
 				continue;
@@ -459,9 +463,8 @@ find_all_apt_dats(const airportdb_t *db, size_t *num)
 				fp = fopen(filename, "r");
 				if (fp != NULL) {
 					fclose(fp);
-					n++;
 					apt_dats = realloc(apt_dats,
-					    n * sizeof (char *));
+					    (++n) * sizeof (char *));
 					apt_dats[n - 1] = filename;
 				} else {
 					free(filename);
@@ -470,18 +473,15 @@ find_all_apt_dats(const airportdb_t *db, size_t *num)
 			}
 		}
 		fclose(scenery_packs_ini);
+		free(line);
 	}
 
 	/* append the default apt.dat */
-	n += 1;
-	apt_dats = realloc(apt_dats, n * sizeof (char *));
+	apt_dats = realloc(apt_dats, (++n) * sizeof (char *));
 	apt_dats[n - 1] = mkpathname(db->xpdir, "Resources", "default scenery",
 	    "default apt dat", "Earth nav data", "apt.dat", NULL);
 
-	free(line);
-
-	if (num != NULL)
-		*num = n;
+	*num = n;
 
 	return (apt_dats);
 }

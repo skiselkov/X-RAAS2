@@ -427,6 +427,7 @@ bool_t
 create_directory(const char *dirname)
 {
 	ASSERT(dirname != NULL);
+	dbg_log("fs", 1, "create_directory: %s", dirname);
 #if	IBM
 	DWORD err;
 	int len = strlen(dirname);
@@ -460,6 +461,19 @@ win_rmdir(const LPTSTR dirnameT)
 
 	StringCchPrintf(srchnameT, dirname_len, TEXT("%s\\*"), dirnameT);
 	h_find = FindFirstFile(srchnameT, &find_data);
+	if (h_find == INVALID_HANDLE_VALUE) {
+		int err = GetLastError();
+		if (err != ERROR_FILE_NOT_FOUND) {
+			char dirname[MAX_PATH];
+			WideCharToMultiByte(CP_UTF8, 0, dirnameT, -1,
+			    dirname, sizeof (dirname), NULL, NULL);
+			win_perror(GetLastError(), "Error listing directory %s",
+			    dirname);
+			return (B_FALSE);
+		} else {
+			return (B_TRUE);
+		}
+	}
 	do {
 		TCHAR filepathT[MAX_PATH];
 		DWORD attrs;
@@ -511,6 +525,7 @@ errout:
 bool_t
 remove_directory(const char *dirname)
 {
+	dbg_log("fs", 1, "remove_directory: %s", dirname);
 #if	IBM
 	TCHAR dirnameT[strlen(dirname) + 1];
 
@@ -532,7 +547,7 @@ remove_directory(const char *dirname)
 	while ((de = readdir(dp)) != NULL) {
 		char filename[FILENAME_MAX];
 		int err;
-		struct stat64 st;
+		struct stat st;
 
 		if (strcmp(de->d_name, ".") == 0 ||
 		    strcmp(de->d_name, "..") == 0)
@@ -544,7 +559,7 @@ remove_directory(const char *dirname)
 			    dirname);
 			goto errout;
 		}
-		if (lstat64(filename, &st) < 0) {
+		if (lstat(filename, &st) < 0) {
 			logMsg("Error removing directory %s: cannot stat "
 			    "file %s: %s", dirname, de->d_name,
 			    strerror(errno));

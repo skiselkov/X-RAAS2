@@ -2220,8 +2220,37 @@ XPluginStart(char *outName, char *outSig, char *outDesc)
 
 	XPLMGetSystemPath(xpdir);
 	XPLMGetPrefsPath(xpprefsdir);
-
 	XPLMGetPluginInfo(XPLMGetMyID(), NULL, plugindir, NULL, NULL);
+
+#if	IBM
+	/*
+	 * For some absolutely inexplicable reason, X-Plane returns these
+	 * paths as a hybrid mix of '/' and '\' separators on Windows. So
+	 * before we start cutting path names, we'll flip all '/'s into
+	 * '\'s to keep consistent with the native path separator scheme.
+	 */
+	for (int i = 0, n = strlen(xpdir); i < n; i++) {
+		if (xpdir[i] == '/')
+			xpdir[i] = '\\';
+	}
+	for (int i = 0, n = strlen(xpprefsdir); i < n; i++) {
+		if (xpprefsdir[i] == '/')
+			xpprefsdir[i] = '\\';
+	}
+	for (int i = 0, n = strlen(plugindir); i < n; i++) {
+		if (plugindir[i] == '/')
+			plugindir[i] = '\\';
+	}
+#endif	/* IBM */
+
+	if (strlen(xpdir) > 0 && xpdir[strlen(xpdir) - 1] == DIRSEP) {
+		/*
+		 * Strip the last path separator from the end to avoid
+		 * double '//' in paths generated with mkpathname. Not
+		 * necessary, just a niceness thing.
+		 */
+		xpdir[strlen(xpdir) - 1] = '\0';
+	}
 
 	/* cut off X-Plane.prf from prefs path */
 	if ((p = strrchr(xpprefsdir, DIRSEP)) != NULL)
