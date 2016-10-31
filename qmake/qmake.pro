@@ -31,7 +31,7 @@ DEFINES += CHECK_RESULT_USED='__attribute__\\(\\(warn_unused_result\\)\\)'
 
 # Defined to use X-Plane SDK 2.0 capabilities - no backward compatibility
 # before 9.0
-DEFINES += XPLM200
+DEFINES += XPLM200 _FILE_OFFSET_BITS=64
 LIBS += -static-libgcc
 
 win32 {

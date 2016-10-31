@@ -41,7 +41,7 @@ endif()
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Werror --std=c99")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} \
     -DCHECK_RESULT_USED=\"__attribute__ ((warn_unused_result))\"")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_GNU_SOURCE")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_GNU_SOURCE -D_FILE_OFFSET_BITS=64")
 
 #libraries
 if(APPLE)
