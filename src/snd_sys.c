@@ -327,9 +327,12 @@ snd_sys_init(const char *plugindir, const xraas_state_t *global_conf)
 
 errout:
 	for (msg_type_t msg = 0; msg < NUM_MSGS; msg++) {
-		if (voice_msgs[msg].wav != NULL)
+		if (voice_msgs[msg].wav != NULL) {
 			wav_free(voice_msgs[msg].wav);
+			voice_msgs[msg].wav = NULL;
+		}
 	}
+	openal_fini();
 
 	return (B_FALSE);
 }

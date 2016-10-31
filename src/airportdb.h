@@ -74,6 +74,7 @@ struct runway {
 struct airport {
 	char		icao[5];	/* 4-letter ID, nul terminated */
 	geo_pos3_t	refpt;		/* airport reference point location */
+	bool_t		geo_linked;	/* airport is in geo_table */
 	double		TA;		/* transition altitude in feet */
 	double		TL;		/* transition level in feet */
 	avl_tree_t	rwys;
@@ -84,14 +85,8 @@ struct airport {
 
 	avl_node_t	apt_dat_node;	/* apt_dat tree */
 	list_node_t	cur_arpts_node;	/* cur_arpts list */
-	list_node_t	tile_node;	/* tiles in the airport_geo_tree */
+	avl_node_t	tile_node;	/* tiles in the airport_geo_tree */
 };
-
-typedef struct tile_s {
-	geo_pos2_t	pos;
-	list_t		arpts;
-	avl_node_t	node;
-} tile_t;
 
 void airportdb_create(airportdb_t *db, const char *xpdir,
     const char *xpprefsdir);

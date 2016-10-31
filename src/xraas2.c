@@ -1679,6 +1679,9 @@ find_nearest_curarpt(void)
 	    XPLMGetDatad(drs.lon), XPLMGetDatad(drs.elev)));
 	const airport_t *cur_arpt = NULL;
 
+	if (state.cur_arpts == NULL)
+		return (NULL);
+
 	for (const airport_t *arpt = list_head(state.cur_arpts); arpt != NULL;
 	    arpt = list_next(state.cur_arpts, arpt)) {
 		double dist = vect3_abs(vect3_sub(arpt->ecef, pos_ecef));
@@ -2062,8 +2065,7 @@ chk_acf_is_helo(void)
 static void
 xraas_init(void)
 {
-	bool_t snd_inited = B_FALSE, dbg_gui_inited = B_FALSE,
-	    airportdb_created = B_FALSE;
+	bool_t airportdb_created = B_FALSE;
 
 	ASSERT(!inited);
 
@@ -2078,13 +2080,11 @@ xraas_init(void)
 
 	dbg_log("startup", 1, "xraas_init");
 
-	if (!(snd_inited = snd_sys_init(plugindir, &state)))
+	if (!snd_sys_init(plugindir, &state))
 		goto errout;
 
-	if (state.debug_graphical) {
+	if (state.debug_graphical)
 		dbg_gui_init();
-		dbg_gui_inited = B_TRUE;
-	}
 
 	raas_dr_reset();
 
@@ -2136,10 +2136,8 @@ xraas_init(void)
 	return;
 
 errout:
-	if (snd_inited)
-		snd_sys_fini();
-	if (dbg_gui_inited)
-		dbg_gui_fini();
+	snd_sys_fini();
+	dbg_gui_fini();
 	if (airportdb_created)
 		airportdb_destroy(&state.airportdb);
 	ND_alerts_fini();
