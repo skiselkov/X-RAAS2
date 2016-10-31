@@ -172,8 +172,11 @@ vect3_unit(vect3_t a, double *l)
 {
 	double len;
 	len = vect3_abs(a);
-	if (len == 0)
+	if (len == 0) {
+		if (l)
+			*l = 0;
 		return (NULL_VECT3);
+	}
 	if (l)
 		*l = len;
 	return (VECT3(a.x / len, a.y / len, a.z / len));
