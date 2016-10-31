@@ -33,12 +33,9 @@ if(APPLE)
 else()
 	add_library(plugin SHARED ${ALL_SRC})
 	SET(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELEASE} -g")
-	SET(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -O0 -g -DDEBUG")
-
-#	SET(CMAKE_LD_FLAGS_RELWITHDEBINFO
-#	    "${CMAKE_LD_FLAGS_RELWITHDEBINFO} -Wl,-Bstatic -lglut -Wl,-Bdynamic")
-#	SET(CMAKE_LD_FLAGS_DEBUG
-#	    "${CMAKE_LD_FLAGS_DEBUG} -Wl,-Bstatic -lglut -Wl,-Bdynamic")
+	# For some reason, we need to specify an optimization level here
+	# or we won't get lstat/fstat correctly defined. Linux, WTF...
+	SET(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -O1 -g -DDEBUG")
 endif()
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Werror --std=c99")
