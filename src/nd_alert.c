@@ -22,7 +22,7 @@
 # include <glut.h>
 #elif	APL
 # include <OpenGL/gl.h>
-# include <OpenGL/glut.h>
+# include <GLUT/glut.h>
 #else	/* LIN */
 # include <GL/gl.h>
 # include <GL/glut.h>
