@@ -590,7 +590,7 @@ write_apt_dat(const airportdb_t *db, const airport_t *arpt)
 
 	ASSERT(!IS_NULL_GEO_POS(arpt->refpt));
 
-	fprintf(fp, "1 %f 0 0 %s TA:%.0f TL:%.0f LAT:%f LON:%f\n",
+	fprintf(fp, "1 %.0f 0 0 %s TA:%.0f TL:%.0f LAT:%f LON:%f\n",
 	    arpt->refpt.elev, arpt->icao, arpt->TL, arpt->TA,
 	    arpt->refpt.lat, arpt->refpt.lon);
 	for (const runway_t *rwy = avl_first(&arpt->rwys); rwy != NULL;

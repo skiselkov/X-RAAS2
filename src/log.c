@@ -19,11 +19,16 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#if	!IBM
+#if	IBM
+#include <windows.h>
+#include <dbghelp.h>
+#else
 #include <execinfo.h>   /* used for stack tracing */
 #endif	/* !IBM */
 
 #include "XPLMUtilities.h"
+
+#include "assert.h"
 #include "helpers.h"
 #include "log.h"
 
@@ -68,7 +73,7 @@ log_impl_v(const char *filename, int line, const char *fmt, va_list ap)
 	free(buf);
 }
 
-#define	MAX_TRACE		128
+#define	MAX_STACK_FRAMES	128
 #define	BACKTRACE_STR		"Backtrace is:\n"
 #if	defined(__GNUC__) || defined(__clang__)
 #define	BACKTRACE_STRLEN	__builtin_strlen(BACKTRACE_STR)
@@ -76,18 +81,64 @@ log_impl_v(const char *filename, int line, const char *fmt, va_list ap)
 #define	BACKTRACE_STRLEN	strlen(BACKTRACE_STR)
 #endif	/* !__GNUC__ && !__clang__ */
 
-void log_backtrace(void)
+void
+log_backtrace(void)
 {
 #if	IBM
-	/* logging backtraces is not implemented yet */
+#define	MAX_SYM_NAME_LEN	256
+#define	FRAME_FMT		"%u: %s - 0x%x\n"
+	unsigned	 frames;
+	void *stack[MAX_STACK_FRAMES];
+	SYMBOL_INFO *symbol;
+	HANDLE process;
+	char *msg = NULL;
+	size_t msg_len = BACKTRACE_STRLEN;
+
+	process = GetCurrentProcess();
+
+	SymInitialize(process, NULL, TRUE);
+
+	frames = CaptureStackBackTrace(0, MAX_STACK_FRAMES, stack, NULL);
+	symbol = malloc(sizeof(SYMBOL_INFO) + MAX_SYM_NAME_LEN);
+	symbol->MaxNameLen = MAX_SYM_NAME_LEN - 1;
+	symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+
+	msg = malloc(msg_len + 1);
+	my_strlcpy(msg, BACKTRACE_STR, msg_len);
+
+	for(unsigned i = 0; i < frames; i++) {
+		int line_len;
+
+		memset(symbol, 0, sizeof(SYMBOL_INFO) + MAX_SYM_NAME_LEN);
+		/*
+		 * This is needed because some dunce at Microsoft thought
+		 * it'd be a swell idea to design the SymFromAddr function to
+		 * always take a DWORD64 rather than a native pointer size.
+		 */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
+		SymFromAddr(process, (DWORD64)(stack[i]), 0, symbol);
+#pragma GCC diagnostic pop
+		line_len = snprintf(NULL, 0, FRAME_FMT, i, symbol->Name,
+		    symbol->Address);
+		msg = realloc(msg, msg_len + line_len + 1);
+		VERIFY(snprintf(&msg[msg_len], line_len + 1, FRAME_FMT, i,
+		    symbol->Name, symbol->Address) == line_len);
+		msg_len += line_len;
+	}
+
+	XPLMDebugString(msg);
+	fputs(msg, stderr);
+
+	free(symbol);
 #else	/* !IBM */
 	char *msg;
 	size_t msg_len;
-	void *trace[MAX_TRACE];
+	void *trace[MAX_STACK_FRAMES];
 	size_t i, j, sz;
 	char **fnames;
 
-	sz = backtrace(trace, MAX_TRACE);
+	sz = backtrace(trace, MAX_STACK_FRAMES);
 	fnames = backtrace_symbols(trace, sz);
 
 	for (i = 1, msg_len = BACKTRACE_STRLEN; i < sz; i++)
@@ -95,9 +146,8 @@ void log_backtrace(void)
 
 	msg = (char *)malloc(msg_len + 1);
 	strcpy(msg, BACKTRACE_STR);
-	for (i = 1, j = BACKTRACE_STRLEN; i < sz; i++) {
+	for (i = 1, j = BACKTRACE_STRLEN; i < sz; i++)
 		j += sprintf(&msg[j], "%s\n", fnames[i]);
-	}
 
 	XPLMDebugString(msg);
 	fputs(msg, stderr);

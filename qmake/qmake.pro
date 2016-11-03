@@ -37,6 +37,7 @@ LIBS += -static-libgcc
 win32 {
 	CONFIG += dll
 	DEFINES += APL=0 IBM=1 LIN=0
+	LIBS += -ldbghelp
 	LIBS += -L../SDK/Libraries/Win -L../GLUT_for_Windows/gl
 	TARGET = win.xpl
 	INCLUDEPATH += ../OpenAL/include

@@ -29,12 +29,23 @@
 #include <assert.h>
 #include <stdlib.h>
 
-#include "helpers.h"
 #include "log.h"
 
 #ifdef	__cplusplus
 extern "C" {
 #endif
+
+/*
+ * ASSERT() and VERIFY() are assertion test macros. If the condition
+ * expression provided as the argument to the macro evaluates as non-true,
+ * the program prints a debug message specifying exactly where and what
+ * condition was violated, a stack backtrace and a dumps core by
+ * calling abort().
+ *
+ * The difference between ASSERT and VERIFY is that ASSERT compiles to
+ * a no-op unless -DDEBUG is provided to the compiler. VERIFY always
+ * checks its condition and dumps if it is non-true.
+ */
 
 #ifdef	DEBUG
 #define	ASSERT(x)		VERIFY(x)
