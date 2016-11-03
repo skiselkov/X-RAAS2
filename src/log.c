@@ -40,7 +40,7 @@
 #define	PREFIX_FMT	"%s[%s:%d]: ", PREFIX, filename, line
 #endif	/* !IBM */
 
-int xraas_debug = 0;
+debug_config_t xraas_debug_config = { 0 };
 
 void
 log_impl(const char *filename, int line, const char *fmt, ...)
@@ -69,6 +69,7 @@ log_impl_v(const char *filename, int line, const char *fmt, va_list ap)
 	(void) sprintf(&buf[strlen(buf)], "\n");
 
 	XPLMDebugString(buf);
+	puts(buf);
 
 	free(buf);
 }
@@ -87,7 +88,7 @@ log_backtrace(void)
 #if	IBM
 #define	MAX_SYM_NAME_LEN	256
 #define	FRAME_FMT		"%u: %s - 0x%x\n"
-	unsigned	 frames;
+	unsigned frames;
 	void *stack[MAX_STACK_FRAMES];
 	SYMBOL_INFO *symbol;
 	HANDLE process;
@@ -155,16 +156,4 @@ log_backtrace(void)
 	free(msg);
 	free(fnames);
 #endif	/* !IBM */
-}
-
-void
-dbg_log_impl(const char *filename, int line, const char *name, int level,
-    const char *fmt, ...)
-{
-	va_list ap;
-	UNUSED(name);
-	va_start(ap, fmt);
-	if (level < xraas_debug)
-		log_impl_v(filename, line, fmt, ap);
-	va_end(ap);
 }

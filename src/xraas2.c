@@ -749,7 +749,7 @@ ground_runway_approach(void)
 
 	if (in_prox == 0) {
 		if (state.landing)
-			dbg_log("flt_state", 1, "state.landing = false");
+			dbg_log(flt_state, 1, "state.landing = false");
 		state.landing = B_FALSE;
 	}
 	if (in_prox <= 1)
@@ -1016,7 +1016,7 @@ stop_check(const runway_t *rwy, int end, double hdg, vect2_t pos_v)
 					append_msglist(&msg, &msg_len,
 					    LONG_LAND_MSG);
 					play_msg(msg, msg_len, MSG_PRIO_HIGH);
-					dbg_log("ann_state", 1,
+					dbg_log(ann_state, 1,
 					    "state.long_landing_ann = true");
 					state.long_landing_ann = B_TRUE;
 					ND_alert(ND_ALERT_LONG_LAND,
@@ -1108,7 +1108,7 @@ ground_on_runway_aligned_arpt(const airport_t *arpt)
 			    0 ||
 			    strcmp(state.rejected_takeoff, rwy->ends[1].id) ==
 			    0) {
-				dbg_log("ann_state", 1,
+				dbg_log(ann_state, 1,
 				    "state.rejected_takeoff = nil");
 				*state.rejected_takeoff = 0;
 			}
@@ -1372,17 +1372,17 @@ apch_config_chk(const char *arpt_id, const char *rwy_id, double height_abv_thr,
 	if (height_abv_thr < win_ceil && height_abv_thr > win_floor &&
 	    (!gear_is_up() || !check_gear) &&
 	    clb_rate < GOAROUND_CLB_RATE_THRESH) {
-		dbg_log("apch_config_chk", 2, "check at %.0f/%.0f",
+		dbg_log(apch_config_chk, 2, "check at %.0f/%.0f",
 		    win_ceil, win_floor);
-		dbg_log("apch_config_chk", 2, "gpa_act = %.02f rwy_gpa = %.02f",
+		dbg_log(apch_config_chk, 2, "gpa_act = %.02f rwy_gpa = %.02f",
 		    gpa_act, rwy_gpa);
 		if (rwy_key_tbl_get(flap_ann_table, arpt_id, rwy_id) == 0 &&
 		    XPLMGetDataf(drs.flaprqst) < state.min_landing_flap) {
-			dbg_log("apch_config_chk", 1, "FLAPS: flaprqst = %f "
+			dbg_log(apch_config_chk, 1, "FLAPS: flaprqst = %f "
 			    "min_flap = %f", XPLMGetDataf(drs.flaprqst),
 			    state.min_landing_flap);
 			if (gpws_flaps_ovrd()) {
-				dbg_log("apch_config_chk", 1,
+				dbg_log(apch_config_chk, 1,
 				    "FLAPS: flaps ovrd active");
 			} else {
 				if (!critical) {
@@ -1408,11 +1408,11 @@ apch_config_chk(const char *arpt_id, const char *rwy_id, double height_abv_thr,
 		} else if (rwy_key_tbl_get(gpa_ann_table, arpt_id, rwy_id) ==
 		    0 && rwy_gpa != 0 &&
 		    gpa_act > gpa_limit(rwy_gpa, dist_from_thr)) {
-			dbg_log("apch_config_chk", 1, "TOO HIGH: "
+			dbg_log(apch_config_chk, 1, "TOO HIGH: "
 			    "gpa_act = %.02f gpa_limit = %.02f",
 			    gpa_act, gpa_limit(rwy_gpa, dist_from_thr));
 			if (gpws_terr_ovrd()) {
-				dbg_log("apch_config_chk", 1,
+				dbg_log(apch_config_chk, 1,
 				    "TOO HIGH: terr ovrd active");
 			} else {
 				if (!critical) {
@@ -1439,15 +1439,15 @@ apch_config_chk(const char *arpt_id, const char *rwy_id, double height_abv_thr,
 		} else if (rwy_key_tbl_get(spd_ann_table, arpt_id, rwy_id) ==
 		    0 && state.too_fast_enabled && XPLMGetDataf(drs.airspeed) >
 		    apch_spd_limit(height_abv_thr)) {
-			dbg_log("apch_config_chk", 1, "TOO FAST: "
+			dbg_log(apch_config_chk, 1, "TOO FAST: "
 			    "airspeed = %.0f apch_spd_limit = %.0f",
 			    XPLMGetDataf(drs.airspeed), apch_spd_limit(
 			    height_abv_thr));
 			if (gpws_terr_ovrd()) {
-				dbg_log("apch_config_chk", 1,
+				dbg_log(apch_config_chk, 1,
 				    "TOO FAST: terr ovrd active");
 			} else if (gpws_flaps_ovrd()) {
-				dbg_log("apch_config_chk", 1,
+				dbg_log(apch_config_chk, 1,
 				    "TOO FAST: flaps ovrd active");
 			} else {
 				if (!critical) {
@@ -1706,7 +1706,7 @@ altimeter_setting(void)
 
 	if (cur_arpt != NULL) {
 		const char *arpt_id = cur_arpt->icao;
-		dbg_log("altimeter", 2, "find_nearest_curarpt() = %s", arpt_id);
+		dbg_log(altimeter, 2, "find_nearest_curarpt() = %s", arpt_id);
 		state.TA = cur_arpt->TA;
 		state.TL = cur_arpt->TL;
 		state.TATL_field_elev = cur_arpt->refpt.elev;
@@ -1714,7 +1714,7 @@ altimeter_setting(void)
 			my_strlcpy(state.TATL_source, arpt_id,
 			    sizeof (state.TATL_source));
 			field_changed = B_TRUE;
-			dbg_log("altimeter", 1, "TATL_source: %s "
+			dbg_log(altimeter, 1, "TATL_source: %s "
 			    "TA: %d TL: %d field_elev: %d", arpt_id,
 			    state.TA, state.TL, state.TATL_field_elev);
 		}
@@ -1726,7 +1726,7 @@ altimeter_setting(void)
 		float outLat, outLon;
 		vect3_t pos_ecef = NULL_VECT3, arpt_ecef = NULL_VECT3;
 
-		dbg_log("altimeter", 2, "XPLMFindNavAid() = %d", arpt_ref);
+		dbg_log(altimeter, 2, "XPLMFindNavAid() = %d", arpt_ref);
 		if (arpt_ref != 0) {
 			XPLMGetNavAidInfo(arpt_ref, NULL, &outLat, &outLon,
 			    NULL, NULL, NULL, outID, NULL, NULL);
@@ -1746,7 +1746,7 @@ altimeter_setting(void)
 				cur_arpt = any_airport_at_coords(
 				    &state.airportdb, p);
 			if (cur_arpt != NULL) {
-				dbg_log("altimeter", 2, "fallback airport = %s",
+				dbg_log(altimeter, 2, "fallback airport = %s",
 				    cur_arpt->icao);
 			}
 		}
@@ -1758,7 +1758,7 @@ altimeter_setting(void)
 			my_strlcpy(state.TATL_source, cur_arpt->icao,
 			    sizeof (state.TATL_source));
 			field_changed = B_TRUE;
-			dbg_log("altimeter", 1, "TATL_source: %s "
+			dbg_log(altimeter, 1, "TATL_source: %s "
 			    "TA: %d TA: %d field_elev: %d", cur_arpt->icao,
 			    state.TA, state.TL, state.TATL_field_elev);
 		}
@@ -1766,7 +1766,7 @@ altimeter_setting(void)
 
 	if (state.TL == 0) {
 		if (field_changed)
-			dbg_log("altimeter", 1, "TL = 0");
+			dbg_log(altimeter, 1, "TL = 0");
 		if (state.TA != 0) {
 			if (XPLMGetDataf(drs.baro_sl) > STD_BARO_REF) {
 				state.TL = state.TA;
@@ -1775,13 +1775,13 @@ altimeter_setting(void)
 				state.TL = state.TA + 28 * (1013 - qnh);
 			}
 			if (field_changed)
-				dbg_log("altimeter", 1, "TL(auto) = %d",
+				dbg_log(altimeter, 1, "TL(auto) = %d",
 				    state.TL);
 		}
 	}
 	if (state.TA == 0) {
 		if (field_changed)
-			dbg_log("altimeter", 1, "TA(auto) = %d", state.TA);
+			dbg_log(altimeter, 1, "TA(auto) = %d", state.TA);
 		state.TA = state.TL;
 	}
 
@@ -1790,7 +1790,7 @@ altimeter_setting(void)
 	if (state.TA != 0 && elev > state.TA && state.TATL_state == TATL_STATE_ALT) {
 		state.TATL_transition = microclock();
 		state.TATL_state = TATL_STATE_FL;
-		dbg_log("altimeter", 1, "elev > TA (%d) transitioning "
+		dbg_log(altimeter, 1, "elev > TA (%d) transitioning "
 		    "state.TATL_state = fl", state.TA);
 	}
 
@@ -1803,7 +1803,7 @@ altimeter_setting(void)
 	    (state.TA == 0 || elev < state.TA) && state.TATL_state == TATL_STATE_FL) {
 		state.TATL_transition = microclock();
 		state.TATL_state = TATL_STATE_ALT;
-		dbg_log("altimeter", 1, "baro_alt < TL (%d) "
+		dbg_log(altimeter, 1, "baro_alt < TL (%d) "
 		    "transitioning state.TATL_state = alt", state.TL);
 	}
 
@@ -1828,7 +1828,7 @@ altimeter_setting(void)
 			    state.qfe_alt_enabled)
 				d_qfe = fabs(XPLMGetDataf(drs.baro_alt) -
 				    (elev - state.TATL_field_elev));
-			dbg_log("altimeter", 1, "alt check; d_qnh: %.1f "
+			dbg_log(altimeter, 1, "alt check; d_qnh: %.1f "
 			    " d_qfe: %.1f", d_qnh, d_qfe);
 			if (/* The set baro is out of bounds for QNH, OR */
 			    d_qnh > ALTIMETER_SETTING_QNH_ERR_LIMIT ||
@@ -1846,7 +1846,7 @@ altimeter_setting(void)
 		    now - state.TATL_transition > ALTM_SETTING_TIMEOUT) {
 			double d_ref = fabs(XPLMGetDataf(drs.baro_set) -
 			    STD_BARO_REF);
-			dbg_log("altimeter", 1, "fl check; d_ref: %.1f", d_ref);
+			dbg_log(altimeter, 1, "fl check; d_ref: %.1f", d_ref);
 			if (d_ref > ALTM_SETTING_BARO_ERR_LIMIT) {
 				msg_type_t *msg = NULL;
 				size_t msg_len = 0;
@@ -1922,7 +1922,7 @@ static void
 raas_exec(void)
 {
 	if (!xraas_is_on()) {
-		dbg_log("power_state", 1, "is_on = false");
+		dbg_log(power_state, 1, "is_on = false");
 		return;
 	}
 
@@ -1931,21 +1931,21 @@ raas_exec(void)
 	if (XPLMGetDataf(drs.rad_alt) > RADALT_FLARE_THRESH) {
 		if (!state.departed) {
 			state.departed = B_TRUE;
-			dbg_log("flt_state", 1, "state.departed = true");
+			dbg_log(flt_state, 1, "state.departed = true");
 		}
 		if (!state.arriving) {
 			state.arriving = B_TRUE;
-			dbg_log("flt_state", 1, "state.arriving = true");
+			dbg_log(flt_state, 1, "state.arriving = true");
 		}
 		if (state.long_landing_ann) {
-			dbg_log("ann_state", 1,
+			dbg_log(ann_state, 1,
 			    "state.long_landing_ann = false");
 			state.long_landing_ann = B_FALSE;
 		}
 	} else if (XPLMGetDataf(drs.rad_alt) < RADALT_GRD_THRESH) {
 		if (state.departed) {
-			dbg_log("flt_state", 1, "state.landing = true");
-			dbg_log("flt_state", 1, "state.departed = false");
+			dbg_log(flt_state, 1, "state.landing = true");
+			dbg_log(flt_state, 1, "state.departed = false");
 			state.landing = B_TRUE;
 		}
 		state.departed = B_FALSE;
@@ -1953,7 +1953,7 @@ raas_exec(void)
 			state.arriving = B_FALSE;
 	}
 	if (XPLMGetDataf(drs.gs) < SPEED_THRESH && state.long_landing_ann) {
-		dbg_log("ann_state", 1, "state.long_landing_ann = false");
+		dbg_log(ann_state, 1, "state.long_landing_ann = false");
 		state.long_landing_ann = B_FALSE;
 	}
 
@@ -2078,7 +2078,7 @@ xraas_init(void)
 	if (!state.enabled)
 		return;
 
-	dbg_log("startup", 1, "xraas_init");
+	dbg_log(startup, 1, "xraas_init");
 
 	if (!snd_sys_init(plugindir, &state))
 		goto errout;
@@ -2154,7 +2154,7 @@ xraas_fini(void)
 	if (!state.enabled)
 		return;
 
-	dbg_log("startup", 1, "xraas_fini");
+	dbg_log(startup, 1, "xraas_fini");
 
 	snd_sys_fini();
 

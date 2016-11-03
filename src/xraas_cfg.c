@@ -25,6 +25,8 @@
 
 #include "xraas_cfg.h"
 
+debug_config_t xraas_debug_config;
+
 static void
 reset_config(xraas_state_t *state)
 {
@@ -72,7 +74,7 @@ reset_config(xraas_state_t *state)
 
 	openal_set_shared_ctx(B_FALSE);
 
-	xraas_debug = 0;
+	memset(&xraas_debug_config, 0, sizeof (xraas_debug_config));
 }
 
 static void
@@ -104,57 +106,56 @@ process_conf(xraas_state_t *state, conf_t *conf)
 	bool_t shared_ctx = B_FALSE;
 	const char *str;
 
-#define	GET_CONF(type, varname) \
+#define	CONF_GET(type, varname) \
 	do { \
 		/* first try the new name, then the old one */ \
 		if (!conf_get_ ## type(conf, #varname, &state->varname)) \
 			(void) conf_get_ ## type(conf, "raas_" #varname, \
 			    &state->varname); \
 	} while (0)
-	GET_CONF(b, enabled);
-	GET_CONF(b, allow_helos);
-	GET_CONF(i, min_engines);
-	GET_CONF(i, min_mtow);
-	GET_CONF(b, auto_disable_notify);
-	GET_CONF(b, startup_notify);
-	GET_CONF(b, use_imperial);
-	GET_CONF(b, voice_female);
-	GET_CONF(d, voice_volume);
-	GET_CONF(b, use_tts);
-	GET_CONF(b, us_runway_numbers);
-	GET_CONF(i, min_takeoff_dist);
-	GET_CONF(i, min_landing_dist);
-	GET_CONF(i, min_rotation_dist);
-	GET_CONF(d, min_rotation_angle);
-	GET_CONF(i, stop_dist_cutoff);
-	GET_CONF(d, min_landing_flap);
-	GET_CONF(d, min_takeoff_flap);
-	GET_CONF(d, max_takeoff_flap);
-	GET_CONF(ll, on_rwy_warn_initial);
-	GET_CONF(ll, on_rwy_warn_repeat);
-	GET_CONF(i, on_rwy_warn_max_n);
-	GET_CONF(b, too_high_enabled);
-	GET_CONF(b, too_fast_enabled);
-	GET_CONF(d, gpa_limit_mult);
-	GET_CONF(d, gpa_limit_max);
-	GET_CONF(b, alt_setting_enabled);
-	GET_CONF(b, qnh_alt_enabled);
-	GET_CONF(b, qfe_alt_enabled);
-	GET_CONF(b, disable_ext_view);
-	GET_CONF(b, override_electrical);
-	GET_CONF(b, override_replay);
-	GET_CONF(b, speak_units);
-	GET_CONF(i, long_land_lim_abs);
-	GET_CONF(d, long_land_lim_fract);
-	GET_CONF(b, nd_alerts_enabled);
-	GET_CONF(i, nd_alert_filter);
-	GET_CONF(b, nd_alert_overlay_enabled);
-	GET_CONF(b, nd_alert_overlay_force);
-	GET_CONF(i, nd_alert_timeout);
-	GET_CONF(b, debug_graphical);
-#undef	GET_CONF
+	CONF_GET(b, enabled);
+	CONF_GET(b, allow_helos);
+	CONF_GET(i, min_engines);
+	CONF_GET(i, min_mtow);
+	CONF_GET(b, auto_disable_notify);
+	CONF_GET(b, startup_notify);
+	CONF_GET(b, use_imperial);
+	CONF_GET(b, voice_female);
+	CONF_GET(d, voice_volume);
+	CONF_GET(b, use_tts);
+	CONF_GET(b, us_runway_numbers);
+	CONF_GET(i, min_takeoff_dist);
+	CONF_GET(i, min_landing_dist);
+	CONF_GET(i, min_rotation_dist);
+	CONF_GET(d, min_rotation_angle);
+	CONF_GET(i, stop_dist_cutoff);
+	CONF_GET(d, min_landing_flap);
+	CONF_GET(d, min_takeoff_flap);
+	CONF_GET(d, max_takeoff_flap);
+	CONF_GET(ll, on_rwy_warn_initial);
+	CONF_GET(ll, on_rwy_warn_repeat);
+	CONF_GET(i, on_rwy_warn_max_n);
+	CONF_GET(b, too_high_enabled);
+	CONF_GET(b, too_fast_enabled);
+	CONF_GET(d, gpa_limit_mult);
+	CONF_GET(d, gpa_limit_max);
+	CONF_GET(b, alt_setting_enabled);
+	CONF_GET(b, qnh_alt_enabled);
+	CONF_GET(b, qfe_alt_enabled);
+	CONF_GET(b, disable_ext_view);
+	CONF_GET(b, override_electrical);
+	CONF_GET(b, override_replay);
+	CONF_GET(b, speak_units);
+	CONF_GET(i, long_land_lim_abs);
+	CONF_GET(d, long_land_lim_fract);
+	CONF_GET(b, nd_alerts_enabled);
+	CONF_GET(i, nd_alert_filter);
+	CONF_GET(b, nd_alert_overlay_enabled);
+	CONF_GET(b, nd_alert_overlay_force);
+	CONF_GET(i, nd_alert_timeout);
+	CONF_GET(b, debug_graphical);
+#undef	CONF_GET
 
-	conf_get_i(conf, "debug", &xraas_debug);
 	if (conf_get_b(conf, "shared_audio_ctx", &shared_ctx))
 		openal_set_shared_ctx(shared_ctx);
 
@@ -164,6 +165,25 @@ process_conf(xraas_state_t *state, conf_t *conf)
 	if (conf_get_str(conf, "gpws_inop_dr", &str))
 		my_strlcpy(state->GPWS_inop_dataref, str,
 		    sizeof (state->GPWS_inop_dataref));
+
+#define	CONF_GET_DEBUG(value) \
+	conf_get_i(conf, "debug_" #value, &xraas_debug_config.value)
+	CONF_GET_DEBUG(all);
+	CONF_GET_DEBUG(altimeter);
+	CONF_GET_DEBUG(ann_state);
+	CONF_GET_DEBUG(apch_config_chk);
+	CONF_GET_DEBUG(config);
+	CONF_GET_DEBUG(dbg_gui);
+	CONF_GET_DEBUG(flt_state);
+	CONF_GET_DEBUG(fs);
+	CONF_GET_DEBUG(nd_alert);
+	CONF_GET_DEBUG(power_state);
+	CONF_GET_DEBUG(rwy_key);
+	CONF_GET_DEBUG(snd);
+	CONF_GET_DEBUG(startup);
+	CONF_GET_DEBUG(tile);
+	CONF_GET_DEBUG(wav);
+#undef	CONF_GET_DEBUG
 }
 
 /*
@@ -182,7 +202,7 @@ load_config(xraas_state_t *state, const char *dirname)
 		conf_t *conf;
 		int errline;
 
-		dbg_log("config", 1, "loading config file: %s", cfgname);
+		dbg_log(config, 1, "loading config file: %s", cfgname);
 		if ((conf = parse_conf(cfg_f, &errline)) == NULL) {
 			log_init_msg(B_TRUE, INIT_ERR_MSG_TIMEOUT,
 			    5, "Configuration", "X-RAAS startup error: syntax "

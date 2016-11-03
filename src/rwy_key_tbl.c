@@ -90,7 +90,7 @@ rwy_key_tbl_remove_impl(avl_tree_t *tree, const char *name,
 
 	snprintf(srch.key, sizeof (srch.key), "%s/%s", arpt_id, rwy_id);
 	if ((key = avl_find(tree, &srch, NULL)) != NULL) {
-	        dbg_log("rwy_key", 1, "%s[%s/%s] = nil", name, arpt_id, rwy_id);
+	        dbg_log(rwy_key, 1, "%s[%s/%s] = nil", name, arpt_id, rwy_id);
 		avl_remove(tree, key);
 		free(key);
 	}
@@ -110,7 +110,7 @@ rwy_key_tbl_set_impl(avl_tree_t *tree, const char *name,
 		avl_insert(tree, key, where);
 	}
 	if (key->value != value) {
-		dbg_log("rwy_key", 1, "%s[%s/%s] = %d", name, arpt_id, rwy_id,
+		dbg_log(rwy_key, 1, "%s[%s/%s] = %d", name, arpt_id, rwy_id,
 		    value);
 		key->value = value;
         }
@@ -141,7 +141,7 @@ rwy_key_tbl_remove_distant_impl(avl_tree_t *tree, const char *name,
 			}
 		}
 		if (!found) {
-			dbg_log("rwy_key", 1, "%s[%s] = nil", name, key->key);
+			dbg_log(rwy_key, 1, "%s[%s] = nil", name, key->key);
 			avl_remove(tree, key);
 			free(key);
 		}

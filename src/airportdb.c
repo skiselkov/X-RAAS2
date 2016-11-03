@@ -240,7 +240,7 @@ geo_link_airport(airportdb_t *db, airport_t *arpt)
 	VERIFY(avl_find(&tile->arpts, arpt, &where) == NULL);
 	avl_insert(&tile->arpts, arpt, where);
 	arpt->geo_linked = B_TRUE;
-	dbg_log("tile", 2, "geo_xref\t%s\t%f\t%f", arpt->icao, arpt->refpt.lat,
+	dbg_log(tile, 2, "geo_xref\t%s\t%f\t%f", arpt->icao, arpt->refpt.lat,
 	    arpt->refpt.lon);
 }
 
@@ -257,7 +257,7 @@ geo_unlink_airport(airportdb_t *db, airport_t *arpt)
 	ASSERT(avl_find(&tile->arpts, arpt, NULL) == arpt);
 	avl_remove(&tile->arpts, arpt);
 	arpt->geo_linked = B_FALSE;
-	dbg_log("tile", 2, "geo_unxref\t%s\t%f\t%f", arpt->icao,
+	dbg_log(tile, 2, "geo_unxref\t%s\t%f\t%f", arpt->icao,
 	    arpt->refpt.lat, arpt->refpt.lon);
 }
 
@@ -403,7 +403,7 @@ read_apt_dat(airportdb_t *db, const char *apt_dat_fname)
 	char **comps;
 	size_t ncomps;
 
-	dbg_log("tile", 2, "read_apt_dat(\"%s\")", apt_dat_fname);
+	dbg_log(tile, 2, "read_apt_dat(\"%s\")", apt_dat_fname);
 
 	apt_dat_f = fopen(apt_dat_fname, "r");
 	if (apt_dat_f == NULL) {
@@ -433,7 +433,7 @@ read_apt_dat(airportdb_t *db, const char *apt_dat_fname)
 
 			comps = strsplit(line, " ", B_TRUE, &ncomps);
 			if (ncomps < 5) {
-				dbg_log("tile", 0, "%s:%d: malformed airport "
+				dbg_log(tile, 0, "%s:%d: malformed airport "
 				    "entry, skipping. Offending line:\n%s",
 				    apt_dat_fname, line_num, line);
 				free_strlist(comps, ncomps);
@@ -480,7 +480,7 @@ read_apt_dat(airportdb_t *db, const char *apt_dat_fname)
 
 			comps = strsplit(line, " ", B_TRUE, &ncomps);
 			if (ncomps < 8 + 9 + 5) {
-				dbg_log("tile", 0, "%s:%d: malformed runway "
+				dbg_log(tile, 0, "%s:%d: malformed runway "
 				    "entry, skipping. Offending line:\n%s",
 				    apt_dat_fname, line_num, line);
 				free_strlist(comps, ncomps);
@@ -719,7 +719,7 @@ load_airports_txt(airportdb_t *db)
 
 			comps = strsplit(line, ",", B_FALSE, &ncomps);
 			if (ncomps < 8) {
-				dbg_log("tile", 0, "%s:%d: malformed airport "
+				dbg_log(tile, 0, "%s:%d: malformed airport "
 				    "entry, skipping. Offending line:\n%s",
 				    fname, line_num, line);
 				free_strlist(comps, ncomps);
@@ -750,7 +750,7 @@ load_airports_txt(airportdb_t *db)
 
 			comps = strsplit(line, ",", B_FALSE, &ncomps);
 			if (ncomps < 13) {
-				dbg_log("tile", 0, "%s:%d: malformed runway "
+				dbg_log(tile, 0, "%s:%d: malformed runway "
 				    "entry, skipping. Offending line:\n%s",
 				    fname, line_num, line);
 				free_strlist(comps, ncomps);
@@ -816,10 +816,10 @@ recreate_apt_dat_cache(airportdb_t *db)
 	if (version == XRAAS_apt_dat_cache_version) {
 		/* cache version current, no need to rebuild it */
 		free(version_filename);
-		dbg_log("tile", 1, "X-RAAS_apt_dat_cache up to date");
+		dbg_log(tile, 1, "X-RAAS_apt_dat_cache up to date");
 		return (B_TRUE);
 	}
-	dbg_log("tile", 1, "X-RAAS_apt_dat_cache out of date");
+	dbg_log(tile, 1, "X-RAAS_apt_dat_cache out of date");
 
 	apt_dat_files = find_all_apt_dats(db, &n_apt_dat_files);
 
@@ -1264,7 +1264,7 @@ unload_distant_airport_tiles_i(airportdb_t *db, tile_t *tile, geo_pos2_t my_pos)
 	if (IS_NULL_GEO_POS(my_pos) ||
 	    fabs(tile->pos.lat - floor(my_pos.lat)) > 1 ||
 	    lon_delta(tile->pos.lon, floor(my_pos.lon)) > 1) {
-		dbg_log("tile", 1, "unloading tile %.0f x %.0f",
+		dbg_log(tile, 1, "unloading tile %.0f x %.0f",
 		    tile->pos.lat, tile->pos.lon);
 		free_tile(db, tile, B_TRUE);
 	}

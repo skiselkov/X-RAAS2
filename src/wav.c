@@ -60,7 +60,7 @@ ctx_save(void)
 		return;
 
 	ASSERT(!ctx_saved);
-	dbg_log("wav", 1, "ctx_save()");
+	dbg_log(wav, 1, "ctx_save()");
 	old_ctx = alcGetCurrentContext();
 	alcMakeContextCurrent(my_ctx);
 	ctx_saved = B_TRUE;
@@ -73,7 +73,7 @@ ctx_restore(void)
 		return;
 
 	ASSERT(ctx_saved);
-	dbg_log("wav", 1, "ctx_restore()");
+	dbg_log(wav, 1, "ctx_restore()");
 	if (old_ctx != NULL)
 		alcMakeContextCurrent(old_ctx);
 	ctx_saved = B_FALSE;
@@ -83,14 +83,14 @@ void
 openal_set_shared_ctx(bool_t flag)
 {
 	ASSERT(!openal_inited);
-	dbg_log("wav", 1, "openal_set_shared_ctx = %d", flag);
+	dbg_log(wav, 1, "openal_set_shared_ctx = %d", flag);
 	use_shared = flag;
 }
 
 bool_t
 openal_init(void)
 {
-	dbg_log("wav", 1, "openal_init");
+	dbg_log(wav, 1, "openal_init");
 
 	ASSERT(!openal_inited);
 
@@ -134,7 +134,7 @@ openal_init(void)
 void
 openal_fini()
 {
-	dbg_log("wav", 1, "openal_fini");
+	dbg_log(wav, 1, "openal_fini");
 
 	if (!openal_inited)
 		return;
@@ -169,7 +169,7 @@ wav_load(const char *filename, const char *descr_name)
 
 	ASSERT(openal_inited);
 
-	dbg_log("wav", 1, "Loading wav file %s", filename);
+	dbg_log(wav, 1, "Loading wav file %s", filename);
 
 	if ((fp = fopen(filename, "rb")) == NULL) {
 		logMsg("Error loading WAV file \"%s\": can't open file.",
@@ -293,7 +293,7 @@ wav_load(const char *filename, const char *descr_name)
 
 	ctx_restore();
 
-	dbg_log("wav", 1, "wav load complete, duration %.2fs", wav->duration);
+	dbg_log(wav, 1, "wav load complete, duration %.2fs", wav->duration);
 
 	riff_free_chunk(riff);
 	free(filebuf);
@@ -321,7 +321,7 @@ wav_free(wav_t *wav)
 	if (wav == NULL)
 		return;
 
-	dbg_log("wav", 1, "wav_free %s", wav->name);
+	dbg_log(wav, 1, "wav_free %s", wav->name);
 
 	ASSERT(openal_inited);
 
@@ -350,7 +350,7 @@ wav_set_gain(wav_t *wav, float gain)
 	if (wav == NULL || wav->alsrc == 0)
 		return;
 
-	dbg_log("wav", 1, "wav_set_gain %s %f", wav->name, (double)gain);
+	dbg_log(wav, 1, "wav_set_gain %s %f", wav->name, (double)gain);
 
 	ASSERT(openal_inited);
 
@@ -376,7 +376,7 @@ wav_play(wav_t *wav)
 	if (wav == NULL)
 		return;
 
-	dbg_log("wav", 1, "wav_play %s", wav->name);
+	dbg_log(wav, 1, "wav_play %s", wav->name);
 
 	ASSERT(openal_inited);
 
@@ -399,7 +399,7 @@ wav_stop(wav_t *wav)
 	if (wav == NULL)
 		return;
 
-	dbg_log("wav", 1, "wav_stop %s", wav->name);
+	dbg_log(wav, 1, "wav_stop %s", wav->name);
 
 	if (wav->alsrc == 0)
 		return;

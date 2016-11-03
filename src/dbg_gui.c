@@ -138,7 +138,7 @@ draw_cb(XPLMDrawingPhase phase, int before, void *refcon)
 void
 dbg_gui_init(void)
 {
-	dbg_log("dbg_gui", 1, "init");
+	dbg_log(dbg_gui, 1, "init");
 
 	ASSERT(!inited);
 
@@ -155,7 +155,7 @@ dbg_gui_init(void)
 void
 dbg_gui_fini(void)
 {
-	dbg_log("dbg_gui", 1, "fini");
+	dbg_log(dbg_gui, 1, "fini");
 
 	if (!inited)
 		return;

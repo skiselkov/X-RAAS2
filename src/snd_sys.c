@@ -98,7 +98,7 @@ resolve_priority_ordering(ann_t *ann, msg_prio_t new_prio)
 {
 	if (ann->prio > new_prio) {
 		/* current message overrides us, be quiet */
-		dbg_log("snd", 1, "priority too low, suppressing.");
+		dbg_log(snd, 1, "priority too low, suppressing.");
 		return (-1);
 	}
 	if (ann->prio == new_prio) {
@@ -107,7 +107,7 @@ resolve_priority_ordering(ann_t *ann, msg_prio_t new_prio)
 	}
 
 	/* we override the queue head, remove it and retry */
-	dbg_log("snd", 1, "priority higher, stopping current annunciation.");
+	dbg_log(snd, 1, "priority higher, stopping current annunciation.");
 	list_remove(&playback_queue, ann);
 	if (ann->cur_msg != -1)
 		wav_stop(voice_msgs[ann->msgs[ann->cur_msg]].wav);
@@ -131,7 +131,7 @@ play_msg(msg_type_t *msg, size_t msg_len, msg_prio_t prio)
 		buf = malloc(buflen + 1);
 		for (size_t i = 0; i < msg_len; i++)
 			strcat(buf, voice_msgs[msg[i]].text);
-		dbg_log("tts", 1, "TTS: \"%s\"", buf);
+		dbg_log(snd, 1, "TTS: \"%s\"", buf);
 		XPLMSpeakString(buf);
 		free(buf);
 		return;
@@ -225,12 +225,12 @@ snd_sched_cb(float elapsed_since_last_call, float elapsed_since_last_floop,
 	 * the cockpit and AC power is on.
 	 */
 	if (view_is_ext && (!view_is_external() || !state->disable_ext_view)) {
-		dbg_log("snd_sched", 1, "view has moved inside, unmuting");
+		dbg_log(snd, 1, "view has moved inside, unmuting");
 		set_sound_on(B_TRUE);
 		view_is_ext = B_FALSE;
 	} else if (!view_is_ext && view_is_external() &&
 	    state->disable_ext_view) {
-		dbg_log("snd_sched", 1, "view has moved outside, muting");
+		dbg_log(snd, 1, "view has moved outside, muting");
 		set_sound_on(B_FALSE);
 		view_is_ext = B_TRUE;
 	}
@@ -241,7 +241,7 @@ snd_sched_cb(float elapsed_since_last_call, float elapsed_since_last_floop,
 	 */
 	if (GPWS_has_priority()) {
 		if (ann->cur_msg >= 0) {
-			dbg_log("snd", 1, "GPWS priority override, pausing");
+			dbg_log(snd, 1, "GPWS priority override, pausing");
 			wav_stop(voice_msgs[ann->msgs[ann->cur_msg]].wav);
 			ann->cur_msg = -1;
 		}
@@ -250,7 +250,7 @@ snd_sched_cb(float elapsed_since_last_call, float elapsed_since_last_floop,
 
 	/* Stop audio when power is down and drain the queue. */
 	if (!xraas_is_on()) {
-		dbg_log("snd_sched", 1, "lost power, stopping sound");
+		dbg_log(snd, 1, "lost power, stopping sound");
 		if (ann->cur_msg >= 0)
 			wav_stop(voice_msgs[ann->msgs[ann->cur_msg]].wav);
 		do {
@@ -287,7 +287,7 @@ snd_sys_init(const char *plugindir, const xraas_state_t *global_conf)
 {
 	const char *gender_dir;
 
-	dbg_log("snd_sys", 1, "snd_sys_init");
+	dbg_log(snd, 1, "snd_sys_init");
 
 	ASSERT(!inited);
 
@@ -340,7 +340,7 @@ errout:
 void
 snd_sys_fini(void)
 {
-	dbg_log("snd_sys", 1, "snd_sys_fini");
+	dbg_log(snd, 1, "snd_sys_fini");
 
 	if (!inited)
 		return;

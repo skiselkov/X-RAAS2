@@ -27,6 +27,26 @@
 extern "C" {
 #endif
 
+typedef struct {
+	int all;
+	int altimeter;
+	int ann_state;
+	int apch_config_chk;
+	int config;
+	int dbg_gui;
+	int flt_state;
+	int fs;
+	int nd_alert;
+	int power_state;
+	int rwy_key;
+	int snd;
+	int startup;
+	int tile;
+	int wav;
+} debug_config_t;
+
+extern debug_config_t xraas_debug_config;
+
 /*
  * This lets us chop out the basename (last path component) from __FILE__
  * at compile time. This works on GCC and Clang. The fallback mechanism
@@ -46,11 +66,12 @@ void log_impl(const char *filename, int line, const char *fmt, ...)
 void log_impl_v(const char *filename, int line, const char *fmt, va_list ap);
 void log_backtrace(void);
 
-#define	dbg_log(...) \
-	dbg_log_impl(log_basename(__FILE__), __LINE__, __VA_ARGS__)
-extern int xraas_debug;
-void dbg_log_impl(const char *filename, int line, const char *name, int level,
-    const char *fmt, ...) PRINTF_ATTR(5);
+#define	dbg_log(class, level, ...) \
+	do { \
+		if (xraas_debug_config.class >= level || \
+		    xraas_debug_config.all >= level) \
+			logMsg("DEBUG[" #class "]: " __VA_ARGS__); \
+	} while (0)
 
 #ifdef __cplusplus
 }

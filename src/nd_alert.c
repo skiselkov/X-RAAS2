@@ -134,7 +134,7 @@ alert_sched_cb(float elapsed_since_last_call, float elapsed_since_last_floop,
 void
 ND_alerts_init(const xraas_state_t *conf_state)
 {
-	dbg_log("ND_alert", 1, "ND_alerts_init");
+	dbg_log(nd_alert, 1, "ND_alerts_init");
 
 	ASSERT(!inited);
 
@@ -166,7 +166,7 @@ ND_alerts_init(const xraas_state_t *conf_state)
 void
 ND_alerts_fini()
 {
-	dbg_log("ND_alert", 1, "ND_alerts_fini");
+	dbg_log(nd_alert, 1, "ND_alerts_fini");
 
 	if (!inited)
 		return;
@@ -190,11 +190,11 @@ ND_alert(nd_alert_msg_type_t msg, nd_alert_level_t level, const char *rwy_id,
 	if (!state->nd_alerts_enabled)
 		return;
 
-	dbg_log("ND_alert", 1, "msg: %d level: %d rwy_ID: %s dist: %d",
+	dbg_log(nd_alert, 1, "msg: %d level: %d rwy_ID: %s dist: %d",
 	    msg, level, rwy_id, dist);
 
 	if (level < (nd_alert_level_t)state->nd_alert_filter) {
-		dbg_log("ND_alert", 2, "suppressed due to filter setting");
+		dbg_log(nd_alert, 2, "suppressed due to filter setting");
 		return;
 	}
 

@@ -427,7 +427,7 @@ bool_t
 create_directory(const char *dirname)
 {
 	ASSERT(dirname != NULL);
-	dbg_log("fs", 1, "create_directory: %s", dirname);
+	dbg_log(fs, 1, "create_directory: %s", dirname);
 #if	IBM
 	DWORD err;
 	int len = strlen(dirname);
@@ -525,7 +525,7 @@ errout:
 bool_t
 remove_directory(const char *dirname)
 {
-	dbg_log("fs", 1, "remove_directory: %s", dirname);
+	dbg_log(fs, 1, "remove_directory: %s", dirname);
 #if	IBM
 	TCHAR dirnameT[strlen(dirname) + 1];
 
