@@ -763,7 +763,6 @@ ground_runway_approach(void)
 		    arpt != NULL; arpt = list_next(state.cur_arpts, arpt))
 			in_prox += ground_runway_approach_arpt(arpt, vel_v);
 	} else {
-		logMsg("clearing");
 		for (const airport_t *arpt = list_head(state.cur_arpts);
 		    arpt != NULL; arpt = list_next(state.cur_arpts, arpt)) {
 			reset_airport_rwy_table(&state.apch_rwy_ann, arpt);
