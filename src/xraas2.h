@@ -22,6 +22,7 @@
 #include "avl.h"
 #include "geom.h"
 #include "list.h"
+#include "rwy_key_tbl.h"
 #include "types.h"
 
 #ifdef	__cplusplus
@@ -91,21 +92,21 @@ typedef struct xraas_state {
 	bool_t		debug_graphical;
 	bool_t		debug;
 
-	avl_tree_t	on_rwy_ann;
-	avl_tree_t	apch_rwy_ann;
+	rwy_key_tbl_t	on_rwy_ann;
+	rwy_key_tbl_t	apch_rwy_ann;
 	bool_t		apch_rwys_ann;		/* when multiple met criteria */
-	avl_tree_t	air_apch_rwy_ann;
+	rwy_key_tbl_t	air_apch_rwy_ann;
 	bool_t		air_apch_rwys_ann;	/* when multiple met criteria */
 	bool_t		air_apch_short_rwy_ann;
-	avl_tree_t	air_apch_flap1_ann;
-	avl_tree_t	air_apch_flap2_ann;
-	avl_tree_t	air_apch_flap3_ann;
-	avl_tree_t	air_apch_gpa1_ann;
-	avl_tree_t	air_apch_gpa2_ann;
-	avl_tree_t	air_apch_gpa3_ann;
-	avl_tree_t	air_apch_spd1_ann;
-	avl_tree_t	air_apch_spd2_ann;
-	avl_tree_t	air_apch_spd3_ann;
+	rwy_key_tbl_t	air_apch_flap1_ann;
+	rwy_key_tbl_t	air_apch_flap2_ann;
+	rwy_key_tbl_t	air_apch_flap3_ann;
+	rwy_key_tbl_t	air_apch_gpa1_ann;
+	rwy_key_tbl_t	air_apch_gpa2_ann;
+	rwy_key_tbl_t	air_apch_gpa3_ann;
+	rwy_key_tbl_t	air_apch_spd1_ann;
+	rwy_key_tbl_t	air_apch_spd2_ann;
+	rwy_key_tbl_t	air_apch_spd3_ann;
 	bool_t		on_twy_ann;
 	bool_t		long_landing_ann;
 	bool_t		short_rwy_takeoff_chk;
@@ -114,7 +115,7 @@ typedef struct xraas_state {
 	bool_t		off_rwy_ann;
 	char		rejected_takeoff[8];
 
-	avl_tree_t	accel_stop_max_spd;
+	rwy_key_tbl_t	accel_stop_max_spd;
 	int		accel_stop_ann_initial;
 
 	bool_t		departed;

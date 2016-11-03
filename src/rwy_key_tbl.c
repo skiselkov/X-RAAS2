@@ -55,63 +55,74 @@ compar(const void *a, const void *b)
 }
 
 void
-rwy_key_tbl_create(avl_tree_t *tree)
+rwy_key_tbl_create(rwy_key_tbl_t *tbl, const char *name)
 {
-	avl_create(tree, compar, sizeof (rwy_key_t),
+	dbg_log(rwy_key, 2, "create(%s)", name);
+	avl_create(&tbl->tree, compar, sizeof (rwy_key_t),
 	    offsetof(rwy_key_t, node));
+	tbl->name = strdup(name);
 }
 
-void
-rwy_key_tbl_destroy(avl_tree_t *tree)
+static void
+rwy_key_tbl_contents_destroy(rwy_key_tbl_t *tbl)
 {
 	void *cookie = NULL;
 	rwy_key_t *key;
 
-	while ((key = avl_destroy_nodes(tree, &cookie)) != NULL)
+	while ((key = avl_destroy_nodes(&tbl->tree, &cookie)) != NULL)
 		free(key);
-	avl_destroy(tree);
 }
 
 void
-rwy_key_tbl_empty(avl_tree_t *tree)
+rwy_key_tbl_destroy(rwy_key_tbl_t *tbl)
 {
-	for (rwy_key_t *key; (key = avl_first(tree)) != NULL;) {
-		avl_remove(tree, key);
-		free(key);
-	}
+	dbg_log(rwy_key, 2, "destroy(%s)", tbl->name);
+	rwy_key_tbl_contents_destroy(tbl);
+	avl_destroy(&tbl->tree);
+	free(tbl->name);
+}
+
+void
+rwy_key_tbl_empty(rwy_key_tbl_t *tbl)
+{
+	dbg_log(rwy_key, 2, "empty(%s)", tbl->name);
+	rwy_key_tbl_contents_destroy(tbl);
+	avl_destroy(&tbl->tree);
+	avl_create(&tbl->tree, compar, sizeof (rwy_key_t),
+	    offsetof(rwy_key_t, node));
 }
 
 
 void
-rwy_key_tbl_remove_impl(avl_tree_t *tree, const char *name,
-    const char *arpt_id, const char *rwy_id)
+rwy_key_tbl_remove(rwy_key_tbl_t *tbl, const char *arpt_id, const char *rwy_id)
 {
 	rwy_key_t srch, *key;
 
 	snprintf(srch.key, sizeof (srch.key), "%s/%s", arpt_id, rwy_id);
-	if ((key = avl_find(tree, &srch, NULL)) != NULL) {
-	        dbg_log(rwy_key, 1, "%s[%s/%s] = nil", name, arpt_id, rwy_id);
-		avl_remove(tree, key);
+	if ((key = avl_find(&tbl->tree, &srch, NULL)) != NULL) {
+		dbg_log(rwy_key, 1, "%s[%s/%s] = nil", tbl->name, arpt_id,
+		    rwy_id);
+		avl_remove(&tbl->tree, key);
 		free(key);
 	}
 }
 
 void
-rwy_key_tbl_set_impl(avl_tree_t *tree, const char *name,
-    const char *arpt_id, const char *rwy_id, int value)
+rwy_key_tbl_set(rwy_key_tbl_t *tbl, const char *arpt_id, const char *rwy_id,
+    int value)
 {
 	rwy_key_t srch, *key;
 	avl_index_t where;
 
 	snprintf(srch.key, sizeof (srch.key), "%s/%s", arpt_id, rwy_id);
-	if ((key = avl_find(tree, &srch, &where)) == NULL) {
+	if ((key = avl_find(&tbl->tree, &srch, &where)) == NULL) {
 		key = calloc(1, sizeof (*key));
 		snprintf(key->key, sizeof (key->key), "%s/%s", arpt_id, rwy_id);
-		avl_insert(tree, key, where);
+		avl_insert(&tbl->tree, key, where);
 	}
 	if (key->value != value) {
-		dbg_log(rwy_key, 1, "%s[%s/%s] = %d", name, arpt_id, rwy_id,
-		    value);
+		dbg_log(rwy_key, 1, "%s[%s/%s] = %d", tbl->name, arpt_id,
+		    rwy_id, value);
 		key->value = value;
         }
 }
@@ -124,15 +135,14 @@ rwy_key_tbl_set_impl(avl_tree_t *tree, const char *name,
  * runway proximity areas.
  */
 void
-rwy_key_tbl_remove_distant_impl(avl_tree_t *tree, const char *name,
-    const list_t *curarpt_list)
+rwy_key_tbl_remove_distant(rwy_key_tbl_t *tbl, const list_t *curarpt_list)
 {
 	rwy_key_t *key, *next;
 
-	for (key = avl_first(tree); key != NULL; key = next) {
+	for (key = avl_first(&tbl->tree); key != NULL; key = next) {
 		bool_t found = B_FALSE;
 
-		next = AVL_NEXT(tree, key);
+		next = AVL_NEXT(&tbl->tree, key);
 		for (const airport_t *arpt = list_head(curarpt_list);
 		    arpt != NULL; arpt = list_next(curarpt_list, arpt)) {
 			if (strstr(key->key, arpt->icao) == key->key) {
@@ -141,21 +151,22 @@ rwy_key_tbl_remove_distant_impl(avl_tree_t *tree, const char *name,
 			}
 		}
 		if (!found) {
-			dbg_log(rwy_key, 1, "%s[%s] = nil", name, key->key);
-			avl_remove(tree, key);
+			dbg_log(rwy_key, 1, "%s[%s] = nil", tbl->name,
+			    key->key);
+			avl_remove(&tbl->tree, key);
 			free(key);
 		}
 	}
 }
 
 int
-rwy_key_tbl_get(avl_tree_t *tree, const char *arpt_id, const char *rwy_id)
+rwy_key_tbl_get(rwy_key_tbl_t *tbl, const char *arpt_id, const char *rwy_id)
 {
 	rwy_key_t srch, *key;
 	avl_index_t where;
 
 	snprintf(srch.key, sizeof (srch.key), "%s/%s", arpt_id, rwy_id);
-	if ((key = avl_find(tree, &srch, &where)) == NULL)
+	if ((key = avl_find(&tbl->tree, &srch, &where)) == NULL)
 		return (0);
 	return (key->value);
 }

@@ -19,6 +19,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <time.h>
+
 #if	IBM
 #include <windows.h>
 #include <dbghelp.h>
@@ -33,12 +35,8 @@
 #include "log.h"
 
 #define	PREFIX		"X-RAAS"
-#if	IBM
-#define	PREFIX_FMT	"%s[%s:%d]: ", PREFIX, strrchr(filename, '\\') ? \
-	strrchr(filename, '\\') + 1 : filename, line
-#else	/* !IBM */
-#define	PREFIX_FMT	"%s[%s:%d]: ", PREFIX, filename, line
-#endif	/* !IBM */
+#define	DATE_FMT	"%Y-%m-%d %H:%M:%S"
+#define	PREFIX_FMT	"%s %s[%s:%d]: ", timedate, PREFIX, filename, line
 
 debug_config_t xraas_debug_config;
 
@@ -55,8 +53,15 @@ void
 log_impl_v(const char *filename, int line, const char *fmt, va_list ap)
 {
 	va_list ap_copy;
+	char timedate[32];
 	char *buf;
 	size_t prefix_len, len;
+	struct tm *tm;
+	time_t t;
+
+	t = time(NULL);
+	tm = localtime(&t);
+	VERIFY(strftime(timedate, sizeof (timedate), DATE_FMT, tm) != 0);
 
 	prefix_len = snprintf(NULL, 0, PREFIX_FMT);
 	va_copy(ap_copy, ap);
