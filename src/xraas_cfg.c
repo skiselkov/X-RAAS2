@@ -171,13 +171,13 @@ process_conf(xraas_state_t *state, conf_t *conf)
 	CONF_GET_DEBUG(all);
 	CONF_GET_DEBUG(altimeter);
 	CONF_GET_DEBUG(ann_state);
-	CONF_GET_DEBUG(apch_config_chk);
+	CONF_GET_DEBUG(apch_cfg_chk);
 	CONF_GET_DEBUG(config);
 	CONF_GET_DEBUG(dbg_gui);
 	CONF_GET_DEBUG(flt_state);
 	CONF_GET_DEBUG(fs);
 	CONF_GET_DEBUG(nd_alert);
-	CONF_GET_DEBUG(power_state);
+	CONF_GET_DEBUG(pwr_state);
 	CONF_GET_DEBUG(rwy_key);
 	CONF_GET_DEBUG(snd);
 	CONF_GET_DEBUG(startup);

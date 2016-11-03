@@ -1357,7 +1357,7 @@ apch_spd_limit(double height_abv_thr)
 }
 
 static bool_t
-apch_config_chk(const char *arpt_id, const char *rwy_id, double height_abv_thr,
+apch_cfg_chk(const char *arpt_id, const char *rwy_id, double height_abv_thr,
     double gpa_act, double rwy_gpa, double win_ceil, double win_floor,
     msg_type_t **msg, size_t *msg_len, avl_tree_t *flap_ann_table,
     avl_tree_t *gpa_ann_table, avl_tree_t *spd_ann_table, bool_t critical,
@@ -1372,17 +1372,17 @@ apch_config_chk(const char *arpt_id, const char *rwy_id, double height_abv_thr,
 	if (height_abv_thr < win_ceil && height_abv_thr > win_floor &&
 	    (!gear_is_up() || !check_gear) &&
 	    clb_rate < GOAROUND_CLB_RATE_THRESH) {
-		dbg_log(apch_config_chk, 2, "check at %.0f/%.0f",
+		dbg_log(apch_cfg_chk, 2, "check at %.0f/%.0f",
 		    win_ceil, win_floor);
-		dbg_log(apch_config_chk, 2, "gpa_act = %.02f rwy_gpa = %.02f",
+		dbg_log(apch_cfg_chk, 2, "gpa_act = %.02f rwy_gpa = %.02f",
 		    gpa_act, rwy_gpa);
 		if (rwy_key_tbl_get(flap_ann_table, arpt_id, rwy_id) == 0 &&
 		    XPLMGetDataf(drs.flaprqst) < state.min_landing_flap) {
-			dbg_log(apch_config_chk, 1, "FLAPS: flaprqst = %f "
+			dbg_log(apch_cfg_chk, 1, "FLAPS: flaprqst = %f "
 			    "min_flap = %f", XPLMGetDataf(drs.flaprqst),
 			    state.min_landing_flap);
 			if (gpws_flaps_ovrd()) {
-				dbg_log(apch_config_chk, 1,
+				dbg_log(apch_cfg_chk, 1,
 				    "FLAPS: flaps ovrd active");
 			} else {
 				if (!critical) {
@@ -1408,11 +1408,11 @@ apch_config_chk(const char *arpt_id, const char *rwy_id, double height_abv_thr,
 		} else if (rwy_key_tbl_get(gpa_ann_table, arpt_id, rwy_id) ==
 		    0 && rwy_gpa != 0 &&
 		    gpa_act > gpa_limit(rwy_gpa, dist_from_thr)) {
-			dbg_log(apch_config_chk, 1, "TOO HIGH: "
+			dbg_log(apch_cfg_chk, 1, "TOO HIGH: "
 			    "gpa_act = %.02f gpa_limit = %.02f",
 			    gpa_act, gpa_limit(rwy_gpa, dist_from_thr));
 			if (gpws_terr_ovrd()) {
-				dbg_log(apch_config_chk, 1,
+				dbg_log(apch_cfg_chk, 1,
 				    "TOO HIGH: terr ovrd active");
 			} else {
 				if (!critical) {
@@ -1439,15 +1439,15 @@ apch_config_chk(const char *arpt_id, const char *rwy_id, double height_abv_thr,
 		} else if (rwy_key_tbl_get(spd_ann_table, arpt_id, rwy_id) ==
 		    0 && state.too_fast_enabled && XPLMGetDataf(drs.airspeed) >
 		    apch_spd_limit(height_abv_thr)) {
-			dbg_log(apch_config_chk, 1, "TOO FAST: "
+			dbg_log(apch_cfg_chk, 1, "TOO FAST: "
 			    "airspeed = %.0f apch_spd_limit = %.0f",
 			    XPLMGetDataf(drs.airspeed), apch_spd_limit(
 			    height_abv_thr));
 			if (gpws_terr_ovrd()) {
-				dbg_log(apch_config_chk, 1,
+				dbg_log(apch_cfg_chk, 1,
 				    "TOO FAST: terr ovrd active");
 			} else if (gpws_flaps_ovrd()) {
-				dbg_log(apch_config_chk, 1,
+				dbg_log(apch_cfg_chk, 1,
 				    "TOO FAST: flaps ovrd active");
 			} else {
 				if (!critical) {
@@ -1512,17 +1512,17 @@ air_runway_approach_arpt_rwy(const airport_t *arpt, const runway_t *rwy,
 		else
 			gpa_act = 0;
 
-		if (apch_config_chk(arpt_id, rwy_id, alt - telev,
+		if (apch_cfg_chk(arpt_id, rwy_id, alt - telev,
 		    gpa_act, rwy_gpa, RWY_APCH_FLAP1_THRESH,
 		    RWY_APCH_FLAP2_THRESH, &msg, &msg_len,
 		    &state.air_apch_flap1_ann, &state.air_apch_gpa1_ann,
 		    &state.air_apch_spd1_ann, B_FALSE, B_TRUE, dist, B_TRUE) ||
-		    apch_config_chk(arpt_id, rwy_id, alt - telev,
+		    apch_cfg_chk(arpt_id, rwy_id, alt - telev,
 		    gpa_act, rwy_gpa, RWY_APCH_FLAP2_THRESH,
 		    RWY_APCH_FLAP3_THRESH, &msg, &msg_len,
 		    &state.air_apch_flap2_ann, &state.air_apch_gpa2_ann,
 		    &state.air_apch_spd2_ann, B_FALSE, B_FALSE, dist, B_FALSE) ||
-		    apch_config_chk(arpt_id, rwy_id, alt - telev,
+		    apch_cfg_chk(arpt_id, rwy_id, alt - telev,
 		    gpa_act, rwy_gpa, RWY_APCH_FLAP3_THRESH,
 		    RWY_APCH_FLAP4_THRESH, &msg, &msg_len,
 		    &state.air_apch_flap3_ann, &state.air_apch_gpa3_ann,
@@ -1922,7 +1922,7 @@ static void
 raas_exec(void)
 {
 	if (!xraas_is_on()) {
-		dbg_log(power_state, 1, "is_on = false");
+		dbg_log(pwr_state, 1, "is_on = false");
 		return;
 	}
 

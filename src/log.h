@@ -31,13 +31,13 @@ typedef struct {
 	int all;
 	int altimeter;
 	int ann_state;
-	int apch_config_chk;
+	int apch_cfg_chk;
 	int config;
 	int dbg_gui;
 	int flt_state;
 	int fs;
 	int nd_alert;
-	int power_state;
+	int pwr_state;
 	int rwy_key;
 	int snd;
 	int startup;
