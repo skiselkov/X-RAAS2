@@ -40,7 +40,7 @@
 #define	PREFIX_FMT	"%s[%s:%d]: ", PREFIX, filename, line
 #endif	/* !IBM */
 
-debug_config_t xraas_debug_config = { 0 };
+debug_config_t xraas_debug_config;
 
 void
 log_impl(const char *filename, int line, const char *fmt, ...)
