@@ -1805,7 +1805,8 @@ altimeter_setting(void)
 	     * If there's a gap between the altitudes and flight levels, don't
 	     * transition until we're below the state.TA
 	     */
-	    (state.TA == 0 || elev < state.TA) && state.TATL_state == TATL_STATE_FL) {
+	    (state.TA == 0 || elev < state.TA) &&
+	    state.TATL_state == TATL_STATE_FL) {
 		state.TATL_transition = microclock();
 		state.TATL_state = TATL_STATE_ALT;
 		dbg_log(altimeter, 1, "baro_alt < TL (%d) "
@@ -1817,7 +1818,8 @@ altimeter_setting(void)
 		if (/* We have transitioned into ALT mode */
 		    state.TATL_state == TATL_STATE_ALT &&
 		    /* The fixed timeout has passed, OR */
-		    (now - state.TATL_transition > ALTM_SETTING_TIMEOUT ||
+		    (now - state.TATL_transition >
+		    SEC2USEC(ALTM_SETTING_TIMEOUT) ||
 		    /*
 		     * The field has a known elevation and we are within
 		     * 1500 feet of it
@@ -1848,7 +1850,8 @@ altimeter_setting(void)
 			}
 			state.TATL_transition = -1;
 		} else if (state.TATL_state == TATL_STATE_FL &&
-		    now - state.TATL_transition > ALTM_SETTING_TIMEOUT) {
+		    now - state.TATL_transition >
+		    SEC2USEC(ALTM_SETTING_TIMEOUT)) {
 			double d_ref = fabs(XPLMGetDataf(drs.baro_set) -
 			    STD_BARO_REF);
 			dbg_log(altimeter, 1, "fl check; d_ref: %.1f", d_ref);
