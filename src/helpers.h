@@ -163,9 +163,7 @@ bool_t is_valid_ndb_freq(double freq_khz);
 bool_t is_valid_tacan_freq(double freq_mhz);
 bool_t is_valid_rwy_ID(const char *rwy_ID);
 
-/* CSV file & string processing helpers */
-ssize_t parser_get_next_line(FILE *fp, char **linep, size_t *linecap,
-    size_t *linenum);
+/* string processing helpers */
 char **strsplit(const char *input, char *sep, bool_t skip_empty, size_t *num);
 void free_strlist(char **comps, size_t len);
 void strip_space(char *line);

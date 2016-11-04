@@ -66,63 +66,6 @@ rel_hdg(double hdg1, double hdg2)
 	}
 }
 
-bool_t
-is_valid_vor_freq(double freq_mhz)
-{
-	unsigned freq_khz = freq_mhz * 1000;
-
-	/* Check correct frequency band */
-	if (freq_khz < 108000 || freq_khz > 117950)
-		return (0);
-	/*
-	 * Check the LOC band - freq must be multiple of 200 kHz or
-	 * remainder must be 50 kHz.
-	 */
-	if (freq_khz >= 108000 && freq_khz <= 112000 &&
-	    freq_khz % 200 != 0 && freq_khz % 200 != 50)
-		return (0);
-	/* Above 112 MHz, frequency must be multiple of 50 kHz */
-	if (freq_khz % 50 != 0)
-		return (0);
-
-	return (1);
-}
-
-bool_t
-is_valid_loc_freq(double freq_mhz)
-{
-	unsigned freq_khz = freq_mhz * 1000;
-
-	/* Check correct frequency band */
-	if (freq_khz < 108100 || freq_khz > 111950)
-		return (0);
-	/* Check 200 kHz spacing with 100 kHz or 150 kHz remainder. */
-	if (freq_khz % 200 != 100 && freq_khz % 200 != 150)
-		return (0);
-
-	return (1);
-}
-
-bool_t
-is_valid_tacan_freq(double freq_mhz)
-{
-	unsigned freq_khz = freq_mhz * 1000;
-
-	/* this is quite a guess! */
-	if (freq_khz < 133000 || freq_khz > 136000 ||
-	    freq_khz % 100 != 0)
-		return (0);
-	return (1);
-}
-
-bool_t
-is_valid_ndb_freq(double freq_khz)
-{
-	unsigned freq_hz = freq_khz * 1000;
-	/* 177 kHz for an NDB is the lowest I've ever seen */
-	return (freq_hz >= 177000 && freq_hz <= 1750000);
-}
-
 /*
  * Checks a runway ID for correct formatting. Runway IDs are
  * 2-, 3- or 4-character strings conforming to the following format:
@@ -150,36 +93,15 @@ is_valid_rwy_ID(const char *rwy_ID)
 }
 
 /*
- * Grabs the next non-empty, non-comment line from a file, having stripped
- * away all leading and trailing whitespace.
- *
- * @param fp File from which to retrieve the line.
- * @param linep Line buffer which will hold the new line. If the buffer pointer
- *	is set to NULL, it will be allocated. If it is not long enough, it
- *	will be expanded.
- * @param linecap The capacity of *linep. If set to zero a new buffer is
- *	allocated.
- * @param linenum The current line number. Will be advanced by 1 for each
- *	new line read.
- *
- * @return The number of characters in the line (after stripping whitespace)
- *	without the terminating NUL.
+ * Splits up an input string by separator into individual components.
+ * The input string is `input' and the separator string is `sep'. The
+ * skip_empty flag indicates whether to skip empty components (i.e.
+ * two occurences of the separator string are next to each other).
+ * Returns an array of pointers to the component strings and the number
+ * of components in the `num' return parameter. The array of pointers
+ * as well as the strings themselves are malloc'd and should be freed
+ * by the caller. Use free_strlist for that.
  */
-ssize_t
-parser_get_next_line(FILE *fp, char **linep, size_t *linecap, size_t *linenum)
-{
-	for (;;) {
-		ssize_t len = getline(linep, linecap, fp);
-		if (len == -1)
-			return (-1);
-		(*linenum)++;
-		strip_space(*linep);
-		if (**linep != 0 && **linep == '#')
-			continue;
-		return (strlen(*linep));
-	}
-}
-
 char **
 strsplit(const char *input, char *sep, bool_t skip_empty, size_t *num)
 {
@@ -259,6 +181,11 @@ strip_space(char *line)
 	p[1] = 0;
 }
 
+/*
+ * Appends a printf-like formatted string to the end of *str, reallocating
+ * the buffer as needed to contain it. The value of *str is modified to
+ * point to the appropriately reallocated buffer.
+ */
 void
 append_format(char **str, size_t *sz, const char *format, ...)
 {
@@ -276,6 +203,10 @@ append_format(char **str, size_t *sz, const char *format, ...)
 	va_end(ap);
 }
 
+/*
+ * strlcpy is a BSD function not available on Windows, so we roll a simple
+ * version of it ourselves.
+ */
 void
 my_strlcpy(char *restrict dest, const char *restrict src, size_t cap)
 {
@@ -433,7 +364,7 @@ win_perror(DWORD err, const char *fmt, ...)
 	LocalFree(win_msg);
 }
 
-#endif
+#endif	/* IBM */
 
 /*
  * Creates an empty directory at `dirname' with default permissions.
