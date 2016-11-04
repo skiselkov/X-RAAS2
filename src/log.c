@@ -87,35 +87,50 @@ log_impl_v(const char *filename, int line, const char *fmt, va_list ap)
 #define	BACKTRACE_STRLEN	strlen(BACKTRACE_STR)
 #endif	/* !__GNUC__ && !__clang__ */
 
+#if	IBM
+/*
+ * Since while dumping stack we are most likely in a fairly compromised
+ * state, we statically pre-allocate these buffers to try and avoid having
+ * to call into the VM subsystem.
+ */
+#define	MAX_SYM_NAME_LEN	1024
+static char backtrace_buf[4096] = { 0 };
+static char symbol_buf[sizeof (SYMBOL_INFO) +
+    MAX_SYM_NAME_LEN * sizeof (TCHAR)];
+static char line_buf[sizeof (IMAGEHLP_LINE64)];
+#endif	/* IBM */
+
 void
 log_backtrace(void)
 {
 #if	IBM
-#define	MAX_SYM_NAME_LEN	256
-#define	FRAME_FMT		"%u: %s - 0x%x\n"
+
 	unsigned frames;
 	void *stack[MAX_STACK_FRAMES];
 	SYMBOL_INFO *symbol;
 	HANDLE process;
-	char *msg = NULL;
-	size_t msg_len = BACKTRACE_STRLEN;
+	DWORD displacement;
+	IMAGEHLP_LINE64 *line;
 
 	process = GetCurrentProcess();
-
 	SymInitialize(process, NULL, TRUE);
 
 	frames = CaptureStackBackTrace(0, MAX_STACK_FRAMES, stack, NULL);
-	symbol = malloc(sizeof(SYMBOL_INFO) + MAX_SYM_NAME_LEN);
-	symbol->MaxNameLen = MAX_SYM_NAME_LEN - 1;
-	symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
 
-	msg = malloc(msg_len + 1);
-	my_strlcpy(msg, BACKTRACE_STR, msg_len);
+	memset(symbol_buf, 0, sizeof (symbol_buf));
+	memset(line_buf, 0, sizeof (line_buf));
+
+	symbol = (SYMBOL_INFO *)symbol_buf;
+	symbol->MaxNameLen = MAX_SYM_NAME_LEN - 1;
+	symbol->SizeOfStruct = sizeof (SYMBOL_INFO);
+
+	line = (IMAGEHLP_LINE64 *)line_buf;
+	line->SizeOfStruct = sizeof (*line);
+
+	backtrace_buf[0] = '\0';
+	my_strlcpy(backtrace_buf, BACKTRACE_STR, sizeof (backtrace_buf));
 
 	for(unsigned i = 0; i < frames; i++) {
-		int line_len;
-
-		memset(symbol, 0, sizeof(SYMBOL_INFO) + MAX_SYM_NAME_LEN);
 		/*
 		 * This is needed because some dunce at Microsoft thought
 		 * it'd be a swell idea to design the SymFromAddr function to
@@ -123,21 +138,40 @@ log_backtrace(void)
 		 */
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
-		SymFromAddr(process, (DWORD64)(stack[i]), 0, symbol);
+		DWORD64 address = (DWORD64)(stack[i]);
 #pragma GCC diagnostic pop
-		line_len = snprintf(NULL, 0, FRAME_FMT, i, symbol->Name,
-		    symbol->Address);
-		msg = realloc(msg, msg_len + line_len + 1);
-		VERIFY(snprintf(&msg[msg_len], line_len + 1, FRAME_FMT, i,
-		    symbol->Name, symbol->Address) == line_len);
-		msg_len += line_len;
+		int fill = strlen(backtrace_buf);
+
+		memset(symbol_buf, 0, sizeof (symbol_buf));
+		/*
+		 * Try to grab the symbol name from the stored %rip data.
+		 */
+		if (!SymFromAddr(process, address, 0, symbol)) {
+			snprintf(&backtrace_buf[fill], sizeof (backtrace_buf) -
+			    fill, "%u %p\n", i, stack[i]);
+			continue;
+		}
+		/*
+		 * See if we have debug info available with file names and
+		 * line numbers.
+		 */
+		if (SymGetLineFromAddr64(process, address, &displacement,
+		    line)) {
+			snprintf(&backtrace_buf[fill], sizeof (backtrace_buf) -
+			    fill, "%u: %s (0x%x) [%s:%d]\n", i, symbol->Name,
+			    symbol->Address, line->FileName, line->LineNumber);
+		} else {
+			snprintf(&backtrace_buf[fill], sizeof (backtrace_buf) -
+			    fill, "%u: %s - 0x%x\n", i, symbol->Name,
+			    symbol->Address);
+		}
 	}
 
-	XPLMDebugString(msg);
-	fputs(msg, stderr);
+	XPLMDebugString(backtrace_buf);
+	fputs(backtrace_buf, stderr);
 
-	free(symbol);
 #else	/* !IBM */
+
 	char *msg;
 	size_t msg_len;
 	void *trace[MAX_STACK_FRAMES];
@@ -160,5 +194,6 @@ log_backtrace(void)
 
 	free(msg);
 	free(fnames);
+
 #endif	/* !IBM */
 }

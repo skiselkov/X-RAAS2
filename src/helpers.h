@@ -173,10 +173,11 @@ void append_format(char **str, size_t *sz, const char *format, ...)
     PRINTF_ATTR(3);
 
 char *mkpathname(const char *comp, ...);
+void fix_pathsep(char *str);
 
 void my_strlcpy(char *restrict dest, const char *restrict src, size_t cap);
 #if     IBM
-size_t getline(char **lineptr, size_t *n, FILE *stream);
+ssize_t getline(char **lineptr, size_t *n, FILE *stream);
 #endif  /* IBM */
 
 #if	defined(__GNUC__) || defined(__clang__)

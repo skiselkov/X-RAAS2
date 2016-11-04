@@ -335,30 +335,29 @@ find_all_apt_dats(const airportdb_t *db, size_t *num)
 		size_t linecap = 0;
 
 		while (!feof(scenery_packs_ini)) {
+			char *scn_name, *filename;
+			FILE *fp;
+
 			if (getline(&line, &linecap, scenery_packs_ini) <= 0)
 				continue;
 			strip_space(line);
-			if (strstr(line, "SCENERY_PACK ") == line) {
-				char *scn_name, *filename;
-				FILE *fp;
-
-				scn_name = strdup(&line[13]);
-				strip_space(scn_name);
-				filename = mkpathname(db->xpdir, scn_name,
-				    "Earth nav data", "apt.dat", NULL);
-				fp = fopen(filename, "r");
-				if (fp != NULL) {
-					fclose(fp);
-					apt_dats = realloc(apt_dats,
-					    (++n) * sizeof (char *));
-					apt_dats[n - 1] = filename;
-				} else {
-					logMsg("Can't open %s: %s",
-					    filename, strerror(errno));
-					free(filename);
-				}
-				free(scn_name);
+			if (strstr(line, "SCENERY_PACK ") != line)
+				continue;
+			scn_name = strdup(&line[13]);
+			strip_space(scn_name);
+			fix_pathsep(scn_name);
+			filename = mkpathname(db->xpdir, scn_name,
+			    "Earth nav data", "apt.dat", NULL);
+			fp = fopen(filename, "r");
+			if (fp != NULL) {
+				fclose(fp);
+				apt_dats = realloc(apt_dats,
+				    (++n) * sizeof (char *));
+				apt_dats[n - 1] = filename;
+			} else {
+				free(filename);
 			}
+			free(scn_name);
 		}
 		fclose(scenery_packs_ini);
 		free(line);
@@ -578,6 +577,8 @@ write_apt_dat(const airportdb_t *db, const airport_t *arpt)
 	FILE *fp;
 	geo_pos2_t p;
 
+	dbg_log(tile, 2, "write_apt_dat(\"%s\")", arpt->icao);
+
 	p = geo_pos2tile_pos(GEO3_TO_GEO2(arpt->refpt), B_FALSE);
 	snprintf(lat_lon, sizeof (lat_lon), TILE_NAME_FMT, p.lat, p.lon);
 	fname = apt_dat_cache_dir(db, GEO3_TO_GEO2(arpt->refpt), lat_lon);
@@ -785,6 +786,7 @@ load_airports_txt(airportdb_t *db)
 
 	fclose(fp);
 	free(fname);
+	free(line);
 
 	return (B_TRUE);
 }
@@ -1309,6 +1311,9 @@ airportdb_destroy(airportdb_t *db)
 		free_tile(db, tile, B_FALSE);
 	avl_destroy(&db->geo_table);
 	avl_destroy(&db->apt_dat);
+
+	free(db->xpdir);
+	free(db->xpprefsdir);
 }
 
 airport_t *

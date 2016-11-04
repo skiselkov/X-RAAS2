@@ -288,60 +288,48 @@ my_strlcpy(char *restrict dest, const char *restrict src, size_t cap)
 /*
  * C getline is a POSIX function, so on Windows, we need to roll our own.
  */
-size_t
-getline(char **lineptr, size_t *n, FILE *stream)
+ssize_t
+getline(char **line_p, size_t *cap_p, FILE *fp)
 {
-	char *bufptr = NULL;
-	char *p = bufptr;
-	size_t size;
-	int c;
+	ASSERT(line_p != NULL);
+	ASSERT(cap_p != NULL);
+	ASSERT(fp != NULL);
 
-	if (lineptr == NULL)
-		return (-1);
+	char *line = *line_p;
+	size_t cap = *cap_p, n = 0;
 
-	if (stream == NULL)
-		return (-1);
-
-	if (n == NULL)
-		return (-1);
-
-	bufptr = *lineptr;
-	size = *n;
-
-	c = fgetc(stream);
-	if (c == EOF)
-		return (-1);
-
-	if (bufptr == NULL)
-		bufptr = malloc(128);
-	if (bufptr == NULL)
-		return (-1);
-
-	size = 128;
-
-	p = bufptr;
-	while(c != EOF) {
-		if ((void *)(p - bufptr) > (void *)(size - 1)) {
-			size = size + 128;
-			bufptr = realloc(bufptr, size);
-			if (bufptr == NULL)
-				return (-1);
+	do {
+		if (n + 1 >= cap) {
+			cap += 256;
+			line = realloc(line, cap);
 		}
-		*p++ = c;
-		if (c == '\n')
-			break;
-		c = fgetc(stream);
-	}
+		ASSERT(n < cap);
+		if (fgets(&line[n], cap - n, fp) == NULL) {
+			if (n != 0) {
+				break;
+			} else {
+				*line_p = line;
+				*cap_p = cap;
+				return (-1);
+			}
+		}
+		n = strlen(line);
+	} while (n > 0 && line[n - 1] != '\n');
 
-	*p++ = '\0';
-	*lineptr = bufptr;
-	*n = size;
+	*line_p = line;
+	*cap_p = cap;
 
-	return (p - bufptr - 1);
+	return (n);
 }
 
 #endif  /* IBM */
 
+/*
+ * Creates a file path string from individual path components. The
+ * components are provided as separate filename arguments and the list needs
+ * to be terminated with a NULL argument. The returned string can be freed
+ * via free().
+ */
 char *
 mkpathname(const char *comp, ...)
 {
@@ -349,8 +337,7 @@ mkpathname(const char *comp, ...)
 	char *str;
 	va_list ap;
 
-	if (comp == NULL)
-		return (strdup(""));
+	ASSERT(comp != NULL);
 
 	va_start(ap, comp);
 	len = strlen(comp);
@@ -367,12 +354,40 @@ mkpathname(const char *comp, ...)
 	    c = va_arg(ap, const char *)) {
 		ASSERT(n < len);
 		n += snprintf(&str[n], len - n + 1, "%c%s", DIRSEP, c);
+		/* kill a trailing directory separator */
+		if (str[n - 1] == DIRSEP) {
+			str[n - 1] = 0;
+			n--;
+		}
 	}
 	va_end(ap);
 
 	return (str);
 }
 
+/*
+ * For some inexplicable reason, on Windows X-Plane can return paths via the
+ * API which are a mixture of Windows- & Unix-style path separators. This
+ * function fixes that by flipping all path separators to the appropriate
+ * type used on the host OS.
+ */
+void
+fix_pathsep(char *str)
+{
+	for (int i = 0, n = strlen(str); i < n; i++) {
+#if	IBM
+		if (str[i] == '/')
+			str[i] = '\\';
+#else	/* !IBM */
+		if (str[i] == '\\')
+			str[i] = '/';
+#endif	/* !IBM */
+	}
+}
+
+/*
+ * Returns the current UNIX time in microseconds.
+ */
 long long
 microclock(void)
 {

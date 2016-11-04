@@ -2232,18 +2232,9 @@ XPluginStart(char *outName, char *outSig, char *outDesc)
 	 * before we start cutting path names, we'll flip all '/'s into
 	 * '\'s to keep consistent with the native path separator scheme.
 	 */
-	for (int i = 0, n = strlen(xpdir); i < n; i++) {
-		if (xpdir[i] == '/')
-			xpdir[i] = '\\';
-	}
-	for (int i = 0, n = strlen(xpprefsdir); i < n; i++) {
-		if (xpprefsdir[i] == '/')
-			xpprefsdir[i] = '\\';
-	}
-	for (int i = 0, n = strlen(plugindir); i < n; i++) {
-		if (plugindir[i] == '/')
-			plugindir[i] = '\\';
-	}
+	fix_pathsep(xpdir);
+	fix_pathsep(xpprefsdir);
+	fix_pathsep(plugindir);
 #endif	/* IBM */
 
 	if (strlen(xpdir) > 0 && xpdir[strlen(xpdir) - 1] == DIRSEP) {
