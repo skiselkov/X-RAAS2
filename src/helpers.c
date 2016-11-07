@@ -150,7 +150,7 @@ extract_icao_country_code(const char *icao)
 
 	for (int i = 0; icao_country_codes[i] != NULL; i++) {
 		if (strncmp(icao, icao_country_codes[i],
-		    strlen(icao_country_codes[i]) == 0))
+		    strlen(icao_country_codes[i])) == 0)
 			return (icao_country_codes[i]);
 	}
 	return (NULL);
