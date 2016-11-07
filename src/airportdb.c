@@ -221,6 +221,8 @@ static void
 apt_dat_insert(avl_tree_t *apt_dat, airport_t *arpt)
 {
 	avl_index_t where;
+	/* Only allow airports with proper ICAO codes */
+	ASSERT(is_valid_icao_code(arpt->icao));
 	VERIFY(avl_find(apt_dat, arpt, &where) == NULL);
 	avl_insert(apt_dat, arpt, where);
 }
@@ -378,7 +380,14 @@ read_apt_dat_insert(airportdb_t *db, airport_t *arpt)
 {
 	if (arpt == NULL)
 		return;
-	if (avl_numnodes(&arpt->rwys) != 0) {
+	/*
+	 * Ignore airports with:
+	 * 1) No runways. Kinda defeats the point of the 'R' in RAAS.
+	 * 2) Airports without full ICAO identifiers. These tend to be
+	 *    small GA fields without TA/TL published and mess with
+	 *    the altimeter setting monitor.
+	 */
+	if (avl_numnodes(&arpt->rwys) != 0 && is_valid_icao_code(arpt->icao)) {
 		ASSERT(!IS_NULL_GEO_POS(arpt->refpt));
 		apt_dat_insert(&db->apt_dat, arpt);
 		geo_link_airport(db, arpt);
@@ -737,6 +746,7 @@ load_airports_txt(airportdb_t *db)
 				geo_link_airport(db, arpt);
 				arpt->TA = atof(comps[6]);
 				arpt->TL = atof(comps[7]);
+				arpt->in_arpts_txt = B_TRUE;
 			}
 			free_strlist(comps, ncomps);
 		} else if (strstr(line, "R,") == line) {
@@ -834,9 +844,20 @@ recreate_apt_dat_cache(airportdb_t *db)
 		goto out;
 	}
 
-	for (airport_t *arpt = avl_first(&db->apt_dat); arpt != NULL;
-	    arpt = AVL_NEXT(&db->apt_dat, arpt))
+	for (airport_t *arpt = avl_first(&db->apt_dat), *next_arpt;
+	    arpt != NULL; arpt = next_arpt) {
+		next_arpt = AVL_NEXT(&db->apt_dat, arpt);
 		ASSERT(arpt->geo_linked);
+		/*
+		 * If the airport isn't in Airports.txt, we want to dump the
+		 * airport, because we don't have TA/TL info on them.
+		 */
+		if (!arpt->in_arpts_txt) {
+			geo_unlink_airport(db, arpt);
+			avl_remove(&db->apt_dat, arpt);
+			free_airport(arpt);
+		}
+	}
 
 	filename = mkpathname(db->xpprefsdir, "X-RAAS_apt_dat_cache", NULL);
 	if (!remove_directory(filename) || !create_directory(filename)) {
@@ -1324,14 +1345,29 @@ airport_lookup(airportdb_t *db, const char *icao, geo_pos2_t pos)
 }
 
 airport_t *
-any_airport_at_coords(airportdb_t *db, geo_pos2_t pos)
+matching_airport_in_tile_with_TATL(airportdb_t *db, geo_pos2_t pos,
+    const char *search_icao)
 {
 	tile_t *tile;
+	char const *search_cc = extract_icao_country_code(search_icao);
 
-	/* Grab the first airport in that tile */
 	load_airports_in_tile(db, pos);
 	tile = geo_table_get_tile(db, pos, B_FALSE, NULL);
-	if (tile != NULL)
-		return (avl_first(&tile->arpts));
+	if (tile == NULL)
+		return (NULL);
+
+	for (airport_t *arpt = avl_first(&tile->arpts); arpt != NULL;
+	    arpt = AVL_NEXT(&tile->arpts, arpt)) {
+		/*
+		 * Because the passed in ICAO code might be invalid or of an
+		 * unknown country, if that is the case and we can't extract
+		 * the country code, we'll just try to do the best job we can
+		 * and grab any airport in the tile with a TA/TL value.
+		 */
+		if ((arpt->TA != 0 || arpt->TL != 0) && (search_cc == NULL ||
+		    search_cc == extract_icao_country_code(arpt->icao)))
+			return (arpt);
+	}
+
 	return (NULL);
 }

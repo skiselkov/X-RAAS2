@@ -157,6 +157,9 @@ is_valid_bool(bool_t b)
 	return (b == B_FALSE || b == B_TRUE);
 }
 
+bool_t is_valid_icao_code(const char *icao);
+const char *extract_icao_country_code(const char *icao);
+
 bool_t is_valid_vor_freq(double freq_mhz);
 bool_t is_valid_loc_freq(double freq_mhz);
 bool_t is_valid_ndb_freq(double freq_khz);

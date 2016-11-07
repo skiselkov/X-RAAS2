@@ -1708,6 +1708,8 @@ altimeter_setting(void)
 
 	const airport_t *cur_arpt = find_nearest_curarpt();
 	bool_t field_changed = B_FALSE;
+	double elev = MET2FEET(XPLMGetDatad(drs.elev));
+	int64_t now = microclock();
 
 	if (cur_arpt != NULL) {
 		const char *arpt_id = cur_arpt->icao;
@@ -1747,9 +1749,10 @@ altimeter_setting(void)
 			geo_pos2_t p = GEO_POS2(outLat, outLon);
 
 			cur_arpt = airport_lookup(&state.airportdb, outID, p);
-			if (cur_arpt == NULL)
-				cur_arpt = any_airport_at_coords(
-				    &state.airportdb, p);
+			if (cur_arpt == NULL || (cur_arpt->TA == 0 &&
+			    cur_arpt->TL == 0))
+				cur_arpt = matching_airport_in_tile_with_TATL(
+				    &state.airportdb, p, outID);
 			if (cur_arpt != NULL) {
 				dbg_log(altimeter, 2, "fallback airport = %s",
 				    cur_arpt->icao);
@@ -1790,8 +1793,6 @@ altimeter_setting(void)
 		state.TA = state.TL;
 	}
 
-	double elev = MET2FEET(XPLMGetDatad(drs.elev));
-
 	if (state.TA != 0 && elev > state.TA && state.TATL_state == TATL_STATE_ALT) {
 		state.TATL_transition = microclock();
 		state.TATL_state = TATL_STATE_FL;
@@ -1813,7 +1814,6 @@ altimeter_setting(void)
 		    "transitioning state.TATL_state = alt", state.TL);
 	}
 
-	int64_t now = microclock();
 	if (state.TATL_transition != -1) {
 		if (/* We have transitioned into ALT mode */
 		    state.TATL_state == TATL_STATE_ALT &&

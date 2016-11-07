@@ -46,6 +46,53 @@
 #include "log.h"
 
 /*
+ * The single-letter versions of the IDs need to go after the two-letter ones
+ * to make sure we pick up the two-letter versions first.
+ */
+static const char *const icao_country_codes[] = {
+	"AN",	"AY",
+	"BG",	"BI",	"BK",
+	"C",
+	"DA",	"DB",	"DF",	"DG",	"DI",	"DN",	"DR",	"DT",	"DX",
+	"EB",	"ED",	"EE",	"EF",	"EG",	"EH",	"EI",	"EK",	"EL",
+	"EN",	"EP",	"ES",	"ET",	"EV",	"EY",
+	"FA",	"FB",	"FC",	"FD",	"FE",	"FG",	"FH",	"FI",	"FJ",
+	"FK",	"FL",	"FM",	"FN",	"FO",	"FP",	"FQ",	"FS",	"FT",
+	"FV",	"FW",	"FX",	"FY",	"FZ",
+	"GA",	"GB",	"GC",	"GE",	"GF",	"GG",	"GL",	"GM",	"GO",
+	"GQ",	"GS",	"GU",	"GV",
+	"HA",	"HB",	"HC",	"HD",	"HE",	"HH",	"HK",	"HL",	"HR",
+	"HS",	"HT",	"HU",
+	"K",
+	"LA",	"LB",	"LC",	"LD",	"LE",	"LF",	"LG",	"LH",	"LI",
+	"LJ",	"LK",	"LL",	"LM",	"LN",	"LO",	"LP",	"LQ",	"LR",
+	"LS",	"LT",	"LU",	"LV",	"LW",	"LX",	"LY",	"LZ",
+	"MB",	"MD",	"MG",	"MH",	"MK",	"MM",	"MN",	"MP",	"MR",
+	"MS",	"MT",	"MU",	"MW",	"MY",	"MZ",
+	"NC",	"NF",	"NG",	"NI",	"NL",	"NS",	"NT",	"NV",	"NW",
+	"NZ",
+	"OA",	"OB",	"OE",	"OI",	"OJ",	"OK",	"OL",	"OM",	"OO",
+	"OP",	"OR",	"OS",	"OT",	"OY",
+	"PA",	"PB",	"PC",	"PF",	"PG",	"PH",	"PJ",	"PK",	"PL",
+	"PM",	"PO",	"PP",	"PT",	"PW",
+	"RC",	"RJ",	"RK",	"RO",	"RP",
+	"SA",	"SB",	"SC",	"SD",	"SE",	"SF",	"SG",	"SH",	"SI",
+	"SJ",	"SK",	"SL",	"SM",	"SN",	"SO",	"SP",	"SS",	"SU",
+	"SV",	"SW",	"SY",
+	"TA",	"TB",	"TD",	"TF",	"TG",	"TI",	"TJ",	"TK",	"TL",
+	"TN",	"TQ",	"TR",	"TT",	"TU",	"TV",	"TX",
+	"UA",	"UB",	"UC",	"UD",	"UG",	"UK",	"UM",	"UT",
+	"U",
+	"VA",	"VC",	"VD",	"VE",	"VG",	"VH",	"VI",	"VL",	"VM",
+	"VN",	"VO",	"VQ",	"VR",	"VT",	"VV",	"VY",
+	"WA",	"WB",	"WI",	"WM",	"WP",	"WQ",	"WR",	"WS",
+	"Y",
+	"ZK",	"ZM",
+	"Z",
+	NULL
+};
+
+/*
  * How to turn to get from hdg1 to hdg2 with positive being right and negative
  * being left. Always turns the shortest way around (<= 180 degrees).
  */
@@ -64,6 +111,49 @@ rel_hdg(double hdg1, double hdg2)
 		else
 			return (hdg2 - hdg1);
 	}
+}
+
+/*
+ * Checks if a string is a valid ICAO airport code. ICAO airport codes always:
+ * 1) are 4 characters long
+ * 2) are all upper case
+ * 3) contain only the letters A-Z
+ * 4) may not start with I, J, Q or X
+ */
+bool_t
+is_valid_icao_code(const char *icao)
+{
+	if (strlen(icao) != 4)
+		return (B_FALSE);
+	for (int i = 0; i < 4; i++)
+		if (icao[i] < 'A' || icao[i] > 'Z')
+			return (B_FALSE);
+	if (icao[0] == 'I' || icao[0] == 'J' || icao[0] == 'Q' ||
+	    icao[0] == 'X')
+		return (B_FALSE);
+	return (B_TRUE);
+}
+
+/*
+ * Extracts the country code portion from an ICAO airport code. Because the
+ * returned string pointer for any given country code is always the same, it
+ * is possible to simply compare country code correspondence using a simple
+ * pointer value comparison. If the ICAO country code is not known, returns
+ * NULL instead.
+ * If the passed string isn't a valid ICAO country code, returns NULL as well.
+ */
+const char *
+extract_icao_country_code(const char *icao)
+{
+	if (!is_valid_icao_code(icao))
+		return (NULL);
+
+	for (int i = 0; icao_country_codes[i] != NULL; i++) {
+		if (strncmp(icao, icao_country_codes[i],
+		    strlen(icao_country_codes[i]) == 0))
+			return (icao_country_codes[i]);
+	}
+	return (NULL);
 }
 
 /*

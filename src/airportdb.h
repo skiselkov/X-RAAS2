@@ -82,6 +82,7 @@ struct airport {
 	bool_t		load_complete;	/* true if we've done load_airport */
 	vect3_t		ecef;		/* refpt ECEF coordinates */
 	fpp_t		fpp;		/* ortho fpp centered on refpt */
+	bool_t		in_arpts_txt;	/* used by recreate_apt_dat_cache */
 
 	avl_node_t	apt_dat_node;	/* apt_dat tree */
 	list_node_t	cur_arpts_node;	/* cur_arpts list */
@@ -101,7 +102,8 @@ void load_nearest_airport_tiles(airportdb_t *db, geo_pos2_t my_pos);
 void unload_distant_airport_tiles(airportdb_t *db, geo_pos2_t my_pos);
 
 airport_t *airport_lookup(airportdb_t *db, const char *icao, geo_pos2_t pos);
-airport_t *any_airport_at_coords(airportdb_t *db, geo_pos2_t pos);
+airport_t *matching_airport_in_tile_with_TATL(airportdb_t *db, geo_pos2_t pos,
+    const char *search_icao);
 
 #ifdef	__cplusplus
 }
