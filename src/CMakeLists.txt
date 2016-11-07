@@ -46,12 +46,8 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_GNU_SOURCE -D_FILE_OFFSET_BITS=64")
 #libraries
 if(APPLE)
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -arch x86_64 -Wno-deprecated")
-        include_directories(plugin PUBLIC "../SDK/CHeaders/XPLM/"
-            "../OpenAL/include")
-else()
-        include_directories(plugin PUBLIC "../SDK/CHeaders/XPLM/"
-            "../OpenAL/include")
 endif()
+include_directories(plugin PUBLIC "../SDK/CHeaders/XPLM/" "../OpenAL/include")
 
 # X-Plane stuff
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DXPLM200=1 -DXPLM210=1")
@@ -66,12 +62,14 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fvisibility=hidden")
 #linking
 link_libraries(m)
 if(APPLE)
-	set(CMAKE_LIBRARY_PATH ${CMAKE_LIBRARY_PATH} ../SDK/Libraries/Mac/)
-	FIND_LIBRARY(XPLM_LIBRARY XPLM ../SDK/Libraries/Mac/)
-	FIND_LIBRARY(XPWIDGETS_LIBRARY XPWidgets ../SDK/Libraries/Mac/)
+	set(CMAKE_LIBRARY_PATH ${CMAKE_LIBRARY_PATH} ../SDK/Libraries/Mac)
+	FIND_LIBRARY(XPLM_LIBRARY XPLM ../SDK/Libraries/Mac)
+	FIND_LIBRARY(XPWIDGETS_LIBRARY XPWidgets ../SDK/Libraries/Mac)
 	FIND_LIBRARY(OPENAL_LIBRARY OpenAL)
+	FIND_LIBRARY(OPENGL_LIBRARY OpenGL)
+	FIND_LIBRARY(GLUT_LIBRARY GLUT)
 	target_link_libraries(plugin ${XPLM_LIBRARY} ${XPWIDGETS_LIBRARY}
-	    ${OPENAL_LIBRARY})
+	    ${OPENAL_LIBRARY} ${OPENGL_LIBRARY} ${GLUT_LIBRARY})
 else()
 	FIND_LIBRARY(GLUT_LIBRARY glut)
 	target_link_libraries(plugin ${GLUT_LIBRARY})
@@ -83,8 +81,7 @@ SET_TARGET_PROPERTIES(plugin PROPERTIES SUFFIX "")
 if(APPLE)
 	set(PLUGIN_OUTPUT_FILENAME "mac.xpl")
 	SET_TARGET_PROPERTIES(plugin PROPERTIES LINK_FLAGS
-	    "${CMAKE_SHARED_LINKER_FLAGS} -fPIC -fvisibility=hidden \
-	    -bundle -framework OpenGL -framework GLUT")
+	    "${CMAKE_SHARED_LINKER_FLAGS} -fPIC -fvisibility=hidden -bundle")
 elseif(UNIX)
 	set(PLUGIN_OUTPUT_FILENAME "lin.xpl")
 	SET_TARGET_PROPERTIES(plugin PROPERTIES LINK_FLAGS
