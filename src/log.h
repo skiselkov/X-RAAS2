@@ -70,7 +70,7 @@ void log_backtrace(void);
 	do { \
 		if (xraas_debug_config.class >= level || \
 		    xraas_debug_config.all >= level) \
-			logMsg("[" #class "] " __VA_ARGS__); \
+			logMsg("[" #class "/" #level "] " __VA_ARGS__); \
 	} while (0)
 
 #ifdef __cplusplus

@@ -261,7 +261,7 @@ extern bool_t avl_update_gt(avl_tree_t *, void *);
 /*
  * Return the number of nodes in the tree
  */
-extern unsigned long avl_numnodes(avl_tree_t *tree);
+extern unsigned long avl_numnodes(const avl_tree_t *tree);
 
 /*
  * Return B_TRUE if there are zero nodes in the tree, B_FALSE otherwise.

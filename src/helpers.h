@@ -174,7 +174,11 @@ void append_format(char **str, size_t *sz, const char *format, ...)
     PRINTF_ATTR(3);
 
 char *mkpathname(const char *comp, ...);
+char *mkpathname_v(const char *comp, va_list ap);
 void fix_pathsep(char *str);
+
+char *file2str(const char *comp, ...);
+ssize_t filesz(const char *filename);
 
 void my_strlcpy(char *restrict dest, const char *restrict src, size_t cap);
 #if     IBM

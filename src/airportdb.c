@@ -22,6 +22,14 @@
 #include <string.h>
 #include <stdlib.h>
 
+#if	IBM
+#include <windows.h>
+#else	/* !IBM */
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#endif	/* !IBM */
+
 #include "assert.h"
 #include "avl.h"
 #include "geom.h"
@@ -43,9 +51,10 @@
 #define	RWY_APCH_PROXIMITY_LAT_DISPL \
     RWY_APCH_PROXIMITY_LON_DISPL * \
     __builtin_tan(DEG2RAD(RWY_APCH_PROXIMITY_LAT_ANGLE))
-#define	XRAAS_apt_dat_cache_version	3
+#define	XRAAS_CACHE_VERSION		3
 #define	ARPT_LOAD_LIMIT			(8 * 1852)	/* meters, 8nm */
 
+#define	XRAAS_CACHE_DIR			"X-RAAS.cache"
 #define	TILE_NAME_FMT			"%+03.0f%+04.0f"
 
 typedef struct tile_s {
@@ -53,6 +62,11 @@ typedef struct tile_s {
 	avl_tree_t	arpts;
 	avl_node_t	node;
 } tile_t;
+
+typedef struct {
+	list_node_t	node;
+	char		*fname;
+} apt_dats_entry_t;
 
 static airport_t *apt_dat_lookup(avl_tree_t *apt_dat, const char *icao);
 static void apt_dat_insert(avl_tree_t *apt_dat, airport_t *arpt);
@@ -298,10 +312,10 @@ apt_dat_cache_dir(const airportdb_t *db, geo_pos2_t pos, const char *suffix)
 	snprintf(lat_lon, sizeof (lat_lon), TILE_NAME_FMT, pos.lat, pos.lon);
 
 	if (suffix != NULL)
-		return (mkpathname(db->xpprefsdir, "X-RAAS_apt_dat_cache",
+		return (mkpathname(db->xpprefsdir, XRAAS_CACHE_DIR,
 		    lat_lon, suffix, NULL));
 	else
-		return (mkpathname(db->xpprefsdir, "X-RAAS_apt_dat_cache",
+		return (mkpathname(db->xpprefsdir, XRAAS_CACHE_DIR,
 		    lat_lon, NULL));
 }
 
@@ -316,15 +330,12 @@ apt_dat_cache_dir(const airportdb_t *db, geo_pos2_t pos, const char *suffix)
  * priority).
  * The apt.dat filenames are full filesystem paths.
  */
-static char **
-find_all_apt_dats(const airportdb_t *db, size_t *num)
+static void
+find_all_apt_dats(const airportdb_t *db, list_t *list)
 {
-	size_t n = 0;
 	char *fname;
 	FILE *scenery_packs_ini;
-	char **apt_dats = NULL;
-
-	ASSERT(num != NULL);
+	apt_dats_entry_t *e;
 
 	fname = mkpathname(db->xpdir, "Custom Scenery", "scenery_packs.ini",
 	    NULL);
@@ -337,42 +348,30 @@ find_all_apt_dats(const airportdb_t *db, size_t *num)
 		size_t linecap = 0;
 
 		while (!feof(scenery_packs_ini)) {
-			char *scn_name, *filename;
-			FILE *fp;
+			char *scn_name;
 
 			if (getline(&line, &linecap, scenery_packs_ini) <= 0)
 				continue;
 			strip_space(line);
 			if (strstr(line, "SCENERY_PACK ") != line)
 				continue;
-			scn_name = strdup(&line[13]);
+			scn_name = &line[13];
 			strip_space(scn_name);
 			fix_pathsep(scn_name);
-			filename = mkpathname(db->xpdir, scn_name,
+			e = malloc(sizeof (*e));
+			e->fname = mkpathname(db->xpdir, scn_name,
 			    "Earth nav data", "apt.dat", NULL);
-			fp = fopen(filename, "r");
-			if (fp != NULL) {
-				fclose(fp);
-				apt_dats = realloc(apt_dats,
-				    (++n) * sizeof (char *));
-				apt_dats[n - 1] = filename;
-			} else {
-				free(filename);
-			}
-			free(scn_name);
+			list_insert_tail(list, e);
 		}
 		fclose(scenery_packs_ini);
 		free(line);
 	}
 
 	/* append the default apt.dat */
-	apt_dats = realloc(apt_dats, (++n) * sizeof (char *));
-	apt_dats[n - 1] = mkpathname(db->xpdir, "Resources", "default scenery",
+	e = malloc(sizeof (*e));
+	e->fname = mkpathname(db->xpdir, "Resources", "default scenery",
 	    "default apt dat", "Earth nav data", "apt.dat", NULL);
-
-	*num = n;
-
-	return (apt_dats);
+	list_insert_tail(list, e);
 }
 
 static void
@@ -397,11 +396,11 @@ read_apt_dat_insert(airportdb_t *db, airport_t *arpt)
 }
 
 /*
- * Parses an apt.dat (either from regular scenery or from
- * X-RAAS_apt_dat_cache) to cache the airports contained in it.
+ * Parses an apt.dat (either from regular scenery or from XRAAS_CACHE_DIR) to
+ * cache the airports contained in it.
  */
 static void
-read_apt_dat(airportdb_t *db, const char *apt_dat_fname)
+read_apt_dat(airportdb_t *db, const char *apt_dat_fname, bool_t fail_ok)
 {
 	FILE *apt_dat_f;
 	airport_t *arpt = NULL;
@@ -415,7 +414,9 @@ read_apt_dat(airportdb_t *db, const char *apt_dat_fname)
 
 	apt_dat_f = fopen(apt_dat_fname, "r");
 	if (apt_dat_f == NULL) {
-		logMsg("Can't open %s: %s", apt_dat_fname, strerror(errno));
+		if (!fail_ok)
+			logMsg("Can't open %s: %s", apt_dat_fname,
+			    strerror(errno));
 		return;
 	}
 
@@ -801,43 +802,225 @@ load_airports_txt(airportdb_t *db)
 	return (B_TRUE);
 }
 
+static bool_t
+check_cache_version(const airportdb_t *db)
+{
+	char *version_str;
+	int version = -1;
+
+	if ((version_str = file2str(db->xpprefsdir, XRAAS_CACHE_DIR,
+	    "version", NULL)) != NULL) {
+		version = atoi(version_str);
+		free(version_str);
+	}
+	dbg_log(tile, 5, XRAAS_CACHE_DIR " version: %d   want version: %d",
+	    version, XRAAS_CACHE_VERSION);
+
+	return (version == XRAAS_CACHE_VERSION);
+}
+
+static bool_t
+check_airac_cycle(airportdb_t *db)
+{
+	char *cycle_str;
+	int db_cycle = -1, xp_cycle = -1;
+
+	if ((cycle_str = file2str(db->xpprefsdir, XRAAS_CACHE_DIR,
+	    "airac_cycle", NULL)) != NULL) {
+		db_cycle = atoi(cycle_str);
+		free(cycle_str);
+	}
+	if ((cycle_str = file2str(db->xpdir, "Custom Data", "GNS430",
+	    "navdata", "cycle_info.txt", NULL)) == NULL)
+		cycle_str = file2str(db->xpdir, "Resources", "GNS430",
+		    "navdata", "cycle_info.txt", NULL);
+	if (cycle_str != NULL) {
+		char *sep = strstr(cycle_str, "AIRAC cycle");
+		if (sep != NULL)
+			sep = strstr(&sep[11], ": ");
+		if (sep != NULL) {
+			xp_cycle = atoi(&sep[2]);
+		}
+		free(cycle_str);
+	}
+
+	db->xp_airac_cycle = xp_cycle;
+	dbg_log(tile, 5, XRAAS_CACHE_DIR " AIRAC cycle: %d  X-Plane cycle: %d",
+	    db_cycle, xp_cycle);
+
+	return (db_cycle == xp_cycle);
+}
+
+static bool_t
+read_apt_dats_list(const airportdb_t *db, list_t *list)
+{
+	FILE *fp;
+	char *filename;
+	char *line = NULL;
+	size_t cap = 0;
+
+	filename = mkpathname(db->xpprefsdir, XRAAS_CACHE_DIR, "apt_dats",
+	    NULL);
+	fp = fopen(filename, "r");
+	free(filename);
+	if (fp == NULL)
+		return (B_FALSE);
+
+	while (!feof(fp)) {
+		apt_dats_entry_t *entry;
+
+		if (getline(&line, &cap, fp) <= 0)
+			continue;
+		strip_space(line);
+		entry = malloc(sizeof (*entry));
+		entry->fname = strdup(line);
+		list_insert_tail(list, entry);
+	}
+
+	free(line);
+	fclose(fp);
+
+	return (B_TRUE);
+}
+
+static void
+destroy_apt_dats_list(list_t *list)
+{
+	apt_dats_entry_t *e;
+	while ((e = list_head(list)) != NULL) {
+		list_remove(list, e);
+		free(e->fname);
+		free(e);
+	}
+	list_destroy(list);
+}
+
+static bool_t
+cache_up_to_date(airportdb_t *db, list_t *xp_apt_dats)
+{
+	list_t db_apt_dats;
+	bool_t result = B_TRUE;
+	apt_dats_entry_t *xp_e, *db_e;
+	bool_t vers_ok, cycle_ok;
+
+	dbg_log(tile, 3, "checking if " XRAAS_CACHE_DIR " is up to date");
+
+	/*
+	 * We need to call both of these functions because check_airac_cycle
+	 * establishes what AIRAC cycle X-Plane uses and modifies `db', so
+	 * we'll need it later on when recreating the cache.
+	 */
+	vers_ok = check_cache_version(db);
+	cycle_ok = check_airac_cycle(db);
+	if (!vers_ok || !cycle_ok)
+		return (B_FALSE);
+	dbg_log(tile, 4, XRAAS_CACHE_DIR " is of the correct version (%d) "
+	    "and AIRAC cycle (%d)", XRAAS_CACHE_VERSION, db->xp_airac_cycle);
+
+	list_create(&db_apt_dats, sizeof (apt_dats_entry_t),
+	    offsetof(apt_dats_entry_t, node));
+	read_apt_dats_list(db, &db_apt_dats);
+	for (xp_e = list_head(xp_apt_dats), db_e = list_head(&db_apt_dats);
+	    xp_e != NULL && db_e != NULL; xp_e = list_next(xp_apt_dats, xp_e),
+	    db_e = list_next(&db_apt_dats, db_e)) {
+		if (strcmp(xp_e->fname, db_e->fname) != 0) {
+			dbg_log(tile, 4, "scenery change detected: scenery "
+			    "contains different set of apt.dat files");
+			result = B_FALSE;
+			break;
+		}
+	}
+	if (db_e != NULL || xp_e != NULL) {
+		dbg_log(tile, 4, "scenery change detected: scenery "
+		    "contains different number of apt.dat files");
+		result = B_FALSE;
+	}
+	destroy_apt_dats_list(&db_apt_dats);
+
+	return (result);
+}
+
+static bool_t
+recreate_cache_skeleton(airportdb_t *db, list_t *apt_dat_files)
+{
+	char *filename;
+	FILE *fp;
+
+	filename = mkpathname(db->xpprefsdir, XRAAS_CACHE_DIR, NULL);
+	if (!remove_directory(filename) || !create_directory(filename)) {
+		free(filename);
+		return (B_FALSE);
+	}
+	free(filename);
+
+	filename = mkpathname(db->xpprefsdir, XRAAS_CACHE_DIR,
+	    "version", NULL);
+	fp = fopen(filename, "w");
+	if (fp == NULL) {
+		logMsg("Error writing new airport database, can't open "
+		    "%s for writing: %s", filename, strerror(errno));
+		free(filename);
+		return (B_FALSE);
+	}
+	fprintf(fp, "%d", XRAAS_CACHE_VERSION);
+	fclose(fp);
+	free(filename);
+
+	filename = mkpathname(db->xpprefsdir, XRAAS_CACHE_DIR,
+	    "airac_cycle", NULL);
+	fp = fopen(filename, "w");
+	if (fp == NULL) {
+		logMsg("Error writing new airport database, can't open "
+		    "%s for writing: %s", filename, strerror(errno));
+		free(filename);
+		return (B_FALSE);
+	}
+	fprintf(fp, "%d", db->xp_airac_cycle);
+	fclose(fp);
+	free(filename);
+
+	filename = mkpathname(db->xpprefsdir, XRAAS_CACHE_DIR,
+	    "apt_dats", NULL);
+	fp = fopen(filename, "w");
+	if (fp == NULL) {
+		logMsg("Error writing new airport database, can't open "
+		    "%s for writing: %s", filename, strerror(errno));
+		free(filename);
+		return (B_FALSE);
+	}
+	for (apt_dats_entry_t *e = list_head(apt_dat_files); e != NULL;
+	    e = list_next(apt_dat_files, e))
+		fprintf(fp, "%s\n", e->fname);
+	fclose(fp);
+	free(filename);
+
+	return (B_TRUE);
+}
+
 /*
  * Takes the current state of the apt_dat table and writes all the
- * airports in it to the X-RAAS_apt_dat.cache so that a subsequent run
+ * airports in it to the XRAAS_CACHE_DIR so that a subsequent run
  * of X-RAAS can pick this info up.
  */
 bool_t
 recreate_apt_dat_cache(airportdb_t *db)
 {
-	FILE *version_file;
-	char **apt_dat_files;
-	char *filename, *version_filename;
-	int version = -1;
-	size_t n_apt_dat_files;
+	list_t apt_dat_files;
 	bool_t success = B_TRUE;
 
-	version_filename = mkpathname(db->xpprefsdir, "X-RAAS_apt_dat_cache",
-	    "version", NULL);
-	version_file = fopen(version_filename, "r");
-	if (version_file != NULL) {
-		if (fscanf(version_file, "%d", &version) != 1)
-			version = -1;
-		fclose(version_file);
+	list_create(&apt_dat_files, sizeof (apt_dats_entry_t),
+	    offsetof(apt_dats_entry_t, node));
+	find_all_apt_dats(db, &apt_dat_files);
+	if (cache_up_to_date(db, &apt_dat_files)) {
+		dbg_log(tile, 1, XRAAS_CACHE_DIR " up to date");
+		goto out;
 	}
-
-	if (version == XRAAS_apt_dat_cache_version) {
-		/* cache version current, no need to rebuild it */
-		free(version_filename);
-		dbg_log(tile, 1, "X-RAAS_apt_dat_cache up to date");
-		return (B_TRUE);
-	}
-	dbg_log(tile, 1, "X-RAAS_apt_dat_cache out of date");
-
-	apt_dat_files = find_all_apt_dats(db, &n_apt_dat_files);
+	dbg_log(tile, 1, XRAAS_CACHE_DIR " out of date");
 
 	/* First scan all the provided apt.dat files */
-	for (size_t i = 0; i < n_apt_dat_files; i++)
-		read_apt_dat(db, apt_dat_files[i]);
+	for (apt_dats_entry_t *e = list_head(&apt_dat_files); e != NULL;
+	    e = list_next(&apt_dat_files, e))
+		read_apt_dat(db, e->fname, B_TRUE);
 
 	if (!load_airports_txt(db)) {
 		success = B_FALSE;
@@ -859,24 +1042,10 @@ recreate_apt_dat_cache(airportdb_t *db)
 		}
 	}
 
-	filename = mkpathname(db->xpprefsdir, "X-RAAS_apt_dat_cache", NULL);
-	if (!remove_directory(filename) || !create_directory(filename)) {
-		free(filename);
+	if (!recreate_cache_skeleton(db, &apt_dat_files)) {
 		success = B_FALSE;
 		goto out;
 	}
-	free(filename);
-	filename = NULL;
-	version_file = fopen(version_filename, "w");
-	if (version_file == NULL) {
-		logMsg("Error writing new airport database, can't open "
-		    "%s for writing: %s", version_filename, strerror(errno));
-		success = B_FALSE;
-		goto out;
-	}
-	fprintf(version_file, "%d\n", XRAAS_apt_dat_cache_version);
-	fclose(version_file);
-	version_file = NULL;
 
 	for (airport_t *arpt = avl_first(&db->apt_dat); arpt != NULL;
 	    arpt = AVL_NEXT(&db->apt_dat, arpt)) {
@@ -896,9 +1065,7 @@ recreate_apt_dat_cache(airportdb_t *db)
 	}
 out:
 	unload_distant_airport_tiles(db, NULL_GEO_POS2);
-
-	free_strlist(apt_dat_files, n_apt_dat_files);
-	free(version_filename);
+	destroy_apt_dats_list(&apt_dat_files);
 
 	return (success);
 }
@@ -1237,7 +1404,7 @@ load_airports_in_tile(airportdb_t *db, geo_pos2_t tile_pos)
 	snprintf(lat_lon, sizeof (lat_lon), TILE_NAME_FMT,
 	    tile_pos.lat, tile_pos.lon);
 	fname = mkpathname(cache_dir, lat_lon, NULL);
-	read_apt_dat(db, fname);
+	read_apt_dat(db, fname, B_FALSE);
 	free(cache_dir);
 	free(fname);
 }

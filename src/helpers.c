@@ -354,22 +354,34 @@ getline(char **line_p, size_t *cap_p, FILE *fp)
 char *
 mkpathname(const char *comp, ...)
 {
-	size_t n = 0, len = 0;
-	char *str;
+	char *res;
 	va_list ap;
 
-	ASSERT(comp != NULL);
-
 	va_start(ap, comp);
-	len = strlen(comp);
-	for (const char *c = va_arg(ap, const char *); c != NULL;
-	    c = va_arg(ap, const char *)) {
-		len += 1 + strlen(c);
-	}
+	res = mkpathname_v(comp, ap);
 	va_end(ap);
 
+	return (res);
+}
+
+char *
+mkpathname_v(const char *comp, va_list ap)
+{
+	size_t n = 0, len = 0;
+	char *str;
+	va_list ap2;
+
+	ASSERT(ap != NULL);
+
+	va_copy(ap2, ap);
+	len = strlen(comp);
+	for (const char *c = va_arg(ap2, const char *); c != NULL;
+	    c = va_arg(ap2, const char *)) {
+		len += 1 + strlen(c);
+	}
+	va_end(ap2);
+
 	str = malloc(len + 1);
-	va_start(ap, comp);
 	n += snprintf(str, len + 1, "%s", comp);
 	for (const char *c = va_arg(ap, const char *); c != NULL;
 	    c = va_arg(ap, const char *)) {
@@ -381,7 +393,6 @@ mkpathname(const char *comp, ...)
 			n--;
 		}
 	}
-	va_end(ap);
 
 	return (str);
 }
@@ -404,6 +415,61 @@ fix_pathsep(char *str)
 			str[i] = '/';
 #endif	/* !IBM */
 	}
+}
+
+char *
+file2str(const char *comp, ...)
+{
+#define	MAX_FILESIZE	1024 * 1024
+	va_list ap;
+	char *filename;
+	char *contents;
+	FILE *fp;
+	long len;
+
+	va_start(ap, comp);
+	filename = mkpathname_v(comp, ap);
+	va_end(ap);
+
+	fp = fopen(filename, "rb");
+	if (fp == NULL) {
+		free(filename);
+		return (NULL);
+	}
+	free(filename);
+	filename = NULL;
+
+	fseek(fp, 0, SEEK_END);
+	len = ftell(fp);
+	if (len < 0 || len > MAX_FILESIZE) {
+		fclose(fp);
+		return (NULL);
+	}
+	fseek(fp, 0, SEEK_SET);
+	contents = malloc(len);
+	if (fread(contents, 1, len, fp) != (size_t)len) {
+		fclose(fp);
+		free(contents);
+		return (NULL);
+	}
+	fclose(fp);
+
+	return (contents);
+}
+
+ssize_t
+filesz(const char *filename)
+{
+	ssize_t s;
+	FILE *fp = fopen(filename, "rb");
+
+	if (fp == NULL)
+		return (-1);
+	fseek(fp, 0, SEEK_END);
+	s = ftell(fp);
+	fclose(fp);
+
+	return (s);
 }
 
 /*

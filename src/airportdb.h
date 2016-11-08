@@ -30,6 +30,7 @@ extern "C" {
 typedef struct airportdb {
 	char		*xpdir;
 	char		*xpprefsdir;
+	int		xp_airac_cycle;
 
 	avl_tree_t	apt_dat;
 	avl_tree_t	geo_table;
