@@ -36,6 +36,7 @@
 #include "conf.h"
 #include "dbg_gui.h"
 #include "geom.h"
+#include "gui.h"
 #include "helpers.h"
 #include "list.h"
 #include "log.h"
@@ -145,8 +146,9 @@ static accel_stop_dist_t accel_stop_distances[] = {
     { .max = NAN, .min = NAN, .ann = -1 }         /* list terminator */
 };
 
-static bool_t inited = B_FALSE;
+bool_t xraas_inited = B_FALSE;
 static xraas_state_t state;
+const xraas_state_t *xraas_state = &state;
 
 static char xpdir[512] = { 0 };
 static char xpprefsdir[512] = { 0 };
@@ -2070,12 +2072,12 @@ chk_acf_is_helo(void)
 #endif	/* !0 */
 }
 
-static void
+void
 xraas_init(void)
 {
 	bool_t airportdb_created = B_FALSE;
 
-	ASSERT(!inited);
+	ASSERT(!xraas_inited);
 
 	/* these must go ahead of config parsing */
 	XPLMGetNthAircraftModel(0, acf_filename, acf_path);
@@ -2088,7 +2090,7 @@ xraas_init(void)
 
 	dbg_log(startup, 1, "xraas_init");
 
-	if (!snd_sys_init(plugindir, &state))
+	if (!snd_sys_init(plugindir))
 		goto errout;
 
 	if (state.debug_graphical)
@@ -2121,7 +2123,7 @@ xraas_init(void)
 		goto errout;
 	}
 
-	ND_alerts_init(&state);
+	ND_alerts_init();
 
 	rwy_key_tbl_create(&state.accel_stop_max_spd, "accel_stop_max_spd");
 	rwy_key_tbl_create(&state.on_rwy_ann, "on_rwy_ann");
@@ -2139,7 +2141,7 @@ xraas_init(void)
 
 	XPLMRegisterFlightLoopCallback(raas_exec_cb, EXEC_INTVAL, NULL);
 
-	inited = B_TRUE;
+	xraas_inited = B_TRUE;
 
 	return;
 
@@ -2153,10 +2155,10 @@ errout:
 	return;
 }
 
-static void
+void
 xraas_fini(void)
 {
-	if (!inited)
+	if (!xraas_inited)
 		return;
 
 	if (!state.enabled)
@@ -2209,7 +2211,7 @@ xraas_fini(void)
 	if (state.debug_graphical)
 		dbg_gui_fini();
 
-	inited = B_FALSE;
+	xraas_inited = B_FALSE;
 }
 
 PLUGIN_API int
@@ -2278,12 +2280,14 @@ PLUGIN_API int
 XPluginEnable(void)
 {
 	xraas_init();
+	gui_init();
 	return (1);
 }
 
 PLUGIN_API void
 XPluginDisable(void)
 {
+	gui_fini();
 	xraas_fini();
 }
 
@@ -2300,6 +2304,7 @@ XPluginReceiveMessage(XPLMPluginID src, int msg, void *param)
 			break;
 		xraas_fini();
 		xraas_init();
+		gui_update();
 		break;
 	}
 }

@@ -142,10 +142,15 @@ typedef struct xraas_state {
 	int64_t		init_msg_end;
 } xraas_state_t;
 
+extern bool_t xraas_inited;
+extern const xraas_state_t *xraas_state;
+
 #define	INIT_ERR_MSG_TIMEOUT		25		/* seconds */
 void log_init_msg(bool_t display, int timeout, int man_sect_number,
     const char *man_sect_name, const char *fmt, ...) PRINTF_ATTR(5);
 
+void xraas_init(void);
+void xraas_fini(void);
 bool_t xraas_is_on(void);
 bool_t view_is_external(void);
 bool_t GPWS_has_priority(void);

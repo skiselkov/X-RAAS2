@@ -50,7 +50,6 @@ static bool_t			inited = B_FALSE;
 static XPLMDataRef		dr = NULL;
 static int			alert_status = 0;
 static long long		alert_start_time = 0;
-static const xraas_state_t	*state = NULL;
 
 static XPLMDataRef		dr_local_x, dr_local_y, dr_local_z;
 static XPLMDataRef		dr_pitch, dr_roll, dr_hdg;
@@ -125,20 +124,19 @@ alert_sched_cb(float elapsed_since_last_call, float elapsed_since_last_floop,
 	UNUSED(refcon);
 
 	if (alert_status != 0 && (microclock() - alert_start_time >
-	    SEC2USEC(state->nd_alert_timeout)))
+	    SEC2USEC(xraas_state->nd_alert_timeout)))
 		alert_status = 0;
 
 	return (ND_SCHED_INTVAL);
 }
 
 void
-ND_alerts_init(const xraas_state_t *conf_state)
+ND_alerts_init(void)
 {
 	dbg_log(nd_alert, 1, "ND_alerts_init");
 
 	ASSERT(!inited);
 
-	state = conf_state;
 	dr = XPLMRegisterDataAccessor(DR_NAME, xplmType_Int, 0, read_ND_alert,
 	    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
 	    NULL, NULL);
@@ -187,13 +185,13 @@ ND_alert(nd_alert_msg_type_t msg, nd_alert_level_t level, const char *rwy_id,
 	ASSERT(inited);
 	ASSERT(msg >= ND_ALERT_FLAPS && msg <= ND_ALERT_LONG_LAND);
 
-	if (!state->nd_alerts_enabled)
+	if (!xraas_state->nd_alerts_enabled)
 		return;
 
 	dbg_log(nd_alert, 1, "msg: %d level: %d rwy_ID: %s dist: %d",
 	    msg, level, rwy_id, dist);
 
-	if (level < (nd_alert_level_t)state->nd_alert_filter) {
+	if (level < (nd_alert_level_t)xraas_state->nd_alert_filter) {
 		dbg_log(nd_alert, 2, "suppressed due to filter setting");
 		return;
 	}
@@ -223,7 +221,7 @@ ND_alert(nd_alert_msg_type_t msg, nd_alert_level_t level, const char *rwy_id,
 
 	/* encode the optional distance field */
 	if (dist >= 0) {
-		if (state->use_imperial)
+		if (xraas_state->use_imperial)
 			msg |= (((int)MET2FEET(dist) / 100) & 0xff) << 16;
 		else
 			msg |= ((dist / 100) & 0xff) << 16;

@@ -69,8 +69,8 @@ typedef enum nd_alert_msg_type {
 	ND_ALERT_LONG_LAND = 10		/* 'LONG LANDING' */
 } nd_alert_msg_type_t;
 
-void ND_alerts_init(const xraas_state_t *conf_state);
-void ND_alerts_fini();
+void ND_alerts_init(void);
+void ND_alerts_fini(void);
 void ND_alert(nd_alert_msg_type_t msg, nd_alert_level_t level,
     const char *rwy_id, int dist);
 

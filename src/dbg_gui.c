@@ -36,7 +36,7 @@
 
 #include "dbg_gui.h"
 
-static bool_t inited = B_FALSE;
+bool_t dbg_gui_inited = B_FALSE;
 static XPLMDataRef *lat_dr = NULL, *lon_dr = NULL;
 static int screen_x, screen_y;
 static double scale;
@@ -76,7 +76,7 @@ draw_cb(XPLMDrawingPhase phase, int before, void *refcon)
 	UNUSED(phase);
 	UNUSED(before);
 	UNUSED(refcon);
-	ASSERT(inited);
+	ASSERT(dbg_gui_inited);
 
 	if ((arpt = find_nearest_curarpt()) == NULL)
 		return (1);
@@ -140,7 +140,7 @@ dbg_gui_init(void)
 {
 	dbg_log(dbg_gui, 1, "init");
 
-	ASSERT(!inited);
+	ASSERT(!dbg_gui_inited);
 
 	lat_dr = XPLMFindDataRef("sim/flightmodel/position/latitude");
 	VERIFY(lat_dr != NULL);
@@ -149,7 +149,7 @@ dbg_gui_init(void)
 
 	XPLMRegisterDrawCallback(draw_cb, xplm_Phase_Window, 0, NULL);
 
-	inited = B_TRUE;
+	dbg_gui_inited = B_TRUE;
 }
 
 void
@@ -157,10 +157,10 @@ dbg_gui_fini(void)
 {
 	dbg_log(dbg_gui, 1, "fini");
 
-	if (!inited)
+	if (!dbg_gui_inited)
 		return;
 
 	XPLMUnregisterDrawCallback(draw_cb, xplm_Phase_Window, 0, NULL);
 
-	inited = B_FALSE;
+	dbg_gui_inited = B_FALSE;
 }

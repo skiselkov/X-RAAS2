@@ -18,9 +18,13 @@
 #ifndef	_XRAAS_DBG_GUI_H_
 #define	_XRAAS_DBG_GUI_H_
 
+#include "types.h"
+
 #ifdef	__cplusplus
 extern "C" {
 #endif
+
+extern bool_t dbg_gui_inited;
 
 void dbg_gui_init(void);
 void dbg_gui_fini(void);
