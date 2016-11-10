@@ -47,7 +47,8 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_GNU_SOURCE -D_FILE_OFFSET_BITS=64")
 if(APPLE)
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -arch x86_64 -Wno-deprecated")
 endif()
-include_directories(plugin PUBLIC "../SDK/CHeaders/XPLM/" "../OpenAL/include")
+include_directories(plugin PUBLIC "../SDK/CHeaders/XPLM/"
+    "../SDK/CHeaders/Widgets" "../OpenAL/include")
 
 # X-Plane stuff
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DXPLM200=1 -DXPLM210=1")

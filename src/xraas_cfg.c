@@ -71,6 +71,7 @@ reset_config(xraas_state_t *state)
 	state->nd_alert_overlay_force = B_FALSE;
 	state->nd_alert_timeout = 7;
 	state->debug_graphical = B_FALSE;
+	state->openal_shared = B_FALSE;
 
 	openal_set_shared_ctx(B_FALSE);
 
@@ -103,7 +104,6 @@ reset_state(xraas_state_t *state)
 static void
 process_conf(xraas_state_t *state, conf_t *conf)
 {
-	bool_t shared_ctx = B_FALSE;
 	const char *str;
 
 #define	CONF_GET(type, varname) \
@@ -156,8 +156,8 @@ process_conf(xraas_state_t *state, conf_t *conf)
 	CONF_GET(b, debug_graphical);
 #undef	CONF_GET
 
-	if (conf_get_b(conf, "shared_audio_ctx", &shared_ctx))
-		openal_set_shared_ctx(shared_ctx);
+	if (conf_get_b(conf, "shared_audio_ctx", &state->openal_shared))
+		openal_set_shared_ctx(state->openal_shared);
 
 	if (conf_get_str(conf, "gpws_prio_dr", &str))
 		my_strlcpy(state->GPWS_priority_dataref, str,

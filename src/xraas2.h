@@ -89,6 +89,7 @@ typedef struct xraas_state {
 	int		long_land_lim_abs;		/* meters */
 	double		long_land_lim_fract;		/* fraction, 0-1 */
 
+	bool_t		openal_shared;
 	bool_t		debug_graphical;
 	bool_t		debug;
 
