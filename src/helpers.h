@@ -209,6 +209,7 @@ long long microclock(void);
 /* directory manipulation */
 bool_t create_directory(const char *dirname);
 bool_t remove_directory(const char *dirname);
+bool_t remove_file(const char *filename, bool_t notfound_ok);
 
 #ifdef	__cplusplus
 }

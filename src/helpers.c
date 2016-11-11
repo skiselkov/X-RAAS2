@@ -687,3 +687,27 @@ errout:
 	return (B_FALSE);
 #endif	/* !IBM */
 }
+
+bool_t
+remove_file(const char *filename, bool_t notfound_ok)
+{
+#if	IBM
+	TCHAR filenameT[strlen(filename) + 1];
+	DWORD error;
+
+	MultiByteToWideChar(CP_UTF8, 0, filename, -1, filenameT,
+	    sizeof (filenameT));
+	if (!DeleteFile(filenameT) && ((error = GetLastError()) !=
+	    ERROR_FILE_NOT_FOUND || !notfound_ok)) {
+		win_perror(error, "Cannot remove file %s", filename);
+		return (B_FALSE);
+	}
+	return (B_TRUE);
+#else	/* !IBM */
+	if (unlink(filename) < 0 && (errno != ENOENT || !notfound_ok)) {
+		logMsg("Cannot remove file %s: %s", filename, strerror(errno));
+		return (B_FALSE);
+	}
+	return (B_TRUE);
+#endif	/* !IBM */
+}

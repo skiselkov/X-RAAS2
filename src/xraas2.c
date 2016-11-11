@@ -154,7 +154,12 @@ static char xpdir[512] = { 0 };
 static char xpprefsdir[512] = { 0 };
 static char plugindir[512] = { 0 };
 static char acf_path[512] = { 0 };
+static char acf_dirpath[512] = { 0 };
 static char acf_filename[512] = { 0 };
+
+const char *xraas_acf_path = acf_path;
+const char *xraas_acf_dirpath = acf_dirpath;
+const char *xraas_plugindir = plugindir;
 
 static const char *FJS737[] = { "B732", NULL };
 static const char *IXEG737[] = { "B733", NULL };
@@ -2076,13 +2081,25 @@ void
 xraas_init(void)
 {
 	bool_t airportdb_created = B_FALSE;
+	char *sep;
 
 	ASSERT(!xraas_inited);
 
 	/* these must go ahead of config parsing */
 	XPLMGetNthAircraftModel(0, acf_filename, acf_path);
+	if ((sep = strrchr(acf_path, DIRSEP)) != NULL) {
+		memset(acf_dirpath, 0, sizeof (acf_dirpath));
+		memcpy(acf_dirpath, acf_path, sep - acf_path);
+	} else {
+		/* aircraft's dirpath is unknown */
+		logMsg("WARNING: can't determine your aircraft's directory "
+		    "path based on its .acf file path (%s). Some functions "
+		    "of X-RAAS will be limited (e.g. aircraft-specific "
+		    "configuration loading).", acf_path);
+		acf_dirpath[0] = 0;
+	}
 
-	if (!load_configs(&state, plugindir, acf_path))
+	if (!load_configs(&state))
 		return;
 
 	if (!state.enabled)

@@ -173,16 +173,6 @@ conf_get_d(const conf_t *conf, const char *key, double *value)
 }
 
 bool_t
-conf_get_ll(const conf_t *conf, const char *key, int64_t *value)
-{
-	const conf_key_t *ck = conf_find(conf, key);
-	if (ck == NULL)
-		return (B_FALSE);
-	*value = atoll(ck->value);
-	return (B_TRUE);
-}
-
-bool_t
 conf_get_b(const conf_t *conf, const char *key, bool_t *value)
 {
 	const conf_key_t *ck = conf_find(conf, key);

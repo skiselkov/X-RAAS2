@@ -122,7 +122,9 @@ process_conf(xraas_state_t *state, conf_t *conf)
 	CONF_GET(b, use_imperial);
 	CONF_GET(b, voice_female);
 	CONF_GET(d, voice_volume);
+#if	!LIN
 	CONF_GET(b, use_tts);
+#endif	/* !LIN */
 	CONF_GET(b, us_runway_numbers);
 	CONF_GET(i, min_takeoff_dist);
 	CONF_GET(i, min_landing_dist);
@@ -132,8 +134,8 @@ process_conf(xraas_state_t *state, conf_t *conf)
 	CONF_GET(d, min_landing_flap);
 	CONF_GET(d, min_takeoff_flap);
 	CONF_GET(d, max_takeoff_flap);
-	CONF_GET(ll, on_rwy_warn_initial);
-	CONF_GET(ll, on_rwy_warn_repeat);
+	CONF_GET(i, on_rwy_warn_initial);
+	CONF_GET(i, on_rwy_warn_repeat);
 	CONF_GET(i, on_rwy_warn_max_n);
 	CONF_GET(b, too_high_enabled);
 	CONF_GET(b, too_fast_enabled);
@@ -156,7 +158,7 @@ process_conf(xraas_state_t *state, conf_t *conf)
 	CONF_GET(b, debug_graphical);
 #undef	CONF_GET
 
-	if (conf_get_b(conf, "shared_audio_ctx", &state->openal_shared))
+	if (conf_get_b(conf, "openal_shared", &state->openal_shared))
 		openal_set_shared_ctx(state->openal_shared);
 
 	if (conf_get_str(conf, "gpws_prio_dr", &str))
@@ -225,13 +227,13 @@ load_config(xraas_state_t *state, const char *dirname)
  * Loads the global and aircraft-specific X-RAAS config files.
  */
 bool_t
-load_configs(xraas_state_t *state, const char *plugindir, const char *acf_path)
+load_configs(xraas_state_t *state)
 {
 	reset_state(state);
 	/* order is important here, first load the global one */
-	if (!load_config(state, plugindir))
+	if (!load_config(state, xraas_plugindir))
 		return (B_FALSE);
-	if (!load_config(state, acf_path))
+	if (!load_config(state, xraas_acf_dirpath))
 		return (B_FALSE);
 	return (B_TRUE);
 }

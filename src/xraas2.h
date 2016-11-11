@@ -68,8 +68,8 @@ typedef struct xraas_state {
 	bool_t		nd_alert_overlay_force;
 	int		nd_alert_timeout;		/* seconds */
 
-	int64_t		on_rwy_warn_initial;		/* seconds */
-	int64_t		on_rwy_warn_repeat;		/* seconds */
+	int		on_rwy_warn_initial;		/* seconds */
+	int		on_rwy_warn_repeat;		/* seconds */
 	int		on_rwy_warn_max_n;		/* count */
 
 	bool_t		too_high_enabled;
@@ -145,6 +145,9 @@ typedef struct xraas_state {
 
 extern bool_t xraas_inited;
 extern const xraas_state_t *xraas_state;
+extern const char *xraas_acf_path;
+extern const char *xraas_acf_dirpath;
+extern const char *xraas_plugindir;
 
 #define	INIT_ERR_MSG_TIMEOUT		25		/* seconds */
 void log_init_msg(bool_t display, int timeout, int man_sect_number,

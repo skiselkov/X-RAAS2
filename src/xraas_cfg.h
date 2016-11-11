@@ -25,8 +25,7 @@
 extern "C" {
 #endif
 
-bool_t load_configs(xraas_state_t *state, const char *plugindir,
-    const char *acf_path);
+bool_t load_configs(xraas_state_t *state);
 
 #ifdef	__cplusplus
 }
