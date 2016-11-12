@@ -34,6 +34,7 @@
 #include "avl.h"
 #include "geom.h"
 #include "helpers.h"
+#include "init_msg.h"
 #include "list.h"
 #include "log.h"
 #include "math.h"
@@ -712,7 +713,7 @@ load_airports_txt(airportdb_t *db)
 
 		if (fp == NULL) {
 			free(fname);
-			log_init_msg(B_TRUE, INIT_ERR_MSG_TIMEOUT, 2,
+			log_init_msg(B_TRUE, INIT_ERR_MSG_TIMEOUT, "2",
 			    "Installation", "X-RAAS navdata error: your "
 			    "Airports.txt is missing or unreadable. "
 			    "Please correct this and recreate the cache.");

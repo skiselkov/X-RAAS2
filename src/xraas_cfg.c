@@ -19,6 +19,7 @@
 #include <stdlib.h>
 
 #include "helpers.h"
+#include "init_msg.h"
 #include "log.h"
 #include "nd_alert.h"
 #include "wav.h"
@@ -206,8 +207,8 @@ load_config(xraas_state_t *state, const char *dirname)
 
 		dbg_log(config, 1, "loading config file: %s", cfgname);
 		if ((conf = parse_conf(cfg_f, &errline)) == NULL) {
-			log_init_msg(B_TRUE, INIT_ERR_MSG_TIMEOUT,
-			    5, "Configuration", "X-RAAS startup error: syntax "
+			log_init_msg(B_TRUE, INIT_ERR_MSG_TIMEOUT, "5",
+			    "Configuration", "X-RAAS startup error: syntax "
 			    "error on line %d in config file:\n%s\n"
 			    "Please correct this and then hit Plugins "
 			    "-> Admin, Disable & Enable X-RAAS.", errline,

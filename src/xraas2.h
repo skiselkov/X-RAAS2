@@ -146,10 +146,6 @@ extern const char *xraas_acf_path;
 extern const char *xraas_acf_dirpath;
 extern const char *xraas_plugindir;
 
-#define	INIT_ERR_MSG_TIMEOUT		25		/* seconds */
-void log_init_msg(bool_t display, int timeout, int man_sect_number,
-    const char *man_sect_name, const char *fmt, ...) PRINTF_ATTR(5);
-
 void xraas_init(void);
 void xraas_fini(void);
 bool_t xraas_is_on(void);

@@ -23,20 +23,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-#if	IBM
-# include <gl.h>
-# include <glut.h>
-#elif	APL
-# include <OpenGL/gl.h>
-# include <GLUT/glut.h>
-#else	/* LIN */
-# include <GL/gl.h>
-# include <GL/glut.h>
-#endif	/* LIN */
-
 #include <XPLMDataAccess.h>
-#include <XPLMDisplay.h>
-#include <XPLMGraphics.h>
 #include <XPLMNavigation.h>
 #include <XPLMPlanes.h>
 #include <XPLMProcessing.h>
@@ -51,6 +38,7 @@
 #include "geom.h"
 #include "gui.h"
 #include "helpers.h"
+#include "init_msg.h"
 #include "list.h"
 #include "log.h"
 #include "math.h"
@@ -115,9 +103,6 @@
 #define	UNITS_APPEND_INTVAL		120	/* seconds */
 
 #define	TILE_NAME_FMT			"%+03.0f%+04.0f"
-
-#define	INIT_MSG_FONT			GLUT_BITMAP_HELVETICA_18
-#define	INIT_MSG_FONT_HEIGHT		21
 
 typedef struct {
 	double min, max;
@@ -211,14 +196,6 @@ static struct {
 	XPLMDataRef replay_mode;
 	XPLMDataRef plug_bus_load;
 } drs;
-
-static struct {
-	char		*msg;
-	long long	end;
-	int		timeout;
-	int		width;
-	int		height;
-} init_msg = { .msg = NULL, .end = 0, .timeout = 0, .width = 0, .height = 0 };
 
 /*
  * Returns true if `x' is within the numerical ranges in `rngs'.
@@ -2030,127 +2007,6 @@ raas_exec_cb(float elapsed_since_last_call, float elapsed_since_last_floop,
 	return (EXEC_INTVAL);
 }
 
-static void
-man_ref(char **str, size_t *cap, int section_number, const char *section_name)
-{
-	append_format(str, cap,
-	    "For more information, please refer to the X-RAAS "
-	    "user manual in docs%cmanual.pdf, section %d \"%s\".", DIRSEP,
-	    section_number, section_name);
-}
-
-static int
-draw_init_msg(XPLMDrawingPhase phase, int before, void *refcon)
-{
-	int screen_x, screen_y, x, y;
-	enum { MARGIN_SIZE = 10 };
-
-	ASSERT(init_msg.msg != NULL);
-	UNUSED(phase);
-	UNUSED(before);
-	UNUSED(refcon);
-
-	if (microclock() > init_msg.end) {
-		logMsg("init_msg_end");
-		free(init_msg.msg);
-		memset(&init_msg, 0, sizeof (init_msg));
-		XPLMUnregisterDrawCallback(draw_init_msg, xplm_Phase_Window,
-		    0, NULL);
-		return (1);
-	}
-
-	XPLMGetScreenSize(&screen_x, &screen_y);
-	glColor4f(0, 0, 0, 0.67);
-	glBegin(GL_POLYGON);
-	glVertex2f((screen_x - init_msg.width) / 2 - MARGIN_SIZE, 0);
-	glVertex2f((screen_x - init_msg.width) / 2 - MARGIN_SIZE,
-	    init_msg.height + 2 * MARGIN_SIZE);
-	glVertex2f((screen_x + init_msg.width) / 2 + MARGIN_SIZE,
-	    init_msg.height + 2 * MARGIN_SIZE);
-	glVertex2f((screen_x + init_msg.width) / 2 + MARGIN_SIZE, 0);
-	glEnd();
-
-	glColor4f(1, 1, 1, 1);
-	x = (screen_x - init_msg.width) / 2;
-	y = init_msg.height + MARGIN_SIZE - INIT_MSG_FONT_HEIGHT;
-	glRasterPos2f(x, y);
-	for (int i = 0, n = strlen(init_msg.msg); i < n; i++) {
-		if (init_msg.msg[i] != '\n') {
-			glutBitmapCharacter(INIT_MSG_FONT, init_msg.msg[i]);
-		} else {
-			y -= INIT_MSG_FONT_HEIGHT;
-			glRasterPos2f(x, y);
-		}
-	}
-
-	return (1);
-}
-
-/*
- * This is to be called ONCE per X-RAAS startup to log an initial startup
- * message and then exit.
- */
-void
-log_init_msg(bool_t display, int timeout, int man_sect_number,
-    const char *man_sect_name, const char *fmt, ...)
-{
-	va_list ap;
-	int len;
-	char *msg;
-
-	va_start(ap, fmt);
-	len = vsnprintf(NULL, 0, fmt, ap);
-	va_end(ap);
-
-	/* +2 for optional newline and terminating nul */
-	msg = calloc(1, len + 2);
-
-	va_start(ap, fmt);
-	vsnprintf(msg, len + 1, fmt, ap);
-	va_end(ap);
-
-	if (man_sect_number != -1) {
-		size_t sz = len + 2;
-		man_ref(&msg, &sz, man_sect_number, man_sect_name);
-	}
-
-	logMsg("%s", msg);
-	if (display) {
-		int line_width = 0;
-
-		if (init_msg.msg != NULL) {
-			/* replace an old message */
-			free(init_msg.msg);
-		} else {
-			/* initial registration */
-			XPLMRegisterDrawCallback(draw_init_msg,
-			    xplm_Phase_Window, 0, NULL);
-		}
-
-		init_msg.msg = msg;
-		init_msg.end = microclock() + SEC2USEC(timeout);
-		init_msg.timeout = timeout;
-		init_msg.width = 0;
-		init_msg.height = INIT_MSG_FONT_HEIGHT;
-
-		for (int i = 0, n = strlen(msg); i < n; i++) {
-			if (msg[i] == '\n') {
-				init_msg.height += INIT_MSG_FONT_HEIGHT;
-				init_msg.width = MAX(init_msg.width,
-				    line_width);
-				line_width = 0;
-			} else {
-				line_width += glutBitmapWidth(INIT_MSG_FONT,
-				    msg[i]);
-			}
-		}
-		init_msg.width = MAX(line_width, init_msg.width);
-		line_width = 0;
-	} else {
-		free(msg);
-	}
-}
-
 /*
  * Check if the aircraft is a helicopter (or at least says it flies like one).
  */
@@ -2175,6 +2031,14 @@ chk_acf_is_helo(void)
 	}
 	free(line);
 	return (result);
+}
+
+static void
+startup_complete(void)
+{
+	log_init_msg(state.startup_notify, STARTUP_MSG_TIMEOUT, NULL, NULL,
+	    "X-RAAS(%s): Runway Awareness OK; %s.", XRAAS2_VERSION,
+	    state.use_imperial ? "Feet" : "Meters");
 }
 
 void
@@ -2225,7 +2089,9 @@ xraas_init(void)
 		goto errout;
 
 	if (chk_acf_is_helo() && !state.allow_helos) {
-		logMsg("acf is helo");
+		log_init_msg(state.auto_disable_notify, INIT_ERR_MSG_TIMEOUT,
+		    "3", "Activating X-RAAS in the aircraft",
+		    "X-RAAS: auto-disabled: aircraft is a helicopter.");
 		goto errout;
 	}
 
@@ -2235,12 +2101,12 @@ xraas_init(void)
 		memset(icao, 0, sizeof (icao));
 		XPLMGetDatab(drs.ICAO, icao, 0, sizeof (icao) - 1);
 		log_init_msg(state.auto_disable_notify, INIT_ERR_MSG_TIMEOUT,
-		    3, "Activating X-RAAS in the aircraft",
+		    "3", "Activating X-RAAS in the aircraft",
 		    "X-RAAS: auto-disabled: aircraft below X-RAAS limits:\n"
 		    "X-RAAS configuration: minimum number of engines: %d; "
 		    "minimum MTOW: %d kg\n"
 		    "Your aircraft: (%s) number of engines: %d; "
-		    "MTOW: %.0f kg\n", state.min_engines, state.min_mtow, icao,
+		    "MTOW: %.0f kg", state.min_engines, state.min_mtow, icao,
 		    XPLMGetDatai(drs.num_engines), XPLMGetDataf(drs.mtow));
 		goto errout;
 	}
@@ -2265,6 +2131,8 @@ xraas_init(void)
 
 	xraas_inited = B_TRUE;
 
+	startup_complete();
+
 	return;
 
 errout:
@@ -2280,17 +2148,6 @@ errout:
 void
 xraas_fini(void)
 {
-	/*
-	 * Must go ahead of the xraas_inited check, because we might have
-	 * set an init_msg without fully initing.
-	 */
-	if (init_msg.msg != NULL) {
-		free(init_msg.msg);
-		memset(&init_msg, 0, sizeof (init_msg));
-		XPLMUnregisterDrawCallback(draw_init_msg, xplm_Phase_Window,
-		    0, NULL);
-	}
-
 	if (!xraas_inited)
 		return;
 
@@ -2398,7 +2255,6 @@ XPluginStart(char *outName, char *outSig, char *outDesc)
 PLUGIN_API void
 XPluginStop(void)
 {
-	ASSERT(init_msg.msg == NULL);
 }
 
 PLUGIN_API int
@@ -2414,6 +2270,7 @@ XPluginDisable(void)
 {
 	gui_fini();
 	xraas_fini();
+	init_msg_sys_fini();
 }
 
 PLUGIN_API void

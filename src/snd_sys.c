@@ -22,6 +22,7 @@
 #include <XPLMUtilities.h>
 
 #include "assert.h"
+#include "init_msg.h"
 #include "list.h"
 #include "wav.h"
 
@@ -310,6 +311,10 @@ snd_sys_init(const char *plugindir)
 		    NULL);
 		voice_msgs[msg].wav = wav_load(pathname, voice_msgs[msg].name);
 		if (voice_msgs[msg].wav == NULL) {
+			log_init_msg(B_TRUE, INIT_ERR_MSG_TIMEOUT, NULL, NULL,
+			    "X-RAAS initialization error: cannot load WAV "
+			    "files.\n"
+			    "See Log.txt for more information.");
 			free(pathname);
 			goto errout;
 		}
