@@ -36,6 +36,7 @@
 
 #include "assert.h"
 #include "dbg_gui.h"
+#include "init_msg.h"
 #include "list.h"
 #include "nd_alert.h"
 #include "xraas2.h"
@@ -47,6 +48,7 @@
 #define	CONFIG_GUI_CMD_NAME	"X-RAAS configuration..."
 #define	DBG_GUI_TOGGLE_CMD_NAME	"Toggle debug overlay"
 #define	RAAS_RESET_CMD_NAME	"Reset"
+#define	RECREATE_CACHE_CMD_NAME	"Recreate data cache"
 
 enum {
 	MAIN_WINDOW_WIDTH =	600,
@@ -85,7 +87,8 @@ typedef struct {
 enum {
 	CONFIG_GUI_CMD,
 	DBG_GUI_TOGGLE_CMD,
-	RAAS_RESET_CMD
+	RAAS_RESET_CMD,
+	RECREATE_CACHE_CMD
 };
 
 static int plugins_menu_item;
@@ -542,6 +545,19 @@ menu_cb(void *menu, void *item)
 		XPLMCheckMenuItem(root_menu, dbg_gui_menu_item,
 		    dbg_gui_inited ? xplm_Menu_Checked : xplm_Menu_Unchecked);
 		break;
+	case RECREATE_CACHE_CMD: {
+		char *cachedir = mkpathname(xraas_xpprefsdir, "X-RAAS.cache",
+		    NULL);
+		if (!remove_directory(cachedir)) {
+			log_init_msg(B_TRUE, INIT_ERR_MSG_TIMEOUT, NULL, NULL,
+			    "Cannot remove existing data cache. See Log.txt "
+			    "for more information.");
+			free(cachedir);
+			break;
+		}
+		free(cachedir);
+		/*FALLTHROUGH*/
+	}
 	case RAAS_RESET_CMD:
 		xraas_fini();
 		xraas_init();
@@ -563,6 +579,8 @@ create_menu(void)
 	    DBG_GUI_TOGGLE_CMD_NAME, (void *)DBG_GUI_TOGGLE_CMD, 1);
 	XPLMAppendMenuItem(root_menu, RAAS_RESET_CMD_NAME,
 	    (void *)RAAS_RESET_CMD, 1);
+	XPLMAppendMenuItem(root_menu, RECREATE_CACHE_CMD_NAME,
+	    (void *)RECREATE_CACHE_CMD, 1);
 }
 
 static void

@@ -158,7 +158,7 @@ static char acf_path[512] = { 0 };
 static char acf_dirpath[512] = { 0 };
 static char acf_filename[512] = { 0 };
 
-const char *xraas_acf_path = acf_path;
+const char *xraas_xpprefsdir = xpprefsdir;
 const char *xraas_acf_dirpath = acf_dirpath;
 const char *xraas_plugindir = plugindir;
 
