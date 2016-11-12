@@ -2069,8 +2069,10 @@ xraas_init(void)
 	if (!load_configs(&state))
 		return;
 
-	if (!state.enabled)
+	if (!state.enabled) {
+		logMsg("X-RAAS: DISABLED");
 		return;
+	}
 
 	dbg_log(startup, 1, "xraas_init");
 

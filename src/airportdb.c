@@ -1107,9 +1107,6 @@ make_apch_prox_bbox(const runway_t *rwy, int end_i)
 	ASSERT(fpp != NULL);
 	ASSERT(end_i == 0 || end_i == 1);
 
-	end = &rwy->ends[end_i];
-	oend = &rwy->ends[!end_i];
-
 	/*
 	 * By pre-initing the whole array to null vectors, we can make the
 	 * bbox either contain 4, 5 or 6 points, depending on whether
@@ -1118,8 +1115,10 @@ make_apch_prox_bbox(const runway_t *rwy, int end_i)
 	for (int i = 0; i < 7; i++)
 		bbox[i] = NULL_VECT2;
 
-	thr_v = geo2fpp(GEO3_TO_GEO2(end->thr), fpp);
-	othr_v = geo2fpp(GEO3_TO_GEO2(oend->thr), fpp);
+	end = &rwy->ends[end_i];
+	oend = &rwy->ends[!end_i];
+	thr_v = end->thr_v;
+	othr_v = oend->thr_v;
 	dir_v = vect2_sub(othr_v, thr_v);
 
 	x = vect2_add(thr_v, vect2_set_abs(vect2_neg(dir_v),
