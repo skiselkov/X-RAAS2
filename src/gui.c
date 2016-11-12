@@ -523,7 +523,10 @@ tooltip_fini(void)
 static void
 menu_cb(void *menu, void *item)
 {
-	int cmd = (long)item;
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
+	int cmd = (int)item;
+#pragma GCC diagnostic pop
 
 	UNUSED(menu);
 	switch (cmd) {
