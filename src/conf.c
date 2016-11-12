@@ -157,7 +157,6 @@ conf_get_i(const conf_t *conf, const char *key, int *value)
 	const conf_key_t *ck = conf_find(conf, key);
 	if (ck == NULL)
 		return (B_FALSE);
-	logMsg("%s = %s\n", key, ck->value);
 	*value = atoi(ck->value);
 	return (B_TRUE);
 }

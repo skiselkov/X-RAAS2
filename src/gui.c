@@ -908,6 +908,8 @@ update_main_window(void)
 	UPDATE_BUTTON_STATE(override_electrical);
 	UPDATE_BUTTON_STATE(override_replay);
 	UPDATE_BUTTON_STATE(speak_units);
+	UPDATE_BUTTON_STATE(use_tts);
+	UPDATE_BUTTON_STATE(voice_female);
 	UPDATE_BUTTON_STATE(nd_alerts_enabled);
 	UPDATE_BUTTON_STATE(nd_alert_overlay_enabled);
 	UPDATE_BUTTON_STATE(nd_alert_overlay_force);

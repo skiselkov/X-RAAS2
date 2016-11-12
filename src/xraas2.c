@@ -23,7 +23,20 @@
 #include <string.h>
 #include <stdlib.h>
 
+#if	IBM
+# include <gl.h>
+# include <glut.h>
+#elif	APL
+# include <OpenGL/gl.h>
+# include <GLUT/glut.h>
+#else	/* LIN */
+# include <GL/gl.h>
+# include <GL/glut.h>
+#endif	/* LIN */
+
 #include <XPLMDataAccess.h>
+#include <XPLMDisplay.h>
+#include <XPLMGraphics.h>
 #include <XPLMNavigation.h>
 #include <XPLMPlanes.h>
 #include <XPLMProcessing.h>
@@ -102,6 +115,9 @@
 #define	UNITS_APPEND_INTVAL		120	/* seconds */
 
 #define	TILE_NAME_FMT			"%+03.0f%+04.0f"
+
+#define	INIT_MSG_FONT			GLUT_BITMAP_HELVETICA_18
+#define	INIT_MSG_FONT_HEIGHT		21
 
 typedef struct {
 	double min, max;
@@ -195,6 +211,14 @@ static struct {
 	XPLMDataRef replay_mode;
 	XPLMDataRef plug_bus_load;
 } drs;
+
+static struct {
+	char		*msg;
+	long long	end;
+	int		timeout;
+	int		width;
+	int		height;
+} init_msg = { .msg = NULL, .end = 0, .timeout = 0, .width = 0, .height = 0 };
 
 /*
  * Returns true if `x' is within the numerical ranges in `rngs'.
@@ -298,7 +322,7 @@ conv_per_min(double x)
 }
 
 /*
- * Returns true if state.landing gear is fully retracted, false otherwise.
+ * Returns true if landing gear is fully retracted, false otherwise.
  */
 static bool_t
 gear_is_up(void)
@@ -874,7 +898,8 @@ on_rwy_check(const char *arpt_id, const char *rwy_id, double hdg,
 	if (rwy_key_tbl_get(&state.on_rwy_ann, arpt_id, rwy_id) == B_FALSE) {
 		if (XPLMGetDataf(drs.gs) < SPEED_THRESH)
 			perform_on_rwy_ann(rwy_id, pos_v, thr_v, opp_thr_v,
-			    strcmp(state.rejected_takeoff, "") != 0, B_FALSE, 1);
+			    strcmp(state.rejected_takeoff, "") != 0,
+			    B_FALSE, 1);
 		rwy_key_tbl_set(&state.on_rwy_ann, arpt_id, rwy_id, B_TRUE);
 	}
 }
@@ -1030,7 +1055,7 @@ stop_check(const runway_t *rwy, int end, double hdg, vect2_t pos_v)
 			 *	a) runway length minus 2000 feet
 			 *	b) 3/4 the runway length
 			 * 2) the lesser of:
-			 *	a) minimum safe state.landing distance
+			 *	a) minimum safe landing distance
 			 *	b) full runway length
 			 */
 			double dist_lim = MAX(MAX(
@@ -1062,9 +1087,11 @@ stop_check(const runway_t *rwy, int end, double hdg, vect2_t pos_v)
 	if (!state.arriving)
 		takeoff_rwy_dist_check(opp_thr_v, pos_v);
 
-	maxspd = rwy_key_tbl_get(&state.accel_stop_max_spd, arpt_id, rwy_end->id);
+	maxspd = rwy_key_tbl_get(&state.accel_stop_max_spd, arpt_id,
+	    rwy_end->id);
 	if (gs > maxspd) {
-		rwy_key_tbl_set(&state.accel_stop_max_spd, arpt_id, rwy_end->id, gs);
+		rwy_key_tbl_set(&state.accel_stop_max_spd, arpt_id,
+		    rwy_end->id, gs);
 		maxspd = gs;
 	}
 	if (!state.landing && gs < maxspd - ACCEL_STOP_SPD_THRESH)
@@ -1075,18 +1102,18 @@ stop_check(const runway_t *rwy, int end, double hdg, vect2_t pos_v)
 	    orwy_end->thr.elev, rwy->length);
 	/*
 	 * We want to perform distance remaining callouts if:
-	 * 1) we are NOT state.landing and speed has decayed below the rejected
+	 * 1) we are NOT landing and speed has decayed below the rejected
 	 *    takeoff threshold, or
-	 * 2) we ARE state.landing, distance remaining is below the stop readout
+	 * 2) we ARE landing, distance remaining is below the stop readout
 	 *    cutoff and our deceleration is insufficient to stop within the
 	 *    remaining distance, or
-	 * 3) we are NOT state.landing, distance remaining is below the rotation
+	 * 3) we are NOT landing, distance remaining is below the rotation
 	 *    threshold and our pitch angle to the runway indicates that
 	 *    rotation has not yet been initiated.
 	 */
 	if (strcmp(state.rejected_takeoff, rwy_end->id) == 0 ||
-	    (state.landing && dist < MAX(rwy->length / 2, state.stop_dist_cutoff) &&
-	    !decel_check(dist)) ||
+	    (state.landing && dist < MAX(rwy->length / 2,
+	    state.stop_dist_cutoff) && !decel_check(dist)) ||
 	    (!state.landing && dist < state.min_rotation_dist &&
 	    XPLMGetDataf(drs.rad_alt) < RADALT_GRD_THRESH &&
 	    rpitch < state.min_rotation_angle))
@@ -1251,16 +1278,16 @@ gpa_limit(double rwy_gpa, double dist_from_thr)
 }
 
 /*
- * Gets the state.landing speed selected in the FMC. This function returns two
+ * Gets the landing speed selected in the FMC. This function returns two
  * values:
- *	*) The state.landing speed (a number).
- *	*) A boolean indicating if the state.landing speed return is a reference
+ *	*) The landing speed (a number).
+ *	*) A boolean indicating if the landing speed return is a reference
  *	   speed (wind margin is NOT taken into account) or an approach
  *	   speed (wind margin IS taken into account). Boeing aircraft tend
  *	   to use Vref, whereas Airbus aircraft tend to use Vapp (V_LS).
  * The functionality of this depends on the exact aircraft model loaded
- * and whether it exposes the state.landing speed to us. If the aircraft doesn't
- * support exposing the state.landing speed or the state.landing speed is not yet
+ * and whether it exposes the landing speed to us. If the aircraft doesn't
+ * support exposing the landing speed or the landing speed is not yet
  * selected in the FMC, this function returns two nil values instead.
  */
 static double
@@ -1299,23 +1326,23 @@ get_land_spd(bool_t *vref)
 
 /*
  * Computes the approach speed limit. The approach speed limit is computed
- * relative to the state.landing speed selected in the FMC with an extra added on
- * top based on our height above the runway threshold:
+ * relative to the landing speed selected in the FMC with an extra added
+ * on top based on our height above the runway threshold:
  * 1) If the aircraft is outside the approach speed limit protection envelope
  *	(below 300 feet or above 950 feet above runway elevation), this
  *	function returns a very high speed value to guarantee that any
  *	comparison with the actual airspeed will indicate "in range".
- * 2) If the FMC doesn't expose state.landing speed information, or the information
- *	has not yet been entered, this function again returns a very high
- *	spped limit value.
- * 3) If the FMC exposes state.landing speed information and the information has
- *	been set, the computed margin value is:
- *	a) if the state.landing speed is based on the reference state.landing speed (Vref),
- *	   +30 knots between 300 and 500 feet, and between 500 and 950
+ * 2) If the FMC doesn't expose landing speed information, or the
+ *	information has not yet been entered, this function again returns
+ *	a very high speed limit value.
+ * 3) If the FMC exposes landing speed information and the information
+ *	has been set, the computed margin value is:
+ *	a) if the landing speed is based on the reference landing speed
+ *	   (Vref), +30 knots between 300 and 500 feet, and between 500 and 950
  *	   increasing linearly from +30 knots at 500 feet to +40 knots at
  *	   950 feet.
- *	b) if the state.landing speed is based on the approach state.landing speed (Vapp),
- *	   +15 knots between 300 and 500 feet, and between 500 and 950
+ *	b) if the landing speed is based on the approach landing speed
+ *	   (Vapp), +15 knots between 300 and 500 feet, and between 500 and 950
  *	   increasing linearly from +15 knots at 500 feet to +40 knots at
  *	   950 feet.
  */
@@ -1333,7 +1360,7 @@ apch_spd_limit(double height_abv_thr)
 	 */
 	const lin_func_seg_t vref_segs[APCH_SPD_SEGS] = {
 		/*
-		 * If the state.landing speed is a reference speed (Vref), we allow
+		 * If the landing speed is a reference speed (Vref), we allow
 		 * up to 30 knots above Vref for approach speed margin when low.
 		 */
 		{ .min = 300, .max = 500, .f1 = 30, .f2 = 30 },
@@ -1341,7 +1368,7 @@ apch_spd_limit(double height_abv_thr)
 	};
 	const lin_func_seg_t vapp_segs[APCH_SPD_SEGS] = {
 		/*
-		 * If the state.landing speed is an approach speed (Vapp), we use
+		 * If the landing speed is an approach speed (Vapp), we use
 		 * a more restrictive speed margin value of 15 knots when low
 		 */
 		{ .min = 300, .max = 500, .f1 = 15, .f2 = 15 },
@@ -1350,7 +1377,7 @@ apch_spd_limit(double height_abv_thr)
 	const lin_func_seg_t *segs;
 
 	/*
-	 * If the state.landing speed is unknown, just return a huge number so
+	 * If the landing speed is unknown, just return a huge number so
 	 * we will always be under this speed.
 	 */
 	if (isnan(land_spd))
@@ -1551,8 +1578,8 @@ air_runway_approach_arpt_rwy(const airport_t *arpt, const runway_t *rwy,
 		    gpa_act, rwy_gpa, RWY_APCH_FLAP2_THRESH,
 		    RWY_APCH_FLAP3_THRESH, &msg, &msg_len,
 		    &state.air_apch_flap2_ann, &state.air_apch_gpa2_ann,
-		    &state.air_apch_spd2_ann, B_FALSE, B_FALSE, dist, B_FALSE) ||
-		    apch_cfg_chk(arpt_id, rwy_id, alt - telev,
+		    &state.air_apch_spd2_ann, B_FALSE, B_FALSE, dist,
+		    B_FALSE) || apch_cfg_chk(arpt_id, rwy_id, alt - telev,
 		    gpa_act, rwy_gpa, RWY_APCH_FLAP3_THRESH,
 		    RWY_APCH_FLAP4_THRESH, &msg, &msg_len,
 		    &state.air_apch_flap3_ann, &state.air_apch_gpa3_ann,
@@ -1646,7 +1673,7 @@ air_runway_approach(void)
 
 	/*
 	 * If we are neither over an approach bbox nor a runway, and we're
-	 * not climbing and we're in a state.landing configuration, we're most
+	 * not climbing and we're in a landing configuration, we're most
 	 * likely trying to land onto something that's not a runway.
 	 */
 	if (in_apch_bbox == 0 && clb_rate < 0 && !gear_is_up() &&
@@ -1800,7 +1827,8 @@ altimeter_setting(void)
 		state.TA = state.TL;
 	}
 
-	if (state.TA != 0 && elev > state.TA && state.TATL_state == TATL_STATE_ALT) {
+	if (state.TA != 0 && elev > state.TA &&
+	    state.TATL_state == TATL_STATE_ALT) {
 		state.TATL_transition = microclock();
 		state.TATL_state = TATL_STATE_FL;
 		dbg_log(altimeter, 1, "elev > TA (%d) transitioning "
@@ -1810,8 +1838,8 @@ altimeter_setting(void)
 	if (state.TL != 0 && elev < state.TA &&
 	    XPLMGetDataf(drs.baro_alt) < state.TL &&
 	    /*
-	     * If there's a gap between the altitudes and flight levels, don't
-	     * transition until we're below the state.TA
+	     * If there's a gap between the altitudes and flight levels,
+	     * don't transition until we're below the state.TA
 	     */
 	    (state.TA == 0 || elev < state.TA) &&
 	    state.TATL_state == TATL_STATE_FL) {
@@ -1923,9 +1951,11 @@ xraas_is_on(void)
 			xfer_elec_bus(0);
 	} else if (state.bus_loaded != -1) {
 		float bus_load;
-		XPLMGetDatavf(drs.plug_bus_load, &bus_load, state.bus_loaded, 1);
+		XPLMGetDatavf(drs.plug_bus_load, &bus_load,
+		    state.bus_loaded, 1);
 		bus_load -= BUS_LOAD_AMPS;
-		XPLMSetDatavf(drs.plug_bus_load, &bus_load, state.bus_loaded, 1);
+		XPLMSetDatavf(drs.plug_bus_load, &bus_load,
+		    state.bus_loaded, 1);
 		state.bus_loaded = -1;
 	}
 
@@ -2009,6 +2039,53 @@ man_ref(char **str, size_t *cap, int section_number, const char *section_name)
 	    section_number, section_name);
 }
 
+static int
+draw_init_msg(XPLMDrawingPhase phase, int before, void *refcon)
+{
+	int screen_x, screen_y, x, y;
+	enum { MARGIN_SIZE = 10 };
+
+	ASSERT(init_msg.msg != NULL);
+	UNUSED(phase);
+	UNUSED(before);
+	UNUSED(refcon);
+
+	if (microclock() > init_msg.end) {
+		logMsg("init_msg_end");
+		free(init_msg.msg);
+		memset(&init_msg, 0, sizeof (init_msg));
+		XPLMUnregisterDrawCallback(draw_init_msg, xplm_Phase_Window,
+		    0, NULL);
+		return (1);
+	}
+
+	XPLMGetScreenSize(&screen_x, &screen_y);
+	glColor4f(0, 0, 0, 0.67);
+	glBegin(GL_POLYGON);
+	glVertex2f((screen_x - init_msg.width) / 2 - MARGIN_SIZE, 0);
+	glVertex2f((screen_x - init_msg.width) / 2 - MARGIN_SIZE,
+	    init_msg.height + 2 * MARGIN_SIZE);
+	glVertex2f((screen_x + init_msg.width) / 2 + MARGIN_SIZE,
+	    init_msg.height + 2 * MARGIN_SIZE);
+	glVertex2f((screen_x + init_msg.width) / 2 + MARGIN_SIZE, 0);
+	glEnd();
+
+	glColor4f(1, 1, 1, 1);
+	x = (screen_x - init_msg.width) / 2;
+	y = init_msg.height + MARGIN_SIZE - INIT_MSG_FONT_HEIGHT;
+	glRasterPos2f(x, y);
+	for (int i = 0, n = strlen(init_msg.msg); i < n; i++) {
+		if (init_msg.msg[i] != '\n') {
+			glutBitmapCharacter(INIT_MSG_FONT, init_msg.msg[i]);
+		} else {
+			y -= INIT_MSG_FONT_HEIGHT;
+			glRasterPos2f(x, y);
+		}
+	}
+
+	return (1);
+}
+
 /*
  * This is to be called ONCE per X-RAAS startup to log an initial startup
  * message and then exit.
@@ -2039,8 +2116,36 @@ log_init_msg(bool_t display, int timeout, int man_sect_number,
 
 	logMsg("%s", msg);
 	if (display) {
-		state.init_msg = msg;
-		state.init_msg_end = microclock() + SEC2USEC(timeout);
+		int line_width = 0;
+
+		if (init_msg.msg != NULL) {
+			/* replace an old message */
+			free(init_msg.msg);
+		} else {
+			/* initial registration */
+			XPLMRegisterDrawCallback(draw_init_msg,
+			    xplm_Phase_Window, 0, NULL);
+		}
+
+		init_msg.msg = msg;
+		init_msg.end = microclock() + SEC2USEC(timeout);
+		init_msg.timeout = timeout;
+		init_msg.width = 0;
+		init_msg.height = INIT_MSG_FONT_HEIGHT;
+
+		for (int i = 0, n = strlen(msg); i < n; i++) {
+			if (msg[i] == '\n') {
+				init_msg.height += INIT_MSG_FONT_HEIGHT;
+				init_msg.width = MAX(init_msg.width,
+				    line_width);
+				line_width = 0;
+			} else {
+				line_width += glutBitmapWidth(INIT_MSG_FONT,
+				    msg[i]);
+			}
+		}
+		init_msg.width = MAX(line_width, init_msg.width);
+		line_width = 0;
 	} else {
 		free(msg);
 	}
@@ -2052,9 +2157,7 @@ log_init_msg(bool_t display, int timeout, int man_sect_number,
 static bool_t
 chk_acf_is_helo(void)
 {
-#if 0
-	/* TODO: implement AIRCRAFT_FILENAME */
-	FILE *fp = fopen(AIRCRAFT_FILENAME, "r");
+	FILE *fp = fopen(acf_path, "r");
 	char *line = NULL;
 	size_t linecap = 0;
 	bool_t result = B_FALSE;
@@ -2072,9 +2175,6 @@ chk_acf_is_helo(void)
 	}
 	free(line);
 	return (result);
-#else	/* !0 */
-	return (B_FALSE);
-#endif	/* !0 */
 }
 
 void
@@ -2087,6 +2187,9 @@ xraas_init(void)
 
 	/* these must go ahead of config parsing */
 	XPLMGetNthAircraftModel(0, acf_filename, acf_path);
+	if (strlen(acf_filename) == 0)
+		/* no aircraft loaded yet */
+		return;
 	if ((sep = strrchr(acf_path, DIRSEP)) != NULL) {
 		memset(acf_dirpath, 0, sizeof (acf_dirpath));
 		memcpy(acf_dirpath, acf_path, sep - acf_path);
@@ -2121,8 +2224,10 @@ xraas_init(void)
 	if (!recreate_apt_dat_cache(&state.airportdb))
 		goto errout;
 
-	if (chk_acf_is_helo() && !state.allow_helos)
+	if (chk_acf_is_helo() && !state.allow_helos) {
+		logMsg("acf is helo");
 		goto errout;
+	}
 
 	if (XPLMGetDatai(drs.num_engines) < state.min_engines ||
 	    XPLMGetDataf(drs.mtow) < state.min_mtow) {
@@ -2175,6 +2280,17 @@ errout:
 void
 xraas_fini(void)
 {
+	/*
+	 * Must go ahead of the xraas_inited check, because we might have
+	 * set an init_msg without fully initing.
+	 */
+	if (init_msg.msg != NULL) {
+		free(init_msg.msg);
+		memset(&init_msg, 0, sizeof (init_msg));
+		XPLMUnregisterDrawCallback(draw_init_msg, xplm_Phase_Window,
+		    0, NULL);
+	}
+
 	if (!xraas_inited)
 		return;
 
@@ -2217,11 +2333,6 @@ xraas_fini(void)
 	rwy_key_tbl_destroy(&state.air_apch_spd1_ann);
 	rwy_key_tbl_destroy(&state.air_apch_spd2_ann);
 	rwy_key_tbl_destroy(&state.air_apch_spd3_ann);
-
-	if (state.init_msg != NULL) {
-		free(state.init_msg);
-		state.init_msg = NULL;
-	}
 
 	XPLMUnregisterFlightLoopCallback(raas_exec_cb, NULL);
 
@@ -2281,16 +2392,13 @@ XPluginStart(char *outName, char *outSig, char *outDesc)
 			*p = '\0';
 	}
 
-	logMsg("xpdir: %s", xpdir);
-	logMsg("prefsdir: %s", xpprefsdir);
-	logMsg("plugindir: %s", plugindir);
-
 	return (1);
 }
 
 PLUGIN_API void
 XPluginStop(void)
 {
+	ASSERT(init_msg.msg == NULL);
 }
 
 PLUGIN_API int
@@ -2315,7 +2423,7 @@ XPluginReceiveMessage(XPLMPluginID src, int msg, void *param)
 	UNUSED(param);
 
 	switch(msg) {
-	case XPLM_MSG_PLANE_LOADED:
+	case XPLM_MSG_AIRPORT_LOADED:
 		/* only respond to user aircraft reloads */
 		if (param != 0)
 			break;

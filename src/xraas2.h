@@ -138,9 +138,6 @@ typedef struct xraas_state {
 	list_t		*cur_arpts;
 	airportdb_t	airportdb;
 	int64_t		last_airport_reload;
-
-	char		*init_msg;
-	int64_t		init_msg_end;
 } xraas_state_t;
 
 extern bool_t xraas_inited;
