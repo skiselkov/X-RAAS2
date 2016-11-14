@@ -771,17 +771,17 @@ create_main_window(void)
 	y = LAYOUT_START_Y;
 	LAYOUT_BUTTON(enabled, "Enabled",
 	    PushButton, CheckBox, enabled_tooltip);
-	LAYOUT_BUTTON(allow_helos, "Allow helicopters",
-	    PushButton, CheckBox, allow_helos_tooltip);
-	LAYOUT_BUTTON(startup_notify, "Notify on startup",
-	    PushButton, CheckBox, startup_notify_tooltip);
 	LAYOUT_BUTTON(use_imperial, "Call out distances in feet",
 	    PushButton, CheckBox, use_imperial_tooltip);
 	LAYOUT_BUTTON(us_runway_numbers, "US runway numbers",
 	    PushButton, CheckBox, us_runway_numbers_tooltip);
-	LAYOUT_BUTTON(too_high_enabled, "Too high approach monitor",
+	LAYOUT_BUTTON(voice_female, "Voice gender female",
+	    PushButton, CheckBox, voice_female_tooltip);
+	LAYOUT_BUTTON(speak_units, "Speak units",
+	    PushButton, CheckBox, speak_units_tooltip);
+	LAYOUT_BUTTON(too_high_enabled, "TOO HIGH approach monitor",
 	    PushButton, CheckBox, too_high_enabled_tooltip);
-	LAYOUT_BUTTON(too_fast_enabled, "Too fast approach monitor",
+	LAYOUT_BUTTON(too_fast_enabled, "TOO FAST approach monitor",
 	    PushButton, CheckBox, too_fast_enabled_tooltip);
 	LAYOUT_BUTTON(alt_setting_enabled, "Altimeter setting monitor",
 	    PushButton, CheckBox, alt_setting_enabled_tooltip);
@@ -789,27 +789,28 @@ create_main_window(void)
 	    PushButton, CheckBox, qnh_alt_mode_tooltip);
 	LAYOUT_BUTTON(qfe_alt_enabled, "QFE altimeter setting mode",
 	    PushButton, CheckBox, qfe_alt_mode_tooltip);
-	LAYOUT_BUTTON(disable_ext_view, "Silence in external view",
+	LAYOUT_BUTTON(allow_helos, "Start up in helicopters",
+	    PushButton, CheckBox, allow_helos_tooltip);
+	LAYOUT_BUTTON(startup_notify, "Show startup notification",
+	    PushButton, CheckBox, startup_notify_tooltip);
+	LAYOUT_BUTTON(disable_ext_view, "Silence in external views",
 	    PushButton, CheckBox, disable_ext_view_tooltip);
+	LAYOUT_BUTTON(nd_alerts_enabled, "Visual alerts",
+	    PushButton, CheckBox, nd_alerts_enabled_tooltip);
+	LAYOUT_BUTTON(nd_alert_overlay_enabled, "Visual alert overlay",
+	    PushButton, CheckBox, nd_alert_overlay_enabled_tooltip);
+	LAYOUT_BUTTON(nd_alert_overlay_force, "Always show visual alerts "
+	    "using overlay",
+	    PushButton, CheckBox, nd_alert_overlay_force_tooltip);
 	LAYOUT_BUTTON(override_electrical, "Override electrical check",
 	    PushButton, CheckBox, override_electrical_tooltip);
 	LAYOUT_BUTTON(override_replay, "Show in replay mode",
 	    PushButton, CheckBox, override_replay_tooltip);
-	LAYOUT_BUTTON(voice_female, "Voice gender female",
-	    PushButton, CheckBox, voice_female_tooltip);
-	LAYOUT_BUTTON(speak_units, "Speak units",
-	    PushButton, CheckBox, speak_units_tooltip);
 	LAYOUT_BUTTON(use_tts, "Use Text-To-Speech",
 	    PushButton, CheckBox, use_tts_tooltip);
 #if	LIN
 	XPSetWidgetProperty(buttons.use_tts, xpProperty_Enabled, 0);
 #endif	/* !LIN */
-	LAYOUT_BUTTON(nd_alerts_enabled, "Visual alerts enabled",
-	    PushButton, CheckBox, nd_alerts_enabled_tooltip);
-	LAYOUT_BUTTON(nd_alert_overlay_enabled, "ND alert overlay enabled",
-	    PushButton, CheckBox, nd_alert_overlay_enabled_tooltip);
-	LAYOUT_BUTTON(nd_alert_overlay_force, "Always show ND alert overlay",
-	    PushButton, CheckBox, nd_alert_overlay_force_tooltip);
 	LAYOUT_BUTTON(openal_shared, "Shared audio driver context",
 	    PushButton, CheckBox, openal_shared_tooltip);
 
@@ -818,7 +819,7 @@ create_main_window(void)
 	x = LAYOUT_START_X + COLUMN_X;
 	y = LAYOUT_START_Y;
 	scrollbars.voice_volume = layout_scroll_control(main_win, tts,
-	    &main_win_scrollbar_cbs, x, y, "Voice volume", 0, 100, 10,
+	    &main_win_scrollbar_cbs, x, y, "Audio volume", 0, 100, 10,
 	    B_FALSE, 1.0, "%", NULL, voice_volume_tooltip);
 	y += TEXT_FIELD_HEIGHT;
 	text_fields.min_engines = layout_text_field(main_win, tts, x, y,
@@ -844,20 +845,20 @@ create_main_window(void)
 	    B_FALSE);
 	y += TEXT_FIELD_HEIGHT;
 	text_fields.stop_dist_cutoff = layout_text_field(main_win, tts, x, y,
-	    "Runway length remaining cutoff", 4, "m", stop_dist_cutoff_tooltip,
+	    "Runway remaining cutoff length", 4, "m", stop_dist_cutoff_tooltip,
 	    B_FALSE);
 	y += TEXT_FIELD_HEIGHT;
 	text_fields.on_rwy_warn_initial = layout_text_field(main_win, tts, x, y,
-	    "On runway warning (initial)", 3, "sec",
+	    "ON RUNWAY annuncation (initial)", 3, "sec",
 	    on_rwy_warn_initial_tooltip, B_FALSE);
 	y += TEXT_FIELD_HEIGHT;
 	text_fields.on_rwy_warn_repeat = layout_text_field(main_win, tts, x, y,
-	    "On runway warning (repeat)", 3, "sec", on_rwy_warn_repeat_tooltip,
-	    B_FALSE);
+	    "ON RUNWAY annuncation (repeat)", 3, "sec",
+	    on_rwy_warn_repeat_tooltip, B_FALSE);
 	y += TEXT_FIELD_HEIGHT;
 	text_fields.on_rwy_warn_max_n = layout_text_field(main_win, tts, x, y,
-	    "On runway maximum number", 2, NULL, on_rwy_warn_max_n_tooltip,
-	    B_FALSE);
+	    "ON RUNWAY annuncation maximum", 2, NULL,
+	    on_rwy_warn_max_n_tooltip, B_FALSE);
 	y += TEXT_FIELD_HEIGHT;
 	scrollbars.gpa_limit_mult = layout_scroll_control(main_win, tts,
 	    &main_win_scrollbar_cbs, x, y, "GPA limit multiplier", 0, 100, 10,
@@ -888,18 +889,19 @@ create_main_window(void)
 	    10, B_FALSE, 0.01, NULL, NULL, max_takeoff_flap_tooltip);
 	y += TEXT_FIELD_HEIGHT;
 	text_fields.nd_alert_timeout = layout_text_field(main_win, tts, x, y,
-	    "ND alert timeout", 3, "sec", nd_alert_timeout_tooltip, B_FALSE);
+	    "Visual alert timeout", 3, "sec", nd_alert_timeout_tooltip,
+	    B_FALSE);
 	y += TEXT_FIELD_HEIGHT;
 	scrollbars.nd_alert_filter = layout_scroll_control(main_win, tts,
-	    &main_win_scrollbar_cbs, x, y, "ND alert filter", 0, 2, 1, B_FALSE,
-	    1, NULL, nd_alert2str, nd_alert_filter_tooltip);
+	    &main_win_scrollbar_cbs, x, y, "Visual alert filter", 0, 2, 1,
+	    B_FALSE, 1, NULL, nd_alert2str, nd_alert_filter_tooltip);
 	y += TEXT_FIELD_HEIGHT;
 	text_fields.nd_alert_overlay_font = layout_text_field(main_win, tts,
-	    x, y, "ND alert overlay font", 500, NULL,
+	    x, y, "Visual alert overlay font", 500, NULL,
 	    nd_alert_overlay_font_tooltip, B_TRUE);
 	y += TEXT_FIELD_HEIGHT;
 	text_fields.nd_alert_overlay_font_size = layout_text_field(main_win,
-	    tts, x, y, "ND alert overlay font size", 3, NULL,
+	    tts, x, y, "Visual alert overlay font size", 3, NULL,
 	    nd_alert_overlay_font_size_tooltip, B_FALSE);
 	y += TEXT_FIELD_HEIGHT;
 
@@ -911,16 +913,18 @@ create_main_window(void)
 	} while (0)
 
 	LAYOUT_PUSH_BUTTON(save_acf_conf, WINDOW_MARGIN, MAIN_WINDOW_HEIGHT -
-	    70, BUTTON_WIDTH, 18, "Save aircraft config", save_acf_tooltip);
+	    70, BUTTON_WIDTH, 18, "SAVE aircraft configuration",
+	    save_acf_tooltip);
 	LAYOUT_PUSH_BUTTON(save_glob_conf, WINDOW_MARGIN, MAIN_WINDOW_HEIGHT -
-	    50, BUTTON_WIDTH, 18, "Save global config", save_glob_tooltip);
+	    50, BUTTON_WIDTH, 18, "SAVE global configuration",
+	    save_glob_tooltip);
 
 	LAYOUT_PUSH_BUTTON(reset_acf_conf, MAIN_WINDOW_WIDTH - BUTTON_WIDTH -
 	    WINDOW_MARGIN, MAIN_WINDOW_HEIGHT - 70, BUTTON_WIDTH, 18,
-	    "Reset aircraft config", reset_acf_tooltip);
+	    "RESET aircraft configuration", reset_acf_tooltip);
 	LAYOUT_PUSH_BUTTON(reset_glob_conf, MAIN_WINDOW_WIDTH - BUTTON_WIDTH -
 	    WINDOW_MARGIN, MAIN_WINDOW_HEIGHT - 50, BUTTON_WIDTH, 18,
-	    "Reset global config", reset_glob_tooltip);
+	    "RESET global configuration", reset_glob_tooltip);
 
 #undef	LAYOUT_PUSH_BUTTON
 
