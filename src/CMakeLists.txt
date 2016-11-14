@@ -77,9 +77,10 @@ if(APPLE)
 	FIND_LIBRARY(XPWIDGETS_LIBRARY XPWidgets ../SDK/Libraries/Mac)
 	FIND_LIBRARY(OPENAL_LIBRARY OpenAL)
 	FIND_LIBRARY(OPENGL_LIBRARY OpenGL)
-	FIND_LIBRARY(FREETYPE_LIBRARY freetype "../FreeType/freetype-mac/lib")
+	# Can't use FIND_LIBRARY for FreeType, because it uses the system-level
+	# dylib. Instead, we append it manually to the linker flags below.
 	target_link_libraries(plugin ${XPLM_LIBRARY} ${XPWIDGETS_LIBRARY}
-	    ${OPENAL_LIBRARY} ${OPENGL_LIBRARY} ${FREETYPE_LIBRARY})
+	    ${OPENAL_LIBRARY} ${OPENGL_LIBRARY})
 else()
 	FIND_LIBRARY(FREETYPE_LIBRARY freetype
 	    "../FreeType/freetype-linux-64/lib")
@@ -92,7 +93,8 @@ SET_TARGET_PROPERTIES(plugin PROPERTIES SUFFIX "")
 if(APPLE)
 	set(PLUGIN_OUTPUT_FILENAME "mac.xpl")
 	SET_TARGET_PROPERTIES(plugin PROPERTIES LINK_FLAGS
-	    "${CMAKE_SHARED_LINKER_FLAGS} -fPIC -fvisibility=hidden -bundle")
+	    "${CMAKE_SHARED_LINKER_FLAGS} -fPIC -fvisibility=hidden -bundle \
+	    -L../FreeType/freetype-mac/lib -lfreetype")
 elseif(UNIX)
 	set(PLUGIN_OUTPUT_FILENAME "lin.xpl")
 	SET_TARGET_PROPERTIES(plugin PROPERTIES LINK_FLAGS

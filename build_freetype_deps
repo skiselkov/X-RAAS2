@@ -39,7 +39,7 @@ function build_freetype() {
 		    ./configure \
 		    --prefix="$(pwd)/../freetype-$PLATFORM" $CONFOPTS \
 		    --disable-shared --enable-static --with-zlib=no \
-		    --with-bzip=no --with-png=no --with-harfbuzz=no \
+		    --with-bzip2=no --with-png=no --with-harfbuzz=no \
 		    --with-old-mac-fonts=no --with-fsspec=no \
 		    --with-fsref=no --with-quickdraw-toolbox=no \
 		    --with-quickdraw-carbon=no --with-ats=no || exit 1
