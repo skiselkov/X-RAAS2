@@ -2076,7 +2076,7 @@ xraas_init(void)
 
 	dbg_log(startup, 1, "xraas_init");
 
-	if (!snd_sys_init(plugindir))
+	if (!snd_sys_init(plugindir) || !ND_alerts_init())
 		goto errout;
 
 	if (state.debug_graphical)
@@ -2112,8 +2112,6 @@ xraas_init(void)
 		    XPLMGetDatai(drs.num_engines), XPLMGetDataf(drs.mtow));
 		goto errout;
 	}
-
-	ND_alerts_init();
 
 	rwy_key_tbl_create(&state.accel_stop_max_spd, "accel_stop_max_spd");
 	rwy_key_tbl_create(&state.on_rwy_ann, "on_rwy_ann");
@@ -2251,12 +2249,22 @@ XPluginStart(char *outName, char *outSig, char *outDesc)
 			*p = '\0';
 	}
 
+	/*
+	 * This has to go very early in the initialization stage since the
+	 * rest of X-RAAS depends on log_init_msg being available, but it
+	 * needs to go after system path determination, since we need to
+	 * load fonts from our plugin directory here.
+	 */
+	if (!init_msg_sys_init())
+		return (0);
+
 	return (1);
 }
 
 PLUGIN_API void
 XPluginStop(void)
 {
+	init_msg_sys_fini();
 }
 
 PLUGIN_API int
@@ -2272,7 +2280,6 @@ XPluginDisable(void)
 {
 	gui_fini();
 	xraas_fini();
-	init_msg_sys_fini();
 }
 
 PLUGIN_API void

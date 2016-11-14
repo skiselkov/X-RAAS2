@@ -307,8 +307,8 @@ snd_sys_init(const char *plugindir)
 
 		ASSERT(voice_msgs[msg].wav == NULL);
 		snprintf(fname, sizeof (fname), "%s.wav", voice_msgs[msg].name);
-		pathname = mkpathname(plugindir, "msgs", gender_dir, fname,
-		    NULL);
+		pathname = mkpathname(plugindir, "data", "msgs", gender_dir,
+		    fname, NULL);
 		voice_msgs[msg].wav = wav_load(pathname, voice_msgs[msg].name);
 		if (voice_msgs[msg].wav == NULL) {
 			log_init_msg(B_TRUE, INIT_ERR_MSG_TIMEOUT, NULL, NULL,

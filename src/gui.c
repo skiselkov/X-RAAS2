@@ -49,9 +49,14 @@
 #define	DBG_GUI_TOGGLE_CMD_NAME	"Toggle debug overlay"
 #define	RAAS_RESET_CMD_NAME	"Reset"
 #define	RECREATE_CACHE_CMD_NAME	"Recreate data cache"
+#if	IBM
+#define	NEWLINE "\r\n"
+#else	/* !IBM */
+#define	NEWLINE "\n"
+#endif	/* !IBM */
 
 enum {
-	MAIN_WINDOW_WIDTH =	600,
+	MAIN_WINDOW_WIDTH =	630,
 	MAIN_WINDOW_HEIGHT =	540,
 	COLUMN_X =		270,
 
@@ -140,6 +145,8 @@ static struct {
 	XPWidgetID	on_rwy_warn_max_n;
 	XPWidgetID	long_land_lim_abs;
 	XPWidgetID	nd_alert_timeout;
+	XPWidgetID	nd_alert_overlay_font;
+	XPWidgetID	nd_alert_overlay_font_size;
 
 	XPWidgetID	status_msg;
 } text_fields;
@@ -192,13 +199,14 @@ gen_config(void)
 {
 	char *conf_text = NULL;
 	size_t conf_sz = 0;
+	char buf[512];
 
 	append_format(&conf_text, &conf_sz,
 	    "-- This configuration file was automatically generated using the\n"
-	    "-- X-RAAS configuration GUI.\n\n");
+	    "-- X-RAAS configuration GUI." NEWLINE NEWLINE);
 
 #define	GEN_BOOL_CONF(widget) \
-	append_format(&conf_text, &conf_sz, "%s = %s\n", #widget, \
+	append_format(&conf_text, &conf_sz, "%s = %s" NEWLINE, #widget, \
 	    XPGetWidgetProperty(buttons.widget, xpProperty_ButtonState, \
 	    NULL) ? "true" : "false")
 
@@ -232,8 +240,9 @@ gen_config(void)
 		char buf[32]; \
 		XPGetWidgetDescriptor(text_fields.text_field, buf, \
 		    sizeof (buf) - 1); \
-		append_format(&conf_text, &conf_sz, "%s = %s\n", \
-		    #text_field, buf);\
+		if (strlen(buf) != 0 && strcmp(buf, "default") != 0) \
+			append_format(&conf_text, &conf_sz, "%s = %s" NEWLINE, \
+			    #text_field, buf);\
 	} while (0)
 
 	GEN_TEXT_CONF(min_engines);
@@ -249,14 +258,22 @@ gen_config(void)
 	GEN_TEXT_CONF(long_land_lim_abs);
 	GEN_TEXT_CONF(nd_alert_timeout);
 
+	XPGetWidgetDescriptor(text_fields.nd_alert_overlay_font, buf,
+	    sizeof (buf) - 1);
+	if (strlen(buf) != 0 && strcmp(buf, "default") != 0 &&
+	    strcmp(buf, ND_alert_overlay_default_font) != 0)
+		append_format(&conf_text, &conf_sz,
+		    "nd_alert_overlay_font = %s" NEWLINE, buf);
+	GEN_TEXT_CONF(nd_alert_overlay_font_size);
+
 #undef	GEN_TEXT_CONF
 
 #define	GEN_FRACT_CONF(scrollbar, multiplier) \
 	do { \
 		double value = XPGetWidgetProperty(scrollbars.scrollbar, \
 		    xpProperty_ScrollBarSliderPosition, NULL) * multiplier; \
-		append_format(&conf_text, &conf_sz, "%s = %g\n", #scrollbar, \
-		    value); \
+		append_format(&conf_text, &conf_sz, "%s = %g" NEWLINE, \
+		    #scrollbar, value); \
 	} while (0)
 
 	GEN_FRACT_CONF(long_land_lim_fract, 0.01);
@@ -647,19 +664,21 @@ main_window_cb(XPWidgetMessage msg, XPWidgetID widget, intptr_t param1,
 
 static XPWidgetID
 layout_text_field(XPWidgetID window, tooltip_set_t *tts, int x, int y,
-    const char *label, int max_chars, const char *units, const char **tooltip)
+    const char *label, int max_chars, const char *units, const char **tooltip,
+    bool_t wide)
 {
 	XPWidgetID widget;
+	double cap_width = wide ? 0.5 : 0.75;
 
-	(void) create_widget_rel(x, y, B_FALSE, TEXT_FIELD_WIDTH * 0.75,
+	(void) create_widget_rel(x, y, B_FALSE, TEXT_FIELD_WIDTH * cap_width,
 	    TEXT_FIELD_HEIGHT - 5, 1, label, 0, window, xpWidgetClass_Caption);
 	if (units != NULL)
 		(void) create_widget_rel(x + TEXT_FIELD_WIDTH * 0.95, y,
 		    B_FALSE, TEXT_FIELD_WIDTH * 0.05, TEXT_FIELD_HEIGHT - 5, 1,
 		    units, 0, window, xpWidgetClass_Caption);
-	widget = create_widget_rel(x + TEXT_FIELD_WIDTH * 0.75, y, B_FALSE,
-	    TEXT_FIELD_WIDTH * 0.2, TEXT_FIELD_HEIGHT - 5, 1, "", 0,
-	    window, xpWidgetClass_TextField);
+	widget = create_widget_rel(x + TEXT_FIELD_WIDTH * cap_width, y, B_FALSE,
+	    TEXT_FIELD_WIDTH * (0.95 - cap_width), TEXT_FIELD_HEIGHT - 5, 1,
+	    "", 0, window, xpWidgetClass_TextField);
 	XPSetWidgetProperty(widget, xpProperty_TextFieldType, xpTextEntryField);
 	XPSetWidgetProperty(widget, xpProperty_Enabled, 1);
 	if (max_chars != 0)
@@ -798,36 +817,47 @@ create_main_window(void)
 
 	x = LAYOUT_START_X + COLUMN_X;
 	y = LAYOUT_START_Y;
+	scrollbars.voice_volume = layout_scroll_control(main_win, tts,
+	    &main_win_scrollbar_cbs, x, y, "Voice volume", 0, 100, 10,
+	    B_FALSE, 1.0, "%", NULL, voice_volume_tooltip);
+	y += TEXT_FIELD_HEIGHT;
 	text_fields.min_engines = layout_text_field(main_win, tts, x, y,
-	    "Minimum number of engines", 1, NULL, min_engines_tooltip);
+	    "Minimum number of engines", 1, NULL, min_engines_tooltip, B_FALSE);
 	y += TEXT_FIELD_HEIGHT;
 	text_fields.min_mtow = layout_text_field(main_win, tts, x, y,
-	    "Minimum MTOW", 6, "kg", min_mtow_tooltip);
+	    "Minimum MTOW", 6, "kg", min_mtow_tooltip, B_FALSE);
 	y += TEXT_FIELD_HEIGHT;
 	text_fields.min_takeoff_dist = layout_text_field(main_win, tts, x, y,
-	    "Minimum takeoff distance", 4, "m", min_takeoff_dist_tooltip);
+	    "Minimum takeoff distance", 4, "m", min_takeoff_dist_tooltip,
+	    B_FALSE);
 	y += TEXT_FIELD_HEIGHT;
 	text_fields.min_landing_dist = layout_text_field(main_win, tts, x, y,
-	    "Minimum landing distance", 4, "m", min_landing_dist_tooltip);
+	    "Minimum landing distance", 4, "m", min_landing_dist_tooltip,
+	    B_FALSE);
 	y += TEXT_FIELD_HEIGHT;
 	text_fields.min_rotation_dist = layout_text_field(main_win, tts, x, y,
-	    "Minimum rotation distance", 4, "m", min_rotation_dist_tooltip);
+	    "Minimum rotation distance", 4, "m", min_rotation_dist_tooltip,
+	    B_FALSE);
 	y += TEXT_FIELD_HEIGHT;
 	text_fields.min_rotation_angle = layout_text_field(main_win, tts, x, y,
-	    "Minimum rotation angle", 4, "deg", min_rotation_angle_tooltip);
+	    "Minimum rotation angle", 4, "deg", min_rotation_angle_tooltip,
+	    B_FALSE);
 	y += TEXT_FIELD_HEIGHT;
 	text_fields.stop_dist_cutoff = layout_text_field(main_win, tts, x, y,
-	    "Runway length remaining cutoff", 4, "m", stop_dist_cutoff_tooltip);
+	    "Runway length remaining cutoff", 4, "m", stop_dist_cutoff_tooltip,
+	    B_FALSE);
 	y += TEXT_FIELD_HEIGHT;
 	text_fields.on_rwy_warn_initial = layout_text_field(main_win, tts, x, y,
 	    "On runway warning (initial)", 3, "sec",
-	    on_rwy_warn_initial_tooltip);
+	    on_rwy_warn_initial_tooltip, B_FALSE);
 	y += TEXT_FIELD_HEIGHT;
 	text_fields.on_rwy_warn_repeat = layout_text_field(main_win, tts, x, y,
-	    "On runway warning (repeat)", 3, "sec", on_rwy_warn_repeat_tooltip);
+	    "On runway warning (repeat)", 3, "sec", on_rwy_warn_repeat_tooltip,
+	    B_FALSE);
 	y += TEXT_FIELD_HEIGHT;
 	text_fields.on_rwy_warn_max_n = layout_text_field(main_win, tts, x, y,
-	    "On runway maximum number", 2, NULL, on_rwy_warn_max_n_tooltip);
+	    "On runway maximum number", 2, NULL, on_rwy_warn_max_n_tooltip,
+	    B_FALSE);
 	y += TEXT_FIELD_HEIGHT;
 	scrollbars.gpa_limit_mult = layout_scroll_control(main_win, tts,
 	    &main_win_scrollbar_cbs, x, y, "GPA limit multiplier", 0, 100, 10,
@@ -838,18 +868,12 @@ create_main_window(void)
 	    B_FALSE, 0.1, "deg", NULL, gpa_limit_max_tooltip);
 	y += TEXT_FIELD_HEIGHT;
 	text_fields.long_land_lim_abs = layout_text_field(main_win, tts, x, y,
-	    "Long landing absolute limit", 4, "m", long_land_lim_abs_tooltip);
+	    "Long landing absolute limit", 4, "m", long_land_lim_abs_tooltip,
+	    B_FALSE);
 	y += TEXT_FIELD_HEIGHT;
 	scrollbars.long_land_lim_fract = layout_scroll_control(main_win, tts,
 	    &main_win_scrollbar_cbs, x, y, "Long landing limit fraction", 0,
 	    100, 10, B_FALSE, 0.01, NULL, NULL, long_land_lim_fract_tooltip);
-	y += TEXT_FIELD_HEIGHT;
-	text_fields.nd_alert_timeout = layout_text_field(main_win, tts, x, y,
-	    "ND alert timeout", 3, "sec", nd_alert_timeout_tooltip);
-	y += TEXT_FIELD_HEIGHT;
-	scrollbars.voice_volume = layout_scroll_control(main_win, tts,
-	    &main_win_scrollbar_cbs, x, y, "Voice volume", 0, 100, 10,
-	    B_FALSE, 1.0, "%", NULL, voice_volume_tooltip);
 	y += TEXT_FIELD_HEIGHT;
 	scrollbars.min_landing_flap = layout_scroll_control(main_win, tts,
 	    &main_win_scrollbar_cbs, x, y, "Minimum landing flaps", 0, 100,
@@ -863,9 +887,20 @@ create_main_window(void)
 	    &main_win_scrollbar_cbs, x, y, "Maximum takeoff flaps", 0, 100,
 	    10, B_FALSE, 0.01, NULL, NULL, max_takeoff_flap_tooltip);
 	y += TEXT_FIELD_HEIGHT;
+	text_fields.nd_alert_timeout = layout_text_field(main_win, tts, x, y,
+	    "ND alert timeout", 3, "sec", nd_alert_timeout_tooltip, B_FALSE);
+	y += TEXT_FIELD_HEIGHT;
 	scrollbars.nd_alert_filter = layout_scroll_control(main_win, tts,
 	    &main_win_scrollbar_cbs, x, y, "ND alert filter", 0, 2, 1, B_FALSE,
 	    1, NULL, nd_alert2str, nd_alert_filter_tooltip);
+	y += TEXT_FIELD_HEIGHT;
+	text_fields.nd_alert_overlay_font = layout_text_field(main_win, tts,
+	    x, y, "ND alert overlay font", 500, NULL,
+	    nd_alert_overlay_font_tooltip, B_TRUE);
+	y += TEXT_FIELD_HEIGHT;
+	text_fields.nd_alert_overlay_font_size = layout_text_field(main_win,
+	    tts, x, y, "ND alert overlay font size", 3, NULL,
+	    nd_alert_overlay_font_size_tooltip, B_FALSE);
 	y += TEXT_FIELD_HEIGHT;
 
 #define	LAYOUT_PUSH_BUTTON(var, x, y, w, h, label, tooltip) \
@@ -954,6 +989,14 @@ update_main_window(void)
 	UPDATE_TEXT_FIELD(on_rwy_warn_max_n, "%d");
 	UPDATE_TEXT_FIELD(long_land_lim_abs, "%d");
 	UPDATE_TEXT_FIELD(nd_alert_timeout, "%d");
+	if (strcmp(xraas_state->nd_alert_overlay_font,
+	    ND_alert_overlay_default_font) == 0)
+		XPSetWidgetDescriptor(text_fields.nd_alert_overlay_font,
+		    "default");
+	else
+		XPSetWidgetDescriptor(text_fields.nd_alert_overlay_font,
+		    xraas_state->nd_alert_overlay_font);
+	UPDATE_TEXT_FIELD(nd_alert_overlay_font_size, "%d");
 
 #undef	UPDATE_TEXT_FIELD
 

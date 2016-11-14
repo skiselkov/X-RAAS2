@@ -71,6 +71,8 @@ reset_config(xraas_state_t *state)
 	state->nd_alert_overlay_enabled = B_TRUE;
 	state->nd_alert_overlay_force = B_FALSE;
 	state->nd_alert_timeout = 7;
+	state->nd_alert_overlay_font = strdup(ND_alert_overlay_default_font);
+	state->nd_alert_overlay_font_size = ND_alert_overlay_default_font_size;
 	state->debug_graphical = B_FALSE;
 	state->openal_shared = B_FALSE;
 
@@ -157,6 +159,11 @@ process_conf(xraas_state_t *state, conf_t *conf)
 	CONF_GET(b, nd_alert_overlay_force);
 	CONF_GET(i, nd_alert_timeout);
 	CONF_GET(b, debug_graphical);
+	if (conf_get_str(conf, "nd_alert_overlay_font", &str)) {
+		free(state->nd_alert_overlay_font);
+		state->nd_alert_overlay_font = strdup(str);
+	}
+	CONF_GET(i, nd_alert_overlay_font_size);
 #undef	CONF_GET
 
 	if (conf_get_b(conf, "openal_shared", &state->openal_shared))

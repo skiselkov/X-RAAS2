@@ -23,27 +23,29 @@
  * Copyright 2016 Saso Kiselkov. All rights reserved.
  */
 
-#ifndef	_XRAAS_INIT_MSG_H_
-#define	_XRAAS_INIT_MSG_H_
+#ifndef	_XRAAS_TEXT_RENDERING_H_
+#define	_XRAAS_TEXT_RENDERING_H_
 
-#include "helpers.h"
+#include <stdint.h>
+
+#include <ft2build.h>
+#include FT_FREETYPE_H
+
 #include "types.h"
 
 #ifdef	__cplusplus
 extern "C" {
 #endif
 
-enum {
-	INIT_ERR_MSG_TIMEOUT = 25
-};
-void log_init_msg(bool_t display, int timeout, const char *man_sect,
-    const char *man_sect_name, const char *fmt, ...) PRINTF_ATTR(5);
-
-bool_t init_msg_sys_init(void);
-void init_msg_sys_fini(void);
+bool_t get_text_block_size(const char *text, FT_Face face, int font_size,
+    int *width, int *height);
+bool_t render_text_block(const char *text, FT_Face face, int font_size,
+    int x, int y, uint8_t r, uint8_t g, uint8_t b,
+    uint8_t *rgba_texture, int texture_width, int texture_height);
+const char *ft_err2str(FT_Error err);
 
 #ifdef	__cplusplus
 }
 #endif
 
-#endif	/* _XRAAS_INIT_MSG_H_ */
+#endif	/* _XRAAS_TEXT_RENDERING_H_ */

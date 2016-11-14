@@ -38,9 +38,11 @@ extern "C" {
 
 #define	BUILD_DIRSEP	'/'	/* we only build on Unix-like OSes */
 #if	IBM
-#define	DIRSEP '\\'
+#define	DIRSEP		'\\'
+#define	DIRSEP_S	"\\"	/* DIRSEP as a string */
 #else	/* !IBM */
-#define	DIRSEP '/'
+#define	DIRSEP		'/'
+#define	DIRSEP_S	"/"	/* DIRSEP as a string */
 #endif	/* !IBM */
 
 #if	defined(__GNUC__) || defined(__clang__)

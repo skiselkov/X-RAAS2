@@ -18,10 +18,11 @@ project(plugin C)
 
 SET(SRC xraas2.c geom.c math.c helpers.c perf.c log.c list.c avl.c conf.c
     riff.c wav.c airportdb.c rwy_key_tbl.c xraas_cfg.c snd_sys.c nd_alert.c
-    dbg_gui.c ../api/c/XRAAS_ND_msg_decode.c gui.c init_msg.c)
+    dbg_gui.c ../api/c/XRAAS_ND_msg_decode.c gui.c init_msg.c text_rendering.c)
 SET(HDR geom.h math.h types.h helpers.h perf.h log.h list.h avl.h avl_impl.h
     conf.h riff.h wav.h airportdb.h rwy_key_tbl.h xraas_cfg.h snd_sys.h
-    nd_alert.h dbg_gui.h ../api/c/XRAAS_ND_msg_decode.h gui.h init_msg.h)
+    nd_alert.h dbg_gui.h ../api/c/XRAAS_ND_msg_decode.h gui.h init_msg.h
+    text_rendering.h)
 
 SET(ALL_SRC ${SRC} ${HDR})
 LIST(SORT ALL_SRC)
@@ -50,6 +51,14 @@ endif()
 include_directories(plugin PUBLIC "../SDK/CHeaders/XPLM/"
     "../SDK/CHeaders/Widgets" "../OpenAL/include")
 
+if (APPLE)
+	include_directories(plugin PUBLIC
+	    "../FreeType/freetype-mac/include/freetype2")
+else()
+	include_directories(plugin PUBLIC
+	    "../FreeType/freetype-linux-64/include/freetype2")
+endif()
+
 # X-Plane stuff
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DXPLM200=1 -DXPLM210=1")
 if(APPLE)
@@ -68,12 +77,13 @@ if(APPLE)
 	FIND_LIBRARY(XPWIDGETS_LIBRARY XPWidgets ../SDK/Libraries/Mac)
 	FIND_LIBRARY(OPENAL_LIBRARY OpenAL)
 	FIND_LIBRARY(OPENGL_LIBRARY OpenGL)
-	FIND_LIBRARY(GLUT_LIBRARY GLUT)
+	FIND_LIBRARY(FREETYPE_LIBRARY freetype "../FreeType/freetype-mac/lib")
 	target_link_libraries(plugin ${XPLM_LIBRARY} ${XPWIDGETS_LIBRARY}
-	    ${OPENAL_LIBRARY} ${OPENGL_LIBRARY} ${GLUT_LIBRARY})
+	    ${OPENAL_LIBRARY} ${OPENGL_LIBRARY} ${FREETYPE_LIBRARY})
 else()
-	FIND_LIBRARY(GLUT_LIBRARY glut)
-	target_link_libraries(plugin ${GLUT_LIBRARY})
+	FIND_LIBRARY(FREETYPE_LIBRARY freetype
+	    "../FreeType/freetype-linux-64/lib")
+	target_link_libraries(plugin ${FREETYPE_LIBRARY})
 endif()
 
 #output

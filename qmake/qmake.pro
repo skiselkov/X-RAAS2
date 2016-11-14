@@ -22,6 +22,7 @@ CONFIG -= thread exceptions qt rtti debug
 
 VERSION = 1.0.0
 
+INCLUDEPATH += ../FreeType/freetype-2.7/include
 INCLUDEPATH += ../SDK/CHeaders/XPLM ../SDK/CHeaders/Widgets
 
 QMAKE_CFLAGS += -std=c99 -g -W -Wall -Wextra -Werror -fvisibility=hidden
@@ -42,25 +43,25 @@ win32 {
 	CONFIG += dll
 	DEFINES += APL=0 IBM=1 LIN=0
 	LIBS += -ldbghelp
-	LIBS += -L../SDK/Libraries/Win -L../GLUT_for_Windows/gl
+	LIBS += -L../SDK/Libraries/Win
 	TARGET = win.xpl
 	INCLUDEPATH += ../OpenAL/include
 	INCLUDEPATH += /usr/include/GL
 	QMAKE_DEL_FILE = rm -f
 }
 
-win32:contains(CROSS_COMPILE, x86_64-w64-mingw32-){
+win32:contains(CROSS_COMPILE, x86_64-w64-mingw32-) {
 	LIBS += -lXPLM_64 -lXPWidgets_64
 	LIBS += -L../OpenAL/libs/Win64 -lOpenAL32
 	LIBS += -L../GL_for_Windows/lib -lopengl32
-	LIBS += -L../GLUT_for_Windows/gl -lglut64
+	LIBS += -L../FreeType/freetype-win-64/lib -lfreetype
 }
 
-win32:contains(CROSS_COMPILE, i686-w64-mingw32-){
+win32:contains(CROSS_COMPILE, i686-w64-mingw32-) {
 	LIBS += -lXPLM -lXPWidgets
 	LIBS += -L../OpenAL/libs/Win32 -lOpenAL32
 	LIBS += -L../GL_for_Windows/lib -lopengl32
-	LIBS += -L../GLUT_for_Windows/gl -lglut32
+	LIBS += -L../FreeType/freetype-win-32/lib -lfreetype
 	DEFINES += __MIDL_user_allocate_free_DEFINED__
 }
 
@@ -71,14 +72,23 @@ unix:!macx {
 	LIBS += `pkg-config --libs openal`
 }
 
+unix:!macx:contains(QMAKE_CFLAGS, -m64) {
+	LIBS += -L../FreeType/freetype-linux-64/lib -lfreetype
+}
+
+unix:!macx:contains(QMAKE_CFLAGS, -m32) {
+	LIBS += -L../FreeType/freetype-linux-32/lib -lfreetype
+}
+
 macx {
 	DEFINES += APL=1 IBM=0 LIN=0
 	TARGET = mac.xpl
 	INCLUDEPATH += ../OpenAL/include
 	QMAKE_LFLAGS += -F../SDK/Libraries/Mac
 	QMAKE_LFLAGS += -framework XPLM -framework XPWidgets
-	QMAKE_LFLAGS += -framework OpenGL -framework GLUT
-	QMAKE_LFLAGS += -framework OpenAL
+	QMAKE_LFLAGS += -framework OpenGL -framework OpenAL
+
+	LIBS += -L../FreeType/freetype-mac/lib -lfreetype
 }
 
 HEADERS += ../src/*.h ../api/c/XRAAS_ND_msg_decode.h

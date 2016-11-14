@@ -67,6 +67,8 @@ typedef struct xraas_state {
 	bool_t		nd_alert_overlay_enabled;
 	bool_t		nd_alert_overlay_force;
 	int		nd_alert_timeout;		/* seconds */
+	char		*nd_alert_overlay_font;		/* file name */
+	int		nd_alert_overlay_font_size;	/* pixel value */
 
 	int		on_rwy_warn_initial;		/* seconds */
 	int		on_rwy_warn_repeat;		/* seconds */

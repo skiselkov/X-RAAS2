@@ -34,31 +34,38 @@ extern "C" {
 
 static const char *enabled_tooltip[] = {
     "The X-RAAS master ON/OFF switch.",
+    "ON: X-RAAS starts up if the current aircraft is compatible.",
+    "OFF: X-RAAS startup is inhibited.",
     NULL
 };
 static const char *allow_helos_tooltip[] = {
-    "ON: permit X-RAAS startup if the current aircraft is a helicopter.",
-    "OFF: inhibit X-RAAS startup if the current aircraft is a helicopter.",
+    "ON: permit startup if the current aircraft is a helicopter.",
+    "OFF: inhibit startup if the current aircraft is a helicopter.",
     "(This setting doesn't affect other compatibility checks, such as the",
-    "minimum number of engines allowed or the minimum MTOW limit.)",
+    "minimum number of engines allowed or the minimum MTOW limit.",
+    "Refer to section 3 of the X-RAAS user manual for more information.)",
     NULL
 };
 static const char *startup_notify_tooltip[] = {
-    "ON: on X-RAAS startup, display a short message at the bottom of the",
-    "  screen to indicate to users that it is installed and working",
-    "  correctly and what units it is configured with.",
+    "ON: on startup, display a short message at the bottom of the screen to",
+    "    indicate that x-RAAS working correctly and what units are used for",
+    "    distance callouts.",
     "OFF: display of the startup message is inhibited.",
     "(This setting doesn't inhibit the startup of X-RAAS itself.)",
     NULL
 };
 static const char *use_imperial_tooltip[] = {
-    "ON: X-RAAS calls out runway lengths in feet.",
-    "OFF: X-RAAS calls out runway lengths in meters.",
+    "ON: use feet as unit of measure in annunciations.",
+    "OFF: use meters as unit of measure in annunciations.",
+    "(This setting doesn't affect the units used in this configuration "
+    "screen.)",
     NULL
 };
 static const char *us_runway_numbers_tooltip[] = {
-    "ON: X-RAAS pronounces single-digit runway numbers without a leading '0'.",
-    "OFF: X-RAAS pronounces single-digit runway numbers with a leading '0'.",
+    "ON: pronounce single-digit runway numbers without a leading '0' "
+    "(e.g. '1L').",
+    "OFF: pronounce single-digit runway numbers with a leading '0' "
+    "(e.g. '01L').",
     NULL
 };
 static const char *too_high_enabled_tooltip[] = {
@@ -93,24 +100,24 @@ static const char *qfe_alt_mode_tooltip[] = {
     NULL
 };
 static const char *disable_ext_view_tooltip[] = {
-    "ON: audible playback and display of ND overlay annunciations is",
-    "  is disabled while the simulator view is external.",
-    "OFF: audible playback and display of ND overlay annunciations is",
-    "  is enabled while the simulator view is external.",
+    "ON: while the simulator view is external, audible playback and display",
+    "    of ND overlay annunciations is inhibited.",
+    "OFF: while the simulator view is external, audible playback and display",
+    "    of ND overlay annunciations is permitted.",
     NULL
 };
 static const char *override_electrical_tooltip[] = {
     "ON: permit X-RAAS startup even if insufficient power is being applied",
-    "  to the aircraft's electrical buses.",
+    "    to the aircraft's electrical buses.",
     "OFF: inhibit X-RAAS startup unless sufficient power is being applied",
-    "  to the aircraft's electrical buses.",
+    "    to the aircraft's electrical buses.",
     NULL
 };
 static const char *override_replay_tooltip[] = {
     "ON: permit X-RAAS operation even if the simulator is currently in ",
-    "  replay mode.",
+    "    replay mode.",
     "OFF: inhibit X-RAAS operation if the simulator is currently in ",
-    "  replay mode.",
+    "    replay mode.",
     NULL
 };
 static const char *use_tts_tooltip[] = {
@@ -142,13 +149,13 @@ static const char *nd_alert_overlay_enabled_tooltip[] = {
 static const char *nd_alert_overlay_force_tooltip[] = {
     "ON: always display visual alerts using the fallback on-screen overlay.",
     "OFF: only display visual alerts using the on-screen overlay if the",
-    "  aircraft doesn't provide native display of visual alerts on the ND",
+    "    aircraft doesn't provide native display of visual alerts on the ND",
     "(Refer to section 3.1.2 of the X-RAAS user manual for more information.)",
     NULL
 };
 static const char *openal_shared_tooltip[] = {
-    "ON: X-RAAS should use an OpenAL audio driver context shared with the",
-    "  rest of X-Plane.",
+    "ON: X-RAAS should use an OpenAL audio driver context shared with the "
+    "rest of X-Plane.",
     "OFF: X-RAAS should use its own dedicated OpenAL audio driver context.",
     NULL
 };
@@ -300,6 +307,17 @@ static const char *nd_alert_filter_tooltip[] = {
     "Non-routine: only non-routine and higher alerts are displayed "
     "(non-routine, caution).",
     "Caution: only caution alerts are displayed.",
+    NULL
+};
+static const char *nd_alert_overlay_font_tooltip[] = {
+    "Specifies the font file (TTF) to use for the ND alert overlay. To use",
+    "a custom font, place the font file into the X-RAAS plugin folder under",
+    "data" DIRSEP_S "fonts and specify its filename here.",
+    "To revert to the default font, simply leave this text field empty.",
+    NULL
+};
+static const char *nd_alert_overlay_font_size_tooltip[] = {
+    "The pixel size of the font to use for the ND alert overlay.",
     NULL
 };
 

@@ -19,13 +19,10 @@
 
 #if	IBM
 # include <gl.h>
-# include <glut.h>
 #elif	APL
 # include <OpenGL/gl.h>
-# include <GLUT/glut.h>
 #else	/* LIN */
 # include <GL/gl.h>
-# include <GL/glut.h>
 #endif	/* LIN */
 
 #include <XPLMDataAccess.h>
@@ -35,7 +32,9 @@
 
 #include "assert.h"
 #include "helpers.h"
+#include "init_msg.h"
 #include "perf.h"
+#include "text_rendering.h"
 #include "../api/c/XRAAS_ND_msg_decode.h"
 
 #include "nd_alert.h"
@@ -44,7 +43,9 @@
 #define	AMBER_FLAG		0x40
 #define	ND_SCHED_INTVAL		1.0
 
-#define	ND_OVERLAY_FONT		GLUT_BITMAP_HELVETICA_18
+const char *ND_alert_overlay_default_font = "ShareTechMono" DIRSEP_S
+    "ShareTechMono-Regular.ttf";
+const int ND_alert_overlay_default_font_size = 28;
 
 static bool_t			inited = B_FALSE;
 static XPLMDataRef		dr = NULL;
@@ -53,6 +54,15 @@ static long long		alert_start_time = 0;
 
 static XPLMDataRef		dr_local_x, dr_local_y, dr_local_z;
 static XPLMDataRef		dr_pitch, dr_roll, dr_hdg;
+
+static struct {
+	FT_Library		ft;
+	FT_Face			face;
+	GLuint			texture;
+	int			width;
+	int			height;
+	uint8_t			*buf;
+} overlay = { NULL, NULL, 0, 0, 0, NULL };
 
 static int
 read_ND_alert(void *refcon)
@@ -64,52 +74,34 @@ read_ND_alert(void *refcon)
 static int
 nd_alert_draw_cb(XPLMDrawingPhase phase, int before, void *refcon)
 {
-	char msg[16];
-	int color, screen_x, screen_y;
-	int width = 0;
-	int val = XPLMGetDatai(dr);
+	int screen_x, screen_y;
 
 	UNUSED(phase);
 	UNUSED(before);
 	UNUSED(refcon);
 
-	if (!XRAAS_ND_msg_decode(val, msg, &color) ||
-	    !xraas_is_on() || view_is_external())
+	if (overlay.buf == NULL || !xraas_is_on() || view_is_external())
 		return (1);
 
 	XPLMGetScreenSize(&screen_x, &screen_y);
 
-	/*
-	 * Graphics state for drawing the ND alert overlay:
-	 * 1) disable fog
-	 * 2) disable multitexturing
-	 * 3) disable GL lighting
-	 * 4) enable per-pixel alpha testing
-	 * 5) enable per-pixel alpha blending
-	 * 6) disable per-pixel bit depth testing
-	 * 7) disable writeback of depth info to the depth buffer
-	 */
-	XPLMSetGraphicsState(0, 0, 0, 1, 1, 0, 0);
+	/* only disable lighting, everything else is on */
+	XPLMSetGraphicsState(1, 1, 0, 1, 1, 1, 1);
 
-	for (int i = 0, n = strlen(msg); i < n; i++)
-		width += glutBitmapWidth(ND_OVERLAY_FONT, msg[i]);
+	glBindTexture(GL_TEXTURE_2D, overlay.texture);
 
-	glColor4f(0, 0, 0, 0.67);
-	glBegin(GL_POLYGON);
-	glVertex2f((screen_x - width) / 2 - 8, screen_y * 0.98 - 27);
-	glVertex2f((screen_x - width) / 2 - 8, screen_y * 0.98);
-	glVertex2f((screen_x + width) / 2 + 8, screen_y * 0.98);
-	glVertex2f((screen_x + width) / 2 + 8, screen_y * 0.98 - 27);
+	glBegin(GL_QUADS);
+	glTexCoord2f(0.0, 1.0);
+	glVertex2f((screen_x - overlay.width) / 2,
+	    screen_y * 0.98 - overlay.height);
+	glTexCoord2f(0.0, 0.0);
+	glVertex2f((screen_x - overlay.width) / 2, screen_y * 0.98);
+	glTexCoord2f(1.0, 0.0);
+	glVertex2f((screen_x + overlay.width) / 2, screen_y * 0.98);
+	glTexCoord2f(1.0, 1.0);
+	glVertex2f((screen_x + overlay.width) / 2,
+	    screen_y * 0.98 - overlay.height);
 	glEnd();
-
-	if (color == XRAAS_ND_ALERT_GREEN)
-		glColor4f(0, 1, 0, 1);
-	else
-		glColor4f(0.9, 0.9, 0, 1);
-
-	glRasterPos2f((screen_x - width) / 2, screen_y * 0.98 - 20);
-	for (int i = 0, n = strlen(msg); i < n; i++)
-		glutBitmapCharacter(ND_OVERLAY_FONT, msg[i]);
 
 	return (1);
 }
@@ -124,18 +116,45 @@ alert_sched_cb(float elapsed_since_last_call, float elapsed_since_last_floop,
 	UNUSED(refcon);
 
 	if (alert_status != 0 && (microclock() - alert_start_time >
-	    SEC2USEC(xraas_state->nd_alert_timeout)))
+	    SEC2USEC(xraas_state->nd_alert_timeout))) {
+		if (overlay.buf != NULL) {
+			glDeleteTextures(1, &overlay.texture);
+			free(overlay.buf);
+			overlay.buf = NULL;
+		}
 		alert_status = 0;
+	}
 
 	return (ND_SCHED_INTVAL);
 }
 
-void
+bool_t
 ND_alerts_init(void)
 {
+	FT_Error err;
+	char *filename;
+
 	dbg_log(nd_alert, 1, "ND_alerts_init");
 
 	ASSERT(!inited);
+
+	if ((err = FT_Init_FreeType(&overlay.ft)) != 0) {
+		log_init_msg(B_TRUE, INIT_ERR_MSG_TIMEOUT, NULL, NULL,
+		    "ND alert overlay initialization error: cannot "
+		    "initialize FreeType library: %s", ft_err2str(err));
+		return (B_FALSE);
+	}
+	filename = mkpathname(xraas_plugindir, "data", "fonts",
+	    xraas_state->nd_alert_overlay_font, NULL);
+	if ((err = FT_New_Face(overlay.ft, filename, 0, &overlay.face)) != 0) {
+		log_init_msg(B_TRUE, INIT_ERR_MSG_TIMEOUT, NULL, NULL,
+		    "ND alert overlay initialization error: cannot "
+		    "load font file %s: %s", filename, ft_err2str(err));
+		VERIFY(FT_Done_FreeType(overlay.ft) == 0);
+		free(filename);
+		return (B_FALSE);
+	}
+	free(filename);
 
 	dr = XPLMRegisterDataAccessor(DR_NAME, xplmType_Int, 0, read_ND_alert,
 	    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
@@ -159,6 +178,57 @@ ND_alerts_init(void)
 	VERIFY(dr_hdg != NULL);
 
 	inited = B_TRUE;
+
+	return (B_TRUE);
+}
+
+void
+render_alert_texture(void)
+{
+	char msg[16];
+	int color, r, g, b;
+	int text_w, text_h;
+	enum { MARGIN_SIZE = 10 };
+	int font_size = xraas_state->nd_alert_overlay_font_size;
+
+	VERIFY(XRAAS_ND_msg_decode(alert_status, msg, &color) != 0);
+
+	if (!get_text_block_size(msg, overlay.face, font_size, &text_w,
+	    &text_h))
+		return;
+
+	overlay.width = text_w + 2 * MARGIN_SIZE;
+	overlay.height = text_h + 2 * MARGIN_SIZE;
+	overlay.buf = calloc(overlay.width * overlay.height * 4, 1);
+
+	/* fill with a black, semi-transparent background */
+	for (int i = 0 ; i < overlay.width * overlay.height; i++)
+		overlay.buf[i * 4 + 3] = (uint8_t)(255 * 0.67);
+
+	if (color == XRAAS_ND_ALERT_GREEN) {
+		r = 0;
+		g = 255;
+		b = 0;
+	} else {
+		r = 255;
+		g = 255;
+		b = 0;
+	}
+
+	if (!render_text_block(msg, overlay.face, font_size, MARGIN_SIZE,
+	    MARGIN_SIZE + font_size, r, g, b, overlay.buf, overlay.width,
+	    overlay.height)) {
+		free(overlay.buf);
+		overlay.buf = NULL;
+		return;
+	}
+
+	glGenTextures(1, &overlay.texture);
+	glBindTexture(GL_TEXTURE_2D, overlay.texture);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, overlay.width, overlay.height,
+	    0, GL_RGBA, GL_UNSIGNED_BYTE, overlay.buf);
 }
 
 void
@@ -168,6 +238,17 @@ ND_alerts_fini()
 
 	if (!inited)
 		return;
+
+	if (overlay.buf != NULL) {
+		glDeleteTextures(1, &overlay.texture);
+		free(overlay.buf);
+		overlay.buf = NULL;
+	}
+
+	VERIFY(FT_Done_Face(overlay.face) == 0);
+	VERIFY(FT_Done_FreeType(overlay.ft) == 0);
+
+	memset(&overlay, 0, sizeof (overlay));
 
 	XPLMUnregisterDataAccessor(dr);
 	dr = NULL;
@@ -182,7 +263,9 @@ void
 ND_alert(nd_alert_msg_type_t msg, nd_alert_level_t level, const char *rwy_id,
     int dist)
 {
-	ASSERT(inited);
+	if (!inited)
+		return;
+
 	ASSERT(msg >= ND_ALERT_FLAPS && msg <= ND_ALERT_LONG_LAND);
 
 	if (!xraas_state->nd_alerts_enabled)
@@ -229,4 +312,7 @@ ND_alert(nd_alert_msg_type_t msg, nd_alert_level_t level, const char *rwy_id,
 
 	alert_status = msg;
 	alert_start_time = microclock();
+
+	if (xraas_state->nd_alert_overlay_enabled)
+		render_alert_texture();
 }

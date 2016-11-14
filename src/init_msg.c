@@ -27,26 +27,35 @@
 #include <stdio.h>
 #include <string.h>
 
-#if	IBM
-# include <gl.h>
-# include <glut.h>
-#elif	APL
-# include <OpenGL/gl.h>
-# include <GLUT/glut.h>
-#else	/* LIN */
-# include <GL/gl.h>
-# include <GL/glut.h>
-#endif	/* LIN */
-
 #include <XPLMDisplay.h>
 #include <XPLMGraphics.h>
+#include <XPLMProcessing.h>
+
+#if	IBM
+# include <gl.h>
+#elif	APL
+# include <OpenGL/gl.h>
+#else	/* LIN */
+# include <GL/gl.h>
+#endif	/* LIN */
 
 #include "assert.h"
+#include "text_rendering.h"
+#include "xraas2.h"
 
 #include "init_msg.h"
 
-#define	INIT_MSG_FONT		GLUT_BITMAP_HELVETICA_18
-#define	INIT_MSG_FONT_HEIGHT	21
+#define	INIT_MSG_SCHED_INTVAL	1.0	/* seconds */
+#if	IBM
+#define	INIT_MSG_FONT		"Aileron\\Aileron-Regular.otf"
+#else	/* !IBM */
+#define	INIT_MSG_FONT		"Aileron/Aileron-Regular.otf"
+#endif	/* !IBM */
+#define	INIT_MSG_FONT_SIZE	21
+
+enum { MARGIN_SIZE = 10 };
+
+static bool_t inited = B_FALSE;
 
 static struct {
 	char		*msg;
@@ -54,7 +63,14 @@ static struct {
 	long long	end;
 	int		width;
 	int		height;
-} init_msg = { NULL, 0, 0, 0, 0 };
+	GLuint		texture;
+	uint8_t		*bytes;
+} init_msg = { NULL, 0, 0, 0, 0, 0, NULL };
+
+static FT_Library ft;
+static FT_Face face;
+
+static int draw_init_msg_cb(XPLMDrawingPhase phase, int before, void *refcon);
 
 static void
 man_ref(char **str, size_t *cap, const char *section, const char *section_name)
@@ -65,53 +81,55 @@ man_ref(char **str, size_t *cap, const char *section, const char *section_name)
 	    section, section_name);
 }
 
+static void
+clear_init_msg(void)
+{
+	if (init_msg.msg != NULL) {
+		glDeleteTextures(1, &init_msg.texture);
+		free(init_msg.msg);
+		free(init_msg.bytes);
+		memset(&init_msg, 0, sizeof (init_msg));
+		XPLMUnregisterDrawCallback(draw_init_msg_cb, xplm_Phase_Window,
+		    0, NULL);
+	}
+}
+
 /*
  * Draw callback for the init message mechanism. Paints the actual black
  * square with the text in it. Once the timeout to show the message expires,
  * this callback unregisters itself automatically and clears all state.
  */
 static int
-draw_init_msg(XPLMDrawingPhase phase, int before, void *refcon)
+draw_init_msg_cb(XPLMDrawingPhase phase, int before, void *refcon)
 {
-	int screen_x, screen_y, x, y;
-	enum { MARGIN_SIZE = 10 };
+	int screen_x, screen_y;
 
-	ASSERT(init_msg.msg != NULL);
 	UNUSED(phase);
 	UNUSED(before);
 	UNUSED(refcon);
 
+	ASSERT(init_msg.msg != NULL);
+
 	if (init_msg.end == 0)
 		init_msg.end = microclock() + SEC2USEC(init_msg.timeout);
 
-	if (microclock() > init_msg.end) {
-		init_msg_sys_fini();
-		return (1);
-	}
-
 	XPLMGetScreenSize(&screen_x, &screen_y);
-	glColor4f(0, 0, 0, 0.67);
-	glBegin(GL_POLYGON);
+	XPLMSetGraphicsState(1, 1, 0, 1, 1, 1, 1);
+
+	glBindTexture(GL_TEXTURE_2D, init_msg.texture);
+
+	glBegin(GL_QUADS);
+	glTexCoord2f(0.0, 1.0);
 	glVertex2f((screen_x - init_msg.width) / 2 - MARGIN_SIZE, 0);
+	glTexCoord2f(0.0, 0.0);
 	glVertex2f((screen_x - init_msg.width) / 2 - MARGIN_SIZE,
 	    init_msg.height + 2 * MARGIN_SIZE);
+	glTexCoord2f(1.0, 0.0);
 	glVertex2f((screen_x + init_msg.width) / 2 + MARGIN_SIZE,
 	    init_msg.height + 2 * MARGIN_SIZE);
+	glTexCoord2f(1.0, 1.0);
 	glVertex2f((screen_x + init_msg.width) / 2 + MARGIN_SIZE, 0);
 	glEnd();
-
-	glColor4f(1, 1, 1, 1);
-	x = (screen_x - init_msg.width) / 2;
-	y = init_msg.height + MARGIN_SIZE - INIT_MSG_FONT_HEIGHT;
-	glRasterPos2f(x, y);
-	for (int i = 0, n = strlen(init_msg.msg); i < n; i++) {
-		if (init_msg.msg[i] != '\n') {
-			glutBitmapCharacter(INIT_MSG_FONT, init_msg.msg[i]);
-		} else {
-			y -= INIT_MSG_FONT_HEIGHT;
-			glRasterPos2f(x, y);
-		}
-	}
 
 	return (1);
 }
@@ -157,43 +175,110 @@ log_init_msg(bool_t display, int timeout, const char *man_sect,
 
 	logMsg("%s", msg);
 	if (display) {
-		int line_width = 0;
+		int tex_w, tex_h;
+		uint8_t *tex_bytes;
 
-		init_msg_sys_fini();
+		clear_init_msg();
 
-		XPLMRegisterDrawCallback(draw_init_msg, xplm_Phase_Window,
-		    0, NULL);
+		if (!get_text_block_size(msg, face, INIT_MSG_FONT_SIZE,
+		    &init_msg.width, &init_msg.height)) {
+			free(msg);
+			return;
+		}
+
+		tex_w = init_msg.width + 2 * MARGIN_SIZE;
+		tex_h = init_msg.height + 2 * MARGIN_SIZE;
+		tex_bytes = calloc(tex_w * tex_h * 4, 1);
+
+		/* fill with a black, semi-transparent background */
+		for (int i = 0 ; i < tex_w * tex_h; i++)
+			tex_bytes[i * 4 + 3] = (uint8_t)(255 * 0.67);
+
+		if (!render_text_block(msg, face, INIT_MSG_FONT_SIZE,
+		    MARGIN_SIZE, MARGIN_SIZE + INIT_MSG_FONT_SIZE,
+		    255, 255, 255, tex_bytes, tex_w, tex_h)) {
+			free(msg);
+			free(tex_bytes);
+			return;
+		}
 
 		init_msg.msg = msg;
 		init_msg.timeout = timeout;
-		init_msg.width = 0;
-		init_msg.height = INIT_MSG_FONT_HEIGHT;
+		init_msg.bytes = tex_bytes;
 
-		for (int i = 0, n = strlen(msg); i < n; i++) {
-			if (msg[i] == '\n') {
-				init_msg.height += INIT_MSG_FONT_HEIGHT;
-				init_msg.width = MAX(init_msg.width,
-				    line_width);
-				line_width = 0;
-			} else {
-				line_width += glutBitmapWidth(INIT_MSG_FONT,
-				    msg[i]);
-			}
-		}
-		init_msg.width = MAX(line_width, init_msg.width);
-		line_width = 0;
+		XPLMRegisterDrawCallback(draw_init_msg_cb, xplm_Phase_Window,
+		    0, NULL);
+
+		glGenTextures(1, &init_msg.texture);
+		glBindTexture(GL_TEXTURE_2D, init_msg.texture);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
+		    GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+		    GL_NEAREST);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, tex_w, tex_h, 0,
+		    GL_RGBA, GL_UNSIGNED_BYTE, init_msg.bytes);
 	} else {
 		free(msg);
 	}
 }
 
+static float
+init_msg_sched_cb(float elapsed_since_last_call, float elapsed_since_last_floop,
+    int counter, void *refcon)
+{
+	UNUSED(elapsed_since_last_call);
+	UNUSED(elapsed_since_last_floop);
+	UNUSED(counter);
+	UNUSED(refcon);
+
+	if (init_msg.end != 0 && microclock() > init_msg.end) {
+		clear_init_msg();
+		return (1);
+	}
+
+	return (INIT_MSG_SCHED_INTVAL);
+}
+
+bool_t
+init_msg_sys_init(void)
+{
+	FT_Error err;
+	char *filename;
+
+	ASSERT(!inited);
+
+	XPLMRegisterFlightLoopCallback(init_msg_sched_cb,
+	    INIT_MSG_SCHED_INTVAL, NULL);
+	if ((err = FT_Init_FreeType(&ft)) != 0) {
+		logMsg("Error initializing FreeType library: %s",
+		    ft_err2str(err));
+		return (B_FALSE);
+	}
+
+	filename = mkpathname(xraas_plugindir, "data", "fonts", INIT_MSG_FONT,
+	    NULL);
+	if ((err = FT_New_Face(ft, filename, 0, &face)) != 0) {
+		logMsg("Error loading init_msg font %s: %s", filename,
+		    ft_err2str(err));
+		VERIFY(FT_Done_FreeType(ft) == 0);
+		free(filename);
+		return (B_FALSE);
+	}
+	free(filename);
+
+	inited = B_TRUE;
+
+	return (B_TRUE);
+}
+
 void
 init_msg_sys_fini(void)
 {
-	if (init_msg.msg != NULL) {
-		free(init_msg.msg);
-		memset(&init_msg, 0, sizeof (init_msg));
-		XPLMUnregisterDrawCallback(draw_init_msg, xplm_Phase_Window,
-		    0, NULL);
-	}
+	if (!inited)
+		return;
+
+	VERIFY(FT_Done_Face(face) == 0);
+	VERIFY(FT_Done_FreeType(ft) == 0);
+	clear_init_msg();
+	XPLMUnregisterFlightLoopCallback(init_msg_sched_cb, NULL);
 }
