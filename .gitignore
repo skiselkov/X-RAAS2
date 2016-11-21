@@ -14,3 +14,4 @@ qmake/release
 qmake/win.xpl_resource.rc
 qmake/output
 FreeType/freetype-*
+X-RAAS2
