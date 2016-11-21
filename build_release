@@ -1,6 +1,32 @@
 #!/bin/bash
 
+# CDDL HEADER START
+#
+# This file and its contents are supplied under the terms of the
+# Common Development and Distribution License ("CDDL"), version 1.0.
+# You may only use this file in accordance with the terms of version
+# 1.0 of the CDDL.
+#
+# A full copy of the text of the CDDL should have accompanied this
+# source.  A copy of the CDDL is also available via the Internet at
+# http://www.illumos.org/license/CDDL.
+#
+# CDDL HEADER END
+
+# Copyright 2016 Saso Kiselkov. All rights reserved.
+
 FILES=(
+    COPYING
+    README.md
+    api/COPYING
+    api/python/XRAAS_ND_msg_decode.py
+    api/python/test_sample.py
+    api/python/.gitignore
+    api/lua/test_sample.lua
+    api/lua/XRAAS_ND_msg_decode.lua
+    api/c/XRAAS_ND_msg_decode.h
+    api/c/XRAAS_ND_msg_decode.c
+    api/c/test_sample.c
     docs/manual.pdf
     data/fonts/Aileron/Aileron-Regular.otf
     data/fonts/ShareTechMono/OFL.txt
@@ -99,8 +125,8 @@ rm -rf X-RAAS2
 case `uname` in
 Linux)
 	( cd qmake && ./build-win-lin ) && mkdir -p X-RAAS2/64 && \
-	    cp qmake/release/{mac,win}.xpl X-RAAS2 && \
-	    cp qmake/release/64/{mac,win}.xpl X-RAAS2/64 && \
+	    cp qmake/output/{win,lin}.xpl X-RAAS2 && \
+	    cp qmake/output/64/{win,lin}.xpl X-RAAS2/64 && \
 	    install_xtra_files
 	;;
 Darwin)
