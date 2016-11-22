@@ -53,7 +53,8 @@ case `uname` in
 		NCPUS=$(( $(grep 'processor[[:space:]]\+:' /proc/cpuinfo \
 		    | wc -l) + 1 ))
 		build_freetype "linux-64" "" "-fPIC" "-fPIC"
-		build_freetype "linux-32" "" "-m32 -fPIC" "-m32 -fPIC"
+		build_freetype "linux-32" "" "-m32 -fPIC -fno-stack-protector" \
+		    "-m32 -fPIC"
 		build_freetype "win-64" "--host=x86_64-w64-mingw32"
 		build_freetype "win-32" "--host=i686-w64-mingw32"
 		;;

@@ -24,6 +24,9 @@ VERSION = 1.0.0
 
 INCLUDEPATH += ../FreeType/freetype-2.7/include
 INCLUDEPATH += ../SDK/CHeaders/XPLM ../SDK/CHeaders/Widgets
+# Always just use the shipped OpenAL headers for predictability.
+# The ABI is X-Plane-internal and stable anyway.
+INCLUDEPATH += ../OpenAL/include
 
 QMAKE_CFLAGS += -std=c99 -g -W -Wall -Wextra -Werror -fvisibility=hidden
 QMAKE_CFLAGS += -Wunused-result
@@ -46,7 +49,6 @@ win32 {
 	LIBS += -ldbghelp
 	LIBS += -L../SDK/Libraries/Win
 	TARGET = win.xpl
-	INCLUDEPATH += ../OpenAL/include
 	INCLUDEPATH += /usr/include/GL
 	QMAKE_DEL_FILE = rm -f
 }
@@ -69,8 +71,7 @@ win32:contains(CROSS_COMPILE, i686-w64-mingw32-) {
 unix:!macx {
 	DEFINES += APL=0 IBM=0 LIN=1
 	TARGET = lin.xpl
-	QMAKE_CFLAGS += `pkg-config --cflags openal`
-	LIBS += `pkg-config --libs openal`
+	QMAKE_LFLAGS += -nodefaultlibs
 }
 
 unix:!macx:contains(QMAKE_CFLAGS, -m64) {
@@ -78,6 +79,9 @@ unix:!macx:contains(QMAKE_CFLAGS, -m64) {
 }
 
 unix:!macx:contains(QMAKE_CFLAGS, -m32) {
+	# The stack protector forces us to depend on libc,
+	# but we'd prefer to be static.
+	QMAKE_CFLAGS += -fno-stack-protector
 	LIBS += -L../FreeType/freetype-linux-32/lib -lfreetype
 }
 
