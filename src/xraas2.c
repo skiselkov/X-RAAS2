@@ -395,6 +395,54 @@ gpws_flaps_ovrd(void)
 }
 
 /*
+ * Sets the current rejected-takeoff (RTO) state. Must be supplied by an
+ * airport and runway identifier to set on which runway we are rejecting the
+ * takeoff. Alternatively, supply NULL for both arguments to reset the RTO
+ * state to the initial non-rejected-takeoff state.
+ */
+static void
+set_rto(const char *icao, const char *rwy_id)
+{
+	if (icao != NULL && rwy_id != NULL) {
+		if (strcmp(state.rejected_takeoff.icao, icao) == 0 &&
+		    strcmp(state.rejected_takeoff.rwy_id, rwy_id) == 0)
+			return;
+		dbg_log(flt_state, 1, "rejected_takeoff = %s/%s", icao, rwy_id);
+		my_strlcpy(state.rejected_takeoff.icao, icao,
+		    sizeof (state.rejected_takeoff.icao));
+		my_strlcpy(state.rejected_takeoff.rwy_id, rwy_id,
+		    sizeof (state.rejected_takeoff.rwy_id));
+	} else {
+		ASSERT(icao == NULL && rwy_id == NULL);
+		if (*state.rejected_takeoff.icao == 0 &&
+		    *state.rejected_takeoff.rwy_id == 0)
+			return;
+		dbg_log(flt_state, 1, "rejected_takeoff = nil");
+		*state.rejected_takeoff.icao = 0;
+		*state.rejected_takeoff.rwy_id = 0;
+	}
+}
+
+/*
+ * Checks if we are currently in a rejected-takeoff (RTO) state. If supplied
+ * with an airport and runway identifier, checks if we are rejecting a takeoff
+ * on that specific runway.
+ */
+static bool_t
+check_rto(const char *icao, const char *rwy_id)
+{
+	if (icao != NULL && rwy_id != NULL) {
+		return (strcmp(state.rejected_takeoff.icao, icao) == 0 &&
+		    strcmp(state.rejected_takeoff.rwy_id, rwy_id) == 0);
+	} else if (icao != NULL) {
+		return (strcmp(state.rejected_takeoff.icao, icao) == 0);
+	} else {
+		ASSERT(icao == NULL && rwy_id == NULL);
+		return (*state.rejected_takeoff.rwy_id != 0);
+	}
+}
+
+/*
  * Locates any airports within a 8 nm radius of the aircraft and loads
  * their RAAS data from the state.apt_dat database. The function then updates
  * state.cur_arpts with the new information and expunges airports that are no
@@ -888,7 +936,7 @@ on_rwy_check(const char *arpt_id, const char *rwy_id, double hdg,
 		return;
 	}
 
-	if (state.on_rwy_timer != -1 && *state.rejected_takeoff == 0 &&
+	if (state.on_rwy_timer != -1 && !check_rto(arpt_id, NULL) &&
 	    ((now - state.on_rwy_timer > SEC2USEC(state.on_rwy_warn_initial) &&
 	    state.on_rwy_warnings == 0) ||
 	    (now - state.on_rwy_timer - SEC2USEC(state.on_rwy_warn_initial) >
@@ -906,9 +954,9 @@ on_rwy_check(const char *arpt_id, const char *rwy_id, double hdg,
 		if (XPLMGetDataf(drs.gs) < SPEED_THRESH) {
 			perform_on_rwy_ann(rwy_id, pos_v, thr_v, opp_thr_v,
 			    state.monitors[ON_RWY_LINEUP_SHORT_MON] &&
-			    *state.rejected_takeoff == 0,
+			    !check_rto(arpt_id, NULL),
 			    state.monitors[ON_RWY_FLAP_MON] &&
-			    *state.rejected_takeoff == 0, B_FALSE, 1,
+			    !check_rto(arpt_id, NULL), B_FALSE, 1,
 			    ON_RWY_LINEUP_MON);
 		}
 		rwy_key_tbl_set(&state.on_rwy_ann, arpt_id, rwy_id, B_TRUE);
@@ -1134,8 +1182,7 @@ stop_check(const runway_t *rwy, int end, double hdg, vect2_t pos_v)
 		maxspd = gs;
 	}
 	if (!state.landing && gs < maxspd - ACCEL_STOP_SPD_THRESH)
-		my_strlcpy(state.rejected_takeoff, rwy_end->id,
-		    sizeof (state.rejected_takeoff));
+		set_rto(arpt_id, rwy_end->id);
 
 	double rpitch = acf_rwy_rel_pitch(rwy_end->thr.elev,
 	    orwy_end->thr.elev, rwy->length);
@@ -1150,7 +1197,7 @@ stop_check(const runway_t *rwy, int end, double hdg, vect2_t pos_v)
 	 *    threshold and our pitch angle to the runway indicates that
 	 *    rotation has not yet been initiated.
 	 */
-	if ((strcmp(state.rejected_takeoff, rwy_end->id) == 0 &&
+	if ((check_rto(arpt_id, rwy_end->id) &&
 	    state.monitors[DIST_RMNG_RTO_MON]) ||
 	    (state.landing && dist < MAX(rwy->length / 2,
 	    state.stop_dist_cutoff) && !decel_check(dist) &&
@@ -1204,14 +1251,9 @@ ground_on_runway_aligned_arpt(const airport_t *arpt)
 			    rwy->ends[0].id);
 			rwy_key_tbl_remove(&state.on_rwy_ann, arpt_id,
 			    rwy->ends[1].id);
-			if (strcmp(state.rejected_takeoff, rwy->ends[0].id) ==
-			    0 ||
-			    strcmp(state.rejected_takeoff, rwy->ends[1].id) ==
-			    0) {
-				dbg_log(ann_state, 1,
-				    "state.rejected_takeoff = nil");
-				*state.rejected_takeoff = 0;
-			}
+			if (check_rto(arpt->icao, rwy->ends[0].id) ||
+			    check_rto(arpt->icao, rwy->ends[1].id))
+				set_rto(NULL, NULL);
 		}
 		if (vect2_in_poly(pos_v, rwy->asda_bbox)) {
 			stop_check(rwy, 0, hdg, pos_v);
@@ -1246,10 +1288,8 @@ ground_on_runway_aligned(void)
 		state.on_rwy_warnings = 0;
 	}
 
-	if (!on_rwy) {
+	if (!on_rwy)
 		state.short_rwy_takeoff_chk = B_FALSE;
-		*state.rejected_takeoff = 0;
-	}
 
 	/* Taxiway takeoff check */
 	if (!on_rwy && XPLMGetDataf(drs.rad_alt) < RADALT_GRD_THRESH &&

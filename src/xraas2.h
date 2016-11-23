@@ -151,7 +151,10 @@ typedef struct xraas_state {
 	int		on_rwy_warnings;
 	bool_t		off_rwy_ann;
 	bool_t		unstable_ann;
-	char		rejected_takeoff[8];
+	struct {
+		char	icao[5];
+		char	rwy_id[8];
+	} rejected_takeoff;
 
 	rwy_key_tbl_t	accel_stop_max_spd;
 	int		accel_stop_ann_initial;
