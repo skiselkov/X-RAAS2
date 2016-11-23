@@ -1470,11 +1470,12 @@ ann_apch_cfg(msg_type_t **msg, size_t *msg_len, bool_t add_pause,
 static void
 ann_unstable_apch(msg_type_t **msg, size_t *msg_len)
 {
-	if (!state.monitors[APCH_UNSTABLE_MON])
+	if (!state.monitors[APCH_UNSTABLE_MON] || state.unstable_ann)
 		return;
 	append_msglist(msg, msg_len, UNSTABLE_MSG);
 	append_msglist(msg, msg_len, UNSTABLE_MSG);
 	ND_alert(ND_ALERT_UNSTABLE, ND_ALERT_CAUTION, NULL, -1);
+	state.unstable_ann = B_TRUE;
 }
 
 static bool_t
@@ -1732,8 +1733,10 @@ air_runway_approach(void)
 			state.off_rwy_ann = B_FALSE;
 		}
 	}
-	if (in_apch_bbox == 0)
+	if (in_apch_bbox == 0) {
 		state.air_apch_short_rwy_ann = B_FALSE;
+		state.unstable_ann = B_FALSE;
+	}
 	if (in_apch_bbox <= 1 && state.air_apch_rwys_ann) {
 		rwy_key_tbl_empty(&state.air_apch_rwy_ann);
 		state.air_apch_rwys_ann = B_FALSE;
