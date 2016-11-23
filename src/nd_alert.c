@@ -266,7 +266,7 @@ ND_alert(nd_alert_msg_type_t msg, nd_alert_level_t level, const char *rwy_id,
 	if (!inited)
 		return;
 
-	ASSERT(msg >= ND_ALERT_FLAPS && msg <= ND_ALERT_LONG_LAND);
+	ASSERT(msg >= ND_ALERT_FLAPS && msg <= ND_ALERT_DEEP_LAND);
 
 	if (!xraas_state->nd_alerts_enabled)
 		return;

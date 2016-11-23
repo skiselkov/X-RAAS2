@@ -32,8 +32,8 @@
 extern "C" {
 #endif
 
-#define	MAN_REF(chapter) \
-	"(Refer to section " chapter " of the X-RAAS user manual for more " \
+#define	MAN_REF(sect) \
+	"(Refer to section " sect " of the X-RAAS user manual for more " \
 	"information.)"
 
 static const char *enabled_tooltip[] = {
@@ -47,7 +47,7 @@ static const char *allow_helos_tooltip[] = {
     "OFF: inhibit startup if the current aircraft is a helicopter.",
     "(This setting doesn't affect other compatibility checks, such as the",
     "minimum number of engines allowed or the minimum MTOW limit.",
-    "Refer to section 3 of the X-RAAS user manual for more information.)",
+    MAN_REF("3"),
     NULL
 };
 static const char *startup_notify_tooltip[] = {
@@ -278,20 +278,20 @@ static const char *speak_units_tooltip[] = {
 static const char *nd_alerts_enabled_tooltip[] = {
     "ON: permit issuing visual alerts on the ND or the screen overlay.",
     "OFF: inhibit issuing visual alerts on the ND and the screen overlay.",
-    "(Refer to section 3.1.2 of the X-RAAS user manual for more information.)",
+    MAN_REF("3.1.2"),
     NULL
 };
 static const char *nd_alert_overlay_enabled_tooltip[] = {
     "ON: permit display of visual alerts using the fallback on-screen overlay.",
     "OFF: inhibit display of visual alerts using the on-screen overlay.",
-    "(Refer to section 3.1.2 of the X-RAAS user manual for more information.)",
+    MAN_REF("3.1.2"),
     NULL
 };
 static const char *nd_alert_overlay_force_tooltip[] = {
     "ON: always display visual alerts using the fallback on-screen overlay.",
     "OFF: only display visual alerts using the on-screen overlay if the",
     "    aircraft doesn't provide native display of visual alerts on the ND.",
-    "(Refer to section 3.1.2 of the X-RAAS user manual for more information.)",
+    MAN_REF("3.1.2"),
     NULL
 };
 static const char *openal_shared_tooltip[] = {
@@ -308,13 +308,13 @@ static const char *voice_female_tooltip[] = {
 static const char *min_engines_tooltip[] = {
     "Minimum number of engines the aircraft must have for it to be considered",
     "an 'airliner' and permit X-RAAS startup.",
-    "(Refer to section 3 of the X-RAAS user manual for more information.)",
+    MAN_REF("3"),
     NULL
 };
 static const char *min_mtow_tooltip[] = {
     "Lowest value of the aircraft's Maximum TakeOff Weight (MTOW) for it to",
     "be considered an 'airliner' and permit X-RAAS startup.",
-    "(Refer to section 3 of the X-RAAS user manual for more information.)",
+    MAN_REF("3"),
     NULL
 };
 static const char *voice_volume_tooltip[] = {
@@ -324,102 +324,102 @@ static const char *voice_volume_tooltip[] = {
 static const char *save_acf_tooltip[] = {
     "Save the current configuration into the currently loaded aircraft.",
     "The configuration will then only be applied to that specific aircraft.",
-    "(Refer to section 5 of the X-RAAS user manual for more information.)",
+    MAN_REF("5"),
     NULL
 };
 static const char *save_glob_tooltip[] = {
     "Save the current configuration as the global configuration. The",
     "configuration will be applied to any aircraft which doesn't have",
     "its own aircraft-specific configuration.",
-    "(Refer to section 5 of the X-RAAS user manual for more information.)",
+    MAN_REF("5"),
     NULL
 };
 static const char *reset_acf_tooltip[] = {
     "Reset the aircraft-specific configuration to its default values.",
     "If there is a global configuration, it will be applied. Otherwise,",
     "the default configuration will be applied.",
-    "(Refer to section 5 of the X-RAAS user manual for more information.)",
+    MAN_REF("5"),
     NULL
 };
 static const char *reset_glob_tooltip[] = {
     "Reset the global configuration to its default values. If there is an",
     "aircraft-specific configuration, it will be applied when the associated",
     "aircraft is loaded. Otherwise the default configuration will be applied.",
-    "(Refer to section 5 of the X-RAAS user manual for more information.)",
+    MAN_REF("5"),
     NULL
 };
 static const char *min_takeoff_dist_tooltip[] = {
     "The minimum runway length remaining that is considered to be safe for",
     "conducting a takeoff. If the runway length remaining is less than this",
     "value, caution annunciations will be issued.",
-    "(Refer to section 4.3 of the X-RAAS user manual for more information.)",
+    MAN_REF("4.3"),
     NULL
 };
 static const char *min_landing_dist_tooltip[] = {
     "The minimum runway length remaining that is considered to be safe for",
     "conduting a landing. If the runway length remaining is less than this",
     "value, caution annunciations will be issued.",
-    "(Refer to section 4.10 of the X-RAAS user manual for more information.)",
+    MAN_REF("4.10"),
     NULL
 };
 static const char *min_rotation_dist_tooltip[] = {
     "The minimum runway length remaining by which if the aircraft hasn't",
     "initiated rotation, X-RAAS will start issuing runway length remaining",
     "annunciations to warn of rapidly approaching the runway end.",
-    "(Refer to section 4.6 of the X-RAAS user manual for more information.)",
+    MAN_REF("4.6"),
     NULL
 };
 static const char *min_rotation_angle_tooltip[] = {
     "The minimum pitch angle relative to the runway slope above which",
     "X-RAAS considers the aircraft to have initiated rotation for takeoff.",
-    "(Refer to section 4.6 of the X-RAAS user manual for more information.)",
+    MAN_REF("4.6"),
     NULL
 };
 static const char *stop_dist_cutoff_tooltip[] = {
     "On landing, do not initiate runway length remaining annunciations",
     "as long as the runway length remaining is above this value.",
-    "(Refer to section 4.16 of the X-RAAS user manual for more information.)",
+    MAN_REF("4.16"),
     NULL
 };
 static const char *on_rwy_warn_initial_tooltip[] = {
     "Issue the first 'ON RUNWAY' annunciation for extended holding on the",
     "runway after this number of seconds have elapsed.",
-    "(Refer to section 4.2.1 of the X-RAAS user manual for more information.)",
+    MAN_REF("4.2.1"),
     NULL
 };
 static const char *on_rwy_warn_repeat_tooltip[] = {
     "Issue subsequent 'ON RUNWAY' annunciations for extended holding",
     "on the runway after this number of seconds have elapsed.",
-    "(Refer to section 4.2.1 of the X-RAAS user manual for more information.)",
+    MAN_REF("4.2.1"),
     NULL
 };
 static const char *on_rwy_warn_max_n_tooltip[] = {
     "Maximum number of 'ON RUNWAY' annunciations issued for extended "
     "holding on the runway.",
-    "(Refer to section 4.2.1 of the X-RAAS user manual for more information.)",
+    MAN_REF("4.2.1"),
     NULL
 };
 static const char *gpa_limit_mult_tooltip[] = {
     "Maximum glidepath angle multiplier for the TOO HIGH approach monitor.",
-    "(Refer to section 4.12 of the X-RAAS user manual for more information.)",
+    MAN_REF("4.12"),
     NULL
 };
 static const char *gpa_limit_max_tooltip[] = {
     "Maximum absolute glidepath angle for the TOO HIGH approach monitor.",
-    "(Refer to section 4.12 of the X-RAAS user manual for more information.)",
+    MAN_REF("4.12"),
     NULL
 };
 static const char *long_land_lim_abs_tooltip[] = {
     "Maximum distance from the approach threshold above which if the aircraft",
-    "has not yet touched down, the landing is considered a LONG LANDING.",
-    "(Refer to section 4.15 of the X-RAAS user manual for more information.)",
+    "has not yet touched down, the landing is considered a long/deep landing.",
+    MAN_REF("4.15"),
     NULL
 };
 static const char *long_land_lim_fract_tooltip[] = {
     "Fraction of the runway length from the approach threshold above which if",
     "the aircraft has not yet touched down, the landing is considered a "
-    "LONG LANDING.",
-    "(Refer to section 4.15 of the X-RAAS user manual for more information.)",
+    "long/deep landing.",
+    MAN_REF("4.15"),
     NULL
 };
 static const char *nd_alert_timeout_tooltip[] = {
@@ -429,26 +429,26 @@ static const char *nd_alert_timeout_tooltip[] = {
 static const char *min_landing_flap_tooltip[] = {
     "Minimum relative flap handle position, including and above which the",
     "flaps setting is considered a valid flaps setting for landing.",
-    "(Refer to section 4.11 of the X-RAAS user manual for more information.)",
+    MAN_REF("4.11"),
     NULL
 };
 static const char *min_takeoff_flap_tooltip[] = {
     "Minimum relative flap handle position, including and above which the",
     "flaps setting is considered a valid flaps setting for takeoff.",
-    "(Refer to section 4.2 of the X-RAAS user manual for more information.)",
+    MAN_REF("4.2"),
     NULL
 };
 static const char *max_takeoff_flap_tooltip[] = {
     "Maximum relative flap handle position, including and below which the",
     "flaps setting is considered a valid flaps setting for takeoff.",
-    "(Refer to section 4.2 of the X-RAAS user manual for more information.)",
+    MAN_REF("4.2"),
     NULL
 };
 static const char *nd_alert_filter_tooltip[] = {
     "A filter which controls what visual alerts are displayed on the ND:",
     "ALL: all visual alerts are displayed (routine, non-routine, caution).",
-    "Non-routine: only non-routine and caution alerts are displayed.",
-    "Caution: only caution alerts are displayed.",
+    "NON-R: only non-routine and caution alerts are displayed.",
+    "CAUT: only caution alerts are displayed.",
     NULL
 };
 static const char *nd_alert_overlay_font_tooltip[] = {
@@ -460,6 +460,14 @@ static const char *nd_alert_overlay_font_tooltip[] = {
 };
 static const char *nd_alert_overlay_font_size_tooltip[] = {
     "The pixel size of the font to use for the ND alert overlay.",
+    NULL
+};
+static const char *say_deep_landing_tooltip[] = {
+    "ON: long landing annunciations are 'DEEP LANDING'.",
+    "OFF: long landing annunciations are 'LONG LANDING'.",
+    "This setting does not control whether the long landing monitor is "
+    "enabled.",
+    MAN_REF("4.15"),
     NULL
 };
 

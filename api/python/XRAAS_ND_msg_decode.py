@@ -78,5 +78,7 @@ def XRAAS_ND_msg_decode(dr_value):
 				    rwy_len), color_code)
 	elif msg_type == 10:
 		return ("LONG LANDING", color_code)
+	elif msg_type == 11:
+		return ("DEEP LANDING", color_code)
 
 	return None

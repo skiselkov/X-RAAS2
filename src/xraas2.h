@@ -121,8 +121,9 @@ typedef struct xraas_state {
 
 	bool_t		us_runway_numbers;
 
-	int		long_land_lim_abs;		/* meters */
-	double		long_land_lim_fract;		/* fraction, 0-1 */
+	bool_t		say_deep_landing;	/* Say 'DEEP landing' */
+	int		long_land_lim_abs;	/* meters */
+	double		long_land_lim_fract;	/* fraction, 0-1 */
 
 	bool_t		openal_shared;
 	bool_t		debug_graphical;
@@ -166,9 +167,9 @@ typedef struct xraas_state {
 
 	bool_t		view_is_ext;
 	int		bus_loaded;
-	int		last_elev;
+	double		last_elev;			/* in meters */
 	double		last_gs;			/* in m/s */
-	uint64_t	last_units_call;
+	uint64_t	last_units_call;		/* microclock time */
 
 	list_t		*cur_arpts;
 	airportdb_t	airportdb;

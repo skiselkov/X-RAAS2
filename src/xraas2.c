@@ -83,7 +83,7 @@
 #define	ALTM_SETTING_QFE_ERR_LIMIT	120		/* feet */
 #define	ALTM_SETTING_BARO_ERR_LIMIT	0.02		/* in.Hg */
 #define	IMMEDIATE_STOP_DIST		50		/* meters */
-#define	GOAROUND_CLB_RATE_THRESH	300		/* feet per minute */
+#define	GOAROUND_CLB_RATE_THRESH	400		/* feet per minute */
 #define	OFF_RWY_HEIGHT_MAX		250		/* feet */
 #define	OFF_RWY_HEIGHT_MIN		100		/* feet */
 
@@ -534,7 +534,8 @@ thousands_msg(msg_type_t **msg, size_t *len, unsigned thousands)
  * UNITS_APPEND_INTVAL seconds.
  */
 static void
-dist_to_msg(double dist, msg_type_t **msg, size_t *len, bool_t div_by_100)
+dist_to_msg(double dist, msg_type_t **msg, size_t *len, bool_t div_by_100,
+    bool_t allow_units)
 {
 	uint64_t now;
 
@@ -610,7 +611,7 @@ dist_to_msg(double dist, msg_type_t **msg, size_t *len, bool_t div_by_100)
 	/* Optionally append units if it is time to do so */
 	now = microclock();
 	if (now - state.last_units_call > SEC2USEC(UNITS_APPEND_INTVAL) &&
-	    state.speak_units) {
+	    state.speak_units && allow_units) {
 		if (state.use_imperial)
 			append_msglist(msg, len, FEET_MSG);
 		else
@@ -710,7 +711,8 @@ do_approaching_rwy(const airport_t *arpt, const runway_t *rwy,
 		 */
 		if (!on_ground && rwy->length < state.min_landing_dist &&
 		    state.monitors[APCH_RWY_IN_AIR_SHORT_MON]) {
-			dist_to_msg(rwy->length, &msg, &msg_len, B_TRUE);
+			dist_to_msg(rwy->length, &msg, &msg_len, B_TRUE,
+			    B_TRUE);
 			append_msglist(&msg, &msg_len, AVAIL_MSG);
 			msg_prio = MSG_PRIO_HIGH;
 			dist_ND = rwy->length;
@@ -839,7 +841,7 @@ perform_on_rwy_ann(const char *rwy_id, vect2_t pos_v, vect2_t thr_v,
 	}
 
 	if (dist < state.min_takeoff_dist && !state.landing && length_check) {
-		dist_to_msg(dist, &msg, &msg_len, B_TRUE);
+		dist_to_msg(dist, &msg, &msg_len, B_TRUE, B_TRUE);
 		dist_ND = dist;
 		level = ND_ALERT_NONROUTINE;
 		append_msglist(&msg, &msg_len, RMNG_MSG);
@@ -951,8 +953,8 @@ takeoff_rwy_dist_check(vect2_t opp_thr_v, vect2_t pos_v)
 }
 
 static void
-perform_rwy_dist_remaining_callouts(vect2_t opp_thr_v, vect2_t pos_v,
-    bool_t try_hard)
+perform_rwy_dist_remaining_callouts_extended(vect2_t opp_thr_v, vect2_t pos_v,
+    bool_t try_hard, bool_t allow_last_dist, msg_type_t **msg, size_t *msg_len)
 {
 	ASSERT(!IS_NULL_VECT(opp_thr_v));
 	ASSERT(!IS_NULL_VECT(pos_v));
@@ -960,11 +962,20 @@ perform_rwy_dist_remaining_callouts(vect2_t opp_thr_v, vect2_t pos_v,
 	double dist = vect2_abs(vect2_sub(opp_thr_v, pos_v));
 	accel_stop_dist_t *the_asd = NULL;
 	double maxdelta = 1000000;
-	msg_type_t *msg = NULL;
-	size_t msg_len = 0;
+	bool_t allow_units = B_TRUE;
 
 	for (int i = 0; !isnan(accel_stop_distances[i].min); i++) {
 		accel_stop_dist_t *asd = &accel_stop_distances[i];
+		if (isnan(accel_stop_distances[i + 1].min)) {
+			/* Only allow the last 100 foot callout if requested */
+			if (!allow_last_dist)
+				break;
+			/*
+			 * The 100 foot callout never has units - not enough
+			 * time left to say them.
+			 */
+			allow_units = B_FALSE;
+		}
 		if (dist > asd->min && dist < asd->max) {
 			the_asd = asd;
 			break;
@@ -980,9 +991,20 @@ perform_rwy_dist_remaining_callouts(vect2_t opp_thr_v, vect2_t pos_v,
 		return;
 
 	the_asd->ann = B_TRUE;
-	dist_to_msg(dist, &msg, &msg_len, B_FALSE);
-	append_msglist(&msg, &msg_len, RMNG_MSG);
-	play_msg(msg, msg_len, MSG_PRIO_MED);
+	dist_to_msg(dist, msg, msg_len, B_FALSE, allow_units);
+	append_msglist(msg, msg_len, RMNG_MSG);
+}
+
+static void
+perform_rwy_dist_remaining_callouts(vect2_t opp_thr_v, vect2_t pos_v,
+    bool_t try_hard, bool_t allow_last_dist)
+{
+	msg_type_t *msg = NULL;
+	size_t msg_len = 0;
+	perform_rwy_dist_remaining_callouts_extended(opp_thr_v, pos_v,
+	    try_hard, allow_last_dist, &msg, &msg_len);
+	if (msg_len != 0)
+		play_msg(msg, msg_len, MSG_PRIO_HIGH);
 }
 
 /*
@@ -1018,6 +1040,45 @@ decel_check(double dist_rmng)
 }
 
 static void
+long_landing_check(const runway_t *rwy, double dist, vect2_t opp_thr_v,
+    vect2_t pos_v)
+{
+	/*
+	 * Our distance limit is the greater of either:
+	 * 1) the greater of:
+	 *	a) runway length minus 2000 feet
+	 *	b) 3/4 the runway length
+	 * 2) the lesser of:
+	 *	a) minimum safe landing distance
+	 *	b) full runway length
+	 */
+	double dist_lim = MAX(MAX(rwy->length - state.long_land_lim_abs,
+	    rwy->length * (1 - state.long_land_lim_fract)),
+	    MIN(rwy->length, state.min_landing_dist));
+	if (dist < dist_lim && state.monitors[LONG_LAND_MON]) {
+		if (!state.long_landing_ann) {
+			msg_type_t m = state.say_deep_landing ?
+			    DEEP_LAND_MSG : LONG_LAND_MSG;
+			msg_type_t *msg = NULL;
+			size_t msg_len = 0;
+			dbg_log(ann_state, 1, "state.long_landing_ann = true");
+			append_msglist(&msg, &msg_len, m);
+			append_msglist(&msg, &msg_len, m);
+			perform_rwy_dist_remaining_callouts_extended(opp_thr_v,
+			    pos_v, B_TRUE, B_FALSE, &msg, &msg_len);
+			play_msg(msg, msg_len, MSG_PRIO_HIGH);
+
+			state.long_landing_ann = B_TRUE;
+			ND_alert(state.say_deep_landing ? ND_ALERT_DEEP_LAND :
+			    ND_ALERT_DEEP_LAND, ND_ALERT_CAUTION, NULL, -1);
+		} else {
+			perform_rwy_dist_remaining_callouts(opp_thr_v, pos_v,
+			    B_FALSE, B_FALSE);
+		}
+	}
+}
+
+static void
 stop_check(const runway_t *rwy, int end, double hdg, vect2_t pos_v)
 {
 	ASSERT(rwy != NULL);
@@ -1042,7 +1103,7 @@ stop_check(const runway_t *rwy, int end, double hdg, vect2_t pos_v)
 		if (dist < IMMEDIATE_STOP_DIST && rhdg < HDG_ALIGN_THRESH &&
 		    gs > SLOW_ROLL_THRESH && state.monitors[RWY_END_MON])
 			perform_rwy_dist_remaining_callouts(opp_thr_v, pos_v,
-			    B_FALSE);
+			    B_FALSE, B_TRUE);
 		else
 			stop_check_reset(arpt_id, rwy_end->id);
 		return;
@@ -1054,43 +1115,11 @@ stop_check(const runway_t *rwy, int end, double hdg, vect2_t pos_v)
 	if (XPLMGetDataf(drs.rad_alt) > RADALT_GRD_THRESH) {
 		double clb_rate = conv_per_min(MET2FEET(XPLMGetDatad(drs.elev) -
 		    state.last_elev));
-
 		stop_check_reset(arpt_id, rwy_end->id);
 		if (state.departed &&
 		    XPLMGetDataf(drs.rad_alt) <= RADALT_DEPART_THRESH &&
-		    clb_rate < GOAROUND_CLB_RATE_THRESH) {
-			/*
-			 * Our distance limit is the greater of either:
-			 * 1) the greater of:
-			 *	a) runway length minus 2000 feet
-			 *	b) 3/4 the runway length
-			 * 2) the lesser of:
-			 *	a) minimum safe landing distance
-			 *	b) full runway length
-			 */
-			double dist_lim = MAX(MAX(
-			    rwy->length - state.long_land_lim_abs,
-			    rwy->length * (1 - state.long_land_lim_fract)),
-			    MIN(rwy->length, state.min_landing_dist));
-			if (dist < dist_lim && state.monitors[LONG_LAND_MON]) {
-				if (!state.long_landing_ann) {
-					msg_type_t *msg = NULL;
-					size_t msg_len = 0;
-					append_msglist(&msg, &msg_len,
-					    LONG_LAND_MSG);
-					append_msglist(&msg, &msg_len,
-					    LONG_LAND_MSG);
-					play_msg(msg, msg_len, MSG_PRIO_HIGH);
-					dbg_log(ann_state, 1,
-					    "state.long_landing_ann = true");
-					state.long_landing_ann = B_TRUE;
-					ND_alert(ND_ALERT_LONG_LAND,
-					    ND_ALERT_CAUTION, NULL, -1);
-				}
-				perform_rwy_dist_remaining_callouts(opp_thr_v,
-				    pos_v, B_TRUE);
-			}
-		}
+		    clb_rate < GOAROUND_CLB_RATE_THRESH)
+			long_landing_check(rwy, dist, opp_thr_v, pos_v);
 		return;
 	}
 
@@ -1130,7 +1159,8 @@ stop_check(const runway_t *rwy, int end, double hdg, vect2_t pos_v)
 	    XPLMGetDataf(drs.rad_alt) < RADALT_GRD_THRESH &&
 	    rpitch < state.min_rotation_angle &&
 	    state.monitors[LATE_ROTATION_MON]))
-		perform_rwy_dist_remaining_callouts(opp_thr_v, pos_v, B_FALSE);
+		perform_rwy_dist_remaining_callouts(opp_thr_v, pos_v, B_FALSE,
+		    B_TRUE);
 }
 
 static bool_t

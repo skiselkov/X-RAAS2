@@ -69,6 +69,7 @@ main(void)
 	test_decode(0x0014E349);
 	test_decode(0x0008A349);
 	test_decode(0x0000004A);
+	test_decode(0x0000004B);
 
 	return (0);
 }

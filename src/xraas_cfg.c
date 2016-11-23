@@ -59,8 +59,11 @@ const char *const monitor_conf_keys[NUM_MONITORS] = {
 static void
 reset_config(xraas_state_t *state)
 {
+	/*
+	 * No need to set B_FALSE/zero values here, since the config has
+	 * already been bzero'ed.
+	 */
 	state->enabled = B_TRUE;
-	state->allow_helos = B_FALSE;
 	state->min_engines = 2;
 	state->min_mtow = 5700;
 	state->auto_disable_notify = B_TRUE;
@@ -68,8 +71,6 @@ reset_config(xraas_state_t *state)
 	state->use_imperial = B_TRUE;
 	state->voice_female = B_TRUE;
 	state->voice_volume = 1.0;
-	state->use_tts = B_FALSE;
-	state->us_runway_numbers = B_FALSE;
 	state->min_takeoff_dist = 1000;
 	state->min_landing_dist = 800;
 	state->min_rotation_dist = 400;
@@ -84,20 +85,15 @@ reset_config(xraas_state_t *state)
 	state->gpa_limit_mult = 2;
 	state->gpa_limit_max = 8;
 	state->disable_ext_view = B_TRUE;
-	state->override_electrical = B_FALSE;
-	state->override_replay = B_FALSE;
 	state->speak_units = B_TRUE;
 	state->long_land_lim_abs = 610;	/* 2000 feet */
 	state->long_land_lim_fract = 0.25;
 	state->nd_alerts_enabled = B_TRUE;
 	state->nd_alert_filter = ND_ALERT_ROUTINE;
 	state->nd_alert_overlay_enabled = B_TRUE;
-	state->nd_alert_overlay_force = B_FALSE;
 	state->nd_alert_timeout = 7;
 	state->nd_alert_overlay_font = strdup(ND_alert_overlay_default_font);
 	state->nd_alert_overlay_font_size = ND_alert_overlay_default_font_size;
-	state->debug_graphical = B_FALSE;
-	state->openal_shared = B_FALSE;
 
 	for (int i = 0; i < NUM_MONITORS; i++)
 		state->monitors[i] = B_TRUE;
@@ -172,6 +168,7 @@ process_conf(xraas_state_t *state, conf_t *conf)
 	CONF_GET(b, override_electrical);
 	CONF_GET(b, override_replay);
 	CONF_GET(b, speak_units);
+	CONF_GET(b, say_deep_landing);
 	CONF_GET(i, long_land_lim_abs);
 	CONF_GET(d, long_land_lim_fract);
 	CONF_GET(b, nd_alerts_enabled);

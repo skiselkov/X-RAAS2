@@ -56,6 +56,12 @@
 #define	NEWLINE "\n"
 #endif	/* !IBM */
 
+#define	COPYRIGHT1	"Copyright 2016 Saso Kiselkov, All rights reserved. " \
+			"X-RAAS is open-source software."
+#define	COPYRIGHT2	"See COPYING for more information."
+#define	TOOLTIP_HINT	"Hint: hover your mouse cursor over any knob to " \
+			"show a short description of what it does."
+
 enum {
 	LAYOUT_START_X =	10,
 	LAYOUT_START_Y =	40,
@@ -119,6 +125,7 @@ static struct {
 	XPWidgetID	speak_units;
 	XPWidgetID	use_tts;
 	XPWidgetID	voice_female;
+	XPWidgetID	say_deep_landing;
 	XPWidgetID	nd_alerts_enabled;
 	XPWidgetID	nd_alert_overlay_enabled;
 	XPWidgetID	nd_alert_overlay_force;
@@ -212,11 +219,11 @@ nd_alert2str(int level, char buf[32])
 		my_strlcpy(buf, "ALL", 32);
 		break;
 	case ND_ALERT_NONROUTINE:
-		my_strlcpy(buf, "Non-routine", 32);
+		my_strlcpy(buf, "NON-R", 32);
 		break;
 	default:
 		ASSERT(level == ND_ALERT_CAUTION);
-		my_strlcpy(buf, "Caution", 32);
+		my_strlcpy(buf, "CAUT", 32);
 		break;
 	}
 }
@@ -255,6 +262,7 @@ gen_config(void)
 	GEN_BOOL_CONF(use_tts);
 #endif	/* !LIN */
 	GEN_BOOL_CONF(voice_female);
+	GEN_BOOL_CONF(say_deep_landing);
 	GEN_BOOL_CONF(nd_alerts_enabled);
 	GEN_BOOL_CONF(nd_alert_overlay_enabled);
 	GEN_BOOL_CONF(nd_alert_overlay_force);
@@ -829,6 +837,8 @@ create_main_window(void)
 	    PushButton, CheckBox, voice_female_tooltip);
 	LAYOUT_BUTTON(speak_units, "Speak units",
 	    PushButton, CheckBox, speak_units_tooltip);
+	LAYOUT_BUTTON(say_deep_landing, "Say 'DEEP LANDING'",
+	    PushButton, CheckBox, say_deep_landing_tooltip);
 	LAYOUT_BUTTON(allow_helos, "Start up in helicopters",
 	    PushButton, CheckBox, allow_helos_tooltip);
 	LAYOUT_BUTTON(startup_notify, "Show startup notification",
@@ -975,8 +985,24 @@ create_main_window(void)
 
 #undef	LAYOUT_PUSH_BUTTON
 
+	create_widget_rel(2 * WINDOW_MARGIN + BUTTON_WIDTH,
+	    MAIN_WINDOW_HEIGHT - 75, B_FALSE,
+	    MAIN_WINDOW_WIDTH - 2 * BUTTON_WIDTH - 4 * WINDOW_MARGIN,
+	    TEXT_FIELD_HEIGHT, 1, COPYRIGHT1, 0, main_win,
+	    xpWidgetClass_Caption);
+	create_widget_rel(2 * WINDOW_MARGIN + BUTTON_WIDTH,
+	    MAIN_WINDOW_HEIGHT - 62, B_FALSE,
+	    MAIN_WINDOW_WIDTH - 2 * BUTTON_WIDTH - 4 * WINDOW_MARGIN,
+	    TEXT_FIELD_HEIGHT, 1, COPYRIGHT2, 0, main_win,
+	    xpWidgetClass_Caption);
+	create_widget_rel(2 * WINDOW_MARGIN + BUTTON_WIDTH,
+	    MAIN_WINDOW_HEIGHT - 49, B_FALSE,
+	    MAIN_WINDOW_WIDTH - 2 * BUTTON_WIDTH - 4 * WINDOW_MARGIN,
+	    TEXT_FIELD_HEIGHT, 1, TOOLTIP_HINT, 0, main_win,
+	    xpWidgetClass_Caption);
+
 	text_fields.status_msg = create_widget_rel(WINDOW_MARGIN,
-	    MAIN_WINDOW_HEIGHT - 30, B_FALSE, MAIN_WINDOW_WIDTH -
+	    MAIN_WINDOW_HEIGHT - 27, B_FALSE, MAIN_WINDOW_WIDTH -
 	    2 * WINDOW_MARGIN, 18, 1, "", 0, main_win, xpWidgetClass_Caption);
 }
 
@@ -1012,6 +1038,7 @@ update_main_window(void)
 	UPDATE_BUTTON_STATE(speak_units);
 	UPDATE_BUTTON_STATE(use_tts);
 	UPDATE_BUTTON_STATE(voice_female);
+	UPDATE_BUTTON_STATE(say_deep_landing);
 	UPDATE_BUTTON_STATE(nd_alerts_enabled);
 	UPDATE_BUTTON_STATE(nd_alert_overlay_enabled);
 	UPDATE_BUTTON_STATE(nd_alert_overlay_force);

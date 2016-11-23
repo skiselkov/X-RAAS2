@@ -66,7 +66,8 @@ typedef enum nd_alert_msg_type {
 	ND_ALERT_ON = 9,		/* 'ON XX' or 'ON XX ZZ' */
 					/* 'XX' is rwy ID (bits 8 - 15) */
 					/* 'ZZ' is rwy length (bits 16 - 23) */
-	ND_ALERT_LONG_LAND = 10		/* 'LONG LANDING' */
+	ND_ALERT_LONG_LAND = 10,	/* 'LONG LANDING' */
+	ND_ALERT_DEEP_LAND = 11		/* 'DEEP LANDING' */
 } nd_alert_msg_type_t;
 
 extern const char *ND_alert_overlay_default_font;

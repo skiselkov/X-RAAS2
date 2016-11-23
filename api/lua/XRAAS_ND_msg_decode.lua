@@ -101,6 +101,8 @@ function XRAAS_ND_msg_decode(dr_value)
 		end
 	elseif msg_type == 10 then
 		return "LONG LANDING", color_code
+	elseif msg_type == 11 then
+		return "DEEP LANDING", color_code
 	else
 		return nil, nil
 	end

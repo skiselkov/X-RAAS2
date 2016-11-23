@@ -34,7 +34,8 @@ enum {
 	ALERT_ALTM_SETTING =	7,
 	ALERT_APP =		8,
 	ALERT_ON =		9,
-	ALERT_LONG_LAND =	10
+	ALERT_LONG_LAND =	10,
+	ALERT_DEEP_LAND =	11
 };
 
 #define MSGLEN	16
@@ -103,6 +104,9 @@ XRAAS_ND_msg_decode(int dr_value, char decoded_msg[MSGLEN], int *color_code)
 	}
 	case ALERT_LONG_LAND:
 		strcpy(decoded_msg, "LONG LANDING");
+		return (1);
+	case ALERT_DEEP_LAND:
+		strcpy(decoded_msg, "DEEP LANDING");
 		return (1);
 	}
 

@@ -61,6 +61,7 @@ static msg_t voice_msgs[NUM_MSGS] = {
 	{ .name = "avail", .text = "Available, ", .wav = NULL },
 	{ .name = "caution", .text = "Caution! ", .wav = NULL },
 	{ .name = "center", .text = "Center, ", .wav = NULL },
+	{ .name = "deep_land", .text = "Deep landing! ", .wav = NULL },
 	{ .name = "feet", .text = "Feet, ", .wav = NULL },
 	{ .name = "flaps", .text = "Flaps! ", .wav = NULL },
 	{ .name = "hundred", .text = "Hundred, ", .wav = NULL },
