@@ -28,6 +28,34 @@
 
 debug_config_t xraas_debug_config;
 
+const char *const monitor_conf_keys[NUM_MONITORS] = {
+    "apch_rwy_on_gnd_mon",		/* APCH_RWY_ON_GND_MON */
+    "apch_rwy_in_air_mon",		/* APCH_RWY_IN_AIR_MON */
+    "apch_rwy_in_air_short_mon",	/* APCH_RWY_IN_AIR_SHORT_MON */
+    "on_rwy_lineup_mon",		/* ON_RWY_LINEUP_MON */
+    "on_rwy_lineup_short_mon",		/* ON_RWY_LINEUP_SHORT_MON */
+    "on_rwy_lineup_flaps_mon",		/* ON_RWY_FLAP_MON */
+    "on_rwy_tkoff_short_mon",		/* ON_RWY_TKOFF_SHORT_MON */
+    "on_rwy_hold_mon",			/* ON_RWY_HOLDING_MON */
+    "twy_tkoff_mon",			/* TWY_TKOFF_MON */
+    "dist_rmng_land_mon",		/* DIST_RMNG_LAND_MON */
+    "dist_rmng_rto_mon",		/* DIST_RMNG_RTO_MON */
+    "twy_land_mon",			/* TWY_LAND_MON */
+    "rwy_end_mon",			/* RWY_END_MON */
+    "apch_too_high_upper_mon",		/* APCH_TOO_HIGH_UPPER_MON */
+    "apch_too_high_lower_mon",		/* APCH_TOO_HIGH_LOWER_MON */
+    "apch_too_fast_upper_mon",		/* APCH_TOO_FAST_UPPER_MON */
+    "apch_too_fast_lower_mon",		/* APCH_TOO_FAST_LOWER_MON */
+    "apch_flaps_upper_mon",		/* APCH_FLAPS_UPPER_MON */
+    "apch_flaps_lower_mon",		/* APCH_FLAPS_LOWER_MON */
+    "apch_unstable_mon",		/* APCH_UNSTABLE_MON */
+    "altm_qne_mon",			/* ALTM_QNE_MON */
+    "altm_qnh_mon",			/* ALTM_QNH_MON */
+    "altm_qfe_mon",			/* ALTM_QFE_MON */
+    "long_land_mon",			/* LONG_LAND_MON */
+    "late_rotation_mon"			/* LATE_ROTATION_MON */
+};
+
 static void
 reset_config(xraas_state_t *state)
 {
@@ -53,13 +81,8 @@ reset_config(xraas_state_t *state)
 	state->on_rwy_warn_initial = 60;
 	state->on_rwy_warn_repeat = 120;
 	state->on_rwy_warn_max_n = 3;
-	state->too_high_enabled = B_TRUE;
-	state->too_fast_enabled = B_TRUE;
 	state->gpa_limit_mult = 2;
 	state->gpa_limit_max = 8;
-	state->alt_setting_enabled = B_TRUE;
-	state->qnh_alt_enabled = B_TRUE;
-	state->qfe_alt_enabled = B_FALSE;
 	state->disable_ext_view = B_TRUE;
 	state->override_electrical = B_FALSE;
 	state->override_replay = B_FALSE;
@@ -75,6 +98,9 @@ reset_config(xraas_state_t *state)
 	state->nd_alert_overlay_font_size = ND_alert_overlay_default_font_size;
 	state->debug_graphical = B_FALSE;
 	state->openal_shared = B_FALSE;
+
+	for (int i = 0; i < NUM_MONITORS; i++)
+		state->monitors[i] = B_TRUE;
 
 	openal_set_shared_ctx(B_FALSE);
 
@@ -140,13 +166,8 @@ process_conf(xraas_state_t *state, conf_t *conf)
 	CONF_GET(i, on_rwy_warn_initial);
 	CONF_GET(i, on_rwy_warn_repeat);
 	CONF_GET(i, on_rwy_warn_max_n);
-	CONF_GET(b, too_high_enabled);
-	CONF_GET(b, too_fast_enabled);
 	CONF_GET(d, gpa_limit_mult);
 	CONF_GET(d, gpa_limit_max);
-	CONF_GET(b, alt_setting_enabled);
-	CONF_GET(b, qnh_alt_enabled);
-	CONF_GET(b, qfe_alt_enabled);
 	CONF_GET(b, disable_ext_view);
 	CONF_GET(b, override_electrical);
 	CONF_GET(b, override_replay);
@@ -165,6 +186,16 @@ process_conf(xraas_state_t *state, conf_t *conf)
 	}
 	CONF_GET(i, nd_alert_overlay_font_size);
 #undef	CONF_GET
+
+	for (int i = 0; i < NUM_MONITORS; i++) {
+		if (conf_get_b(conf, monitor_conf_keys[i],
+		    &state->monitors[i])) {
+			int l = strlen(monitor_conf_keys[i]) + 6;
+			char buf[l];
+			snprintf(buf, l, "raas_%s", monitor_conf_keys[i]);
+			(void) conf_get_b(conf, buf, &state->monitors[i]);
+		}
+	}
 
 	if (conf_get_b(conf, "openal_shared", &state->openal_shared))
 		openal_set_shared_ctx(state->openal_shared);

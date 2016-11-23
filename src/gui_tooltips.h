@@ -32,6 +32,10 @@
 extern "C" {
 #endif
 
+#define	MAN_REF(chapter) \
+	"(Refer to section " chapter " of the X-RAAS user manual for more " \
+	"information.)"
+
 static const char *enabled_tooltip[] = {
     "The master ON/OFF switch.",
     "ON: X-RAAS starts up if the current aircraft is compatible.",
@@ -68,37 +72,174 @@ static const char *us_runway_numbers_tooltip[] = {
     "(e.g. '01L').",
     NULL
 };
-static const char *too_high_enabled_tooltip[] = {
-    "ON: the 'TOO HIGH' approach monitor is enabled.",
-    "OFF: the 'TOO HIGH' approach monitor is disabled.",
-    "(Refer to section 4.12 of the X-RAAS user manual for more information.)",
-    NULL
+
+static const char *monitor_tooltips[][NUM_MONITORS] = {
+    {	/* APCH_RWY_ON_GND_MON */
+	"ON: the approaching runway on ground monitor is enabled.",
+	"OFF: the approaching runway on-ground monitor is disabled.",
+	MAN_REF("4.1"),
+	NULL
+    },
+    {	/* APCH_RWY_IN_AIR_MON */
+	"ON: the approaching runway in air monitor is enabled.",
+	"OFF: the approaching runway in air monitor is disabled.",
+	MAN_REF("4.10"),
+	NULL
+    },
+    {	/* APCH_RWY_IN_AIR_SHORT_MON */
+	"ON: the approaching short runway in air monitor is enabled.",
+	"OFF: the approaching short runway in air monitor is disabled",
+	MAN_REF("4.10"),
+	NULL
+    },
+    {	/* ON_RWY_LINEUP_MON */
+	"ON: the on-runway lineup monitor is enabled.",
+	"OFF: the on-runway lineup monitor is disabled.",
+	MAN_REF("4.2"),
+	NULL
+    },
+    {	/* ON_RWY_LINEUP_SHORT_MON */
+	"ON: the on-runway (short runway) lineup monitor is enabled.",
+	"OFF: the on-runway (short runway) lineup monitor is disabled.",
+	MAN_REF("4.3"),
+	NULL
+    },
+    {	/* ON_RWY_FLAP_MON */
+	"ON: the on-runway lineup late flap selection monitor is enabled.",
+	"OFF: the on-runway lineup late flap selection monitor is disabled.",
+	MAN_REF("4.1"),
+	NULL
+    },
+    {	/* ON_RWY_TKOFF_SHORT_MON */
+	"ON: the short runway takeoff monitor is enabled.",
+	"OFF: the short runway takeoff monitor is disabled.",
+	MAN_REF("4.4"),
+	NULL
+    },
+    {	/* ON_RWY_HOLDING_MON */
+	"ON: the on-runway extended holding monitor is enabled.",
+	"OFF: the on-runway extended holding monitor is disabled.",
+	MAN_REF("4.2.1"),
+	NULL
+    },
+    {	/* ON_TWY_TKOFF_MON */
+	"ON: the taxiway takeoff monitor is enabled.",
+	"OFF: the taxiway takeoff monitor is disabled.",
+	MAN_REF("4.5"),
+	NULL
+    },
+    {	/* DIST_RMNG_LAND_MON */
+	"ON: distance remaining callouts on landing are enabled.",
+	"OFF: distance remaining callouts on landing are disabled.",
+	MAN_REF("4.16"),
+	NULL
+    },
+    {	/* DIST_RMNG_RTO_MON */
+	"ON: distance remaining callouts on rejected takeoff are enabled.",
+	"OFF: distance remaining callouts on rejected takeoff are disabled.",
+	MAN_REF("4.7"),
+	NULL
+    },
+    {	/* TWY_LAND_MON */
+	"ON: the taxiway landing monitor is enabled.",
+	"OFF: the taxiway landing monitor is disabled.",
+	MAN_REF("4.14"),
+	NULL
+    },
+    {	/* RWY_END_MON */
+	"ON: the runway ending distance remaining callout is enabled.",
+	"OFF: the runway ending distance remaining callout is disabled.",
+	NULL
+    },
+    {	/* APCH_TOO_HIGH_UPPER_MON */
+	"ON: the 'TOO HIGH' approach monitor upper gate (950-600 ft AFE) is "
+	"enabled.",
+	"OFF: the 'TOO HIGH' approach monitor upper gate (950-600 ft AFE) is "
+	"disabled.",
+	MAN_REF("4.12"),
+	NULL
+    },
+    {	/* APCH_TOO_HIGH_LOWER_MON */
+	"ON: the 'TOO HIGH' approach monitor lower gate (600-450 ft AFE) is "
+	"enabled.",
+	"OFF: the 'TOO HIGH' approach monitor lower gate (600-450 ft AFE) is "
+	"disabled.",
+	MAN_REF("4.12"),
+	NULL
+    },
+    {	/* APCH_TOO_FAST_UPPER_MON */
+	"ON: the 'TOO FAST' approach monitor upper gate (950-600 ft AFE) is "
+	"enabled.",
+	"OFF: the 'TOO FAST' approach monitor upper gate (950-600 ft AFE) is "
+	"disabled.",
+	MAN_REF("4.13"),
+	NULL
+    },
+    {	/* APCH_TOO_FAST_LOWER_MON */
+	"ON: the 'TOO FAST' approach monitor lower gate (600-450 ft AFE) is "
+	"enabled.",
+	"OFF: the 'TOO FAST' approach monitor lower gate (600-450 ft AFE) is "
+	"disabled.",
+	MAN_REF("4.13"),
+	NULL
+    },
+    {	/* APCH_FLAPS_UPPER_MON */
+	"ON: the 'TOO FAST' approach monitor upper gate (950-600 ft AFE) is "
+	"enabled.",
+	"OFF: the 'TOO FAST' approach monitor upper gate (950-600 ft AFE) is "
+	"disabled.",
+	MAN_REF("4.13"),
+	NULL
+    },
+    {	/* APCH_FLAPS_LOWER_MON */
+	"ON: the late flap selection approach monitor lower gate "
+	"(600-450 ft AFE) is enabled.",
+	"OFF: the late flap selection approach monitor lower gate "
+	"(600-450 ft AFE) is disabled.",
+	MAN_REF("4.13"),
+	NULL
+    },
+    {	/* APCH_UNSTABLE_MON */
+	"ON: the unstable approach monitor is enabled. The conditions "
+	"checked depend",
+	"    on the lower gate setting of the respective approach monitor.",
+	"OFF: the unstable approach monitor is disabled.",
+	MAN_REF("4.13"),
+	NULL
+    },
+    {	/* ALTM_QNE_MON */
+	"ON: the QNE altimeter setting monitor mode is enabled.",
+	"OFF: the QNE altimeter setting monitor mode is disabled.",
+	MAN_REF("4.8"),
+	NULL
+    },
+    {	/* ALTM_QNH_MON */
+	"ON: the QNH altimeter setting monitor mode is enabled.",
+	"OFF: the QNH altimeter setting monitor mode is disabled.",
+	MAN_REF("4.9"),
+	NULL
+    },
+    {	/* ALTM_QFE_MON */
+	"ON: the QFE altimeter setting monitor mode is enabled.",
+	"OFF: the QFE altimeter setting monitor mode is disabled.",
+	MAN_REF("4.9"),
+	NULL
+    },
+    {	/* LONG_LAND_MON */
+	"ON: the long landing monitor is enabled.",
+	"OFF: the long landing monitor is disabled.",
+	MAN_REF("4.15"),
+	NULL
+    },
+    {	/* LATE ROTATION_MON */
+	"ON: the late rotation on takeoff monitor is enabled.",
+	"OFF: the late rotation on takeoff monitor is disabled.",
+	MAN_REF("4.6"),
+	NULL
+    },
+    { NULL }
 };
-static const char *too_fast_enabled_tooltip[] = {
-    "ON: the 'TOO FAST' approach monitor is enabled.",
-    "OFF: the 'TOO FAST' approach monitor is disabled.",
-    "(Refer to section 4.13 of the X-RAAS user manual for more information.)",
-    NULL
-};
-static const char *alt_setting_enabled_tooltip[] = {
-    "ON: the barometric altimeter setting monitor is enabled.",
-    "OFF: the barometric altimeter setting monitor is disabled.",
-    "(Refer to sections 4.8 and 4.9 of the X-RAAS user manual for more "
-    "information.)",
-    NULL
-};
-static const char *qnh_alt_mode_tooltip[] = {
-    "ON: the QNH altimeter setting monitor mode is enabled.",
-    "OFF: the QNH altimeter setting monitor mode is disabled.",
-    "(Refer to section 4.9 of the X-RAAS user manual for more information.)",
-    NULL
-};
-static const char *qfe_alt_mode_tooltip[] = {
-    "ON: the QFE altimeter setting monitor mode is enabled.",
-    "OFF: the QFE altimeter setting monitor mode is disabled.",
-    "(Refer to section 4.9 of the X-RAAS user manual for more information.)",
-    NULL
-};
+
 static const char *disable_ext_view_tooltip[] = {
     "ON: while the simulator view is external, audible playback and display "
     "of visual overlay annunciations is inhibited.",

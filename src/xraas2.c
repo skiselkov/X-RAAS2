@@ -657,6 +657,12 @@ do_approaching_rwy(const airport_t *arpt, const runway_t *rwy,
 		    0)) {
 			msg_type_t *apch_rwys;
 
+			if ((on_ground &&
+			    !state.monitors[APCH_RWY_ON_GND_MON]) ||
+			    (!on_ground &&
+			    !state.monitors[APCH_RWY_IN_AIR_MON]))
+				return;
+
 			if (on_ground)
 				/*
 				 * On the ground we don't want to re-annunciate
@@ -698,12 +704,25 @@ do_approaching_rwy(const airport_t *arpt, const runway_t *rwy,
 		rwy_id_to_msg(rwy_end->id, &msg, &msg_len);
 		msg_prio = MSG_PRIO_LOW;
 
-		if (!on_ground && rwy->length < state.min_landing_dist) {
+		/*
+		 * For short rwys, use a different enabling check. If OFF,
+		 * we still want to try and annunciate as normal.
+		 */
+		if (!on_ground && rwy->length < state.min_landing_dist &&
+		    state.monitors[APCH_RWY_IN_AIR_SHORT_MON]) {
 			dist_to_msg(rwy->length, &msg, &msg_len, B_TRUE);
 			append_msglist(&msg, &msg_len, AVAIL_MSG);
 			msg_prio = MSG_PRIO_HIGH;
 			dist_ND = rwy->length;
 			level = ND_ALERT_NONROUTINE;
+		} else {
+			if ((on_ground &&
+			    !state.monitors[APCH_RWY_ON_GND_MON]) ||
+			    (!on_ground &&
+			    !state.monitors[APCH_RWY_IN_AIR_MON])) {
+				free(msg);
+				return;
+			}
 		}
 
 		play_msg(msg, msg_len, msg_prio);
@@ -789,7 +808,8 @@ ground_runway_approach(void)
 
 static void
 perform_on_rwy_ann(const char *rwy_id, vect2_t pos_v, vect2_t thr_v,
-    vect2_t opp_thr_v, bool_t no_flap_check, bool_t non_routine, int repeats)
+    vect2_t opp_thr_v, bool_t length_check, bool_t flap_check,
+    bool_t non_routine, int repeats)
 {
 	msg_type_t *msg = NULL;
 	size_t msg_len = 0;
@@ -814,23 +834,23 @@ perform_on_rwy_ann(const char *rwy_id, vect2_t pos_v, vect2_t thr_v,
 	ASSERT(rwy_id != NULL);
 	for (int i = 0; i < repeats; i++) {
 		append_msglist(&msg, &msg_len, ON_RWY_MSG);
-
 		rwy_id_to_msg(rwy_id, &msg, &msg_len);
-		if (dist < state.min_takeoff_dist && !state.landing) {
-			dist_to_msg(dist, &msg, &msg_len, B_TRUE);
-			dist_ND = dist;
-			level = ND_ALERT_NONROUTINE;
-			append_msglist(&msg, &msg_len, RMNG_MSG);
-		}
+	}
 
-		if ((flaprqst < state.min_takeoff_flap ||
-		    flaprqst > state.max_takeoff_flap) &&
-		    !state.landing && !gpws_flaps_ovrd() && !no_flap_check) {
-			append_msglist(&msg, &msg_len, FLAPS_MSG);
-			append_msglist(&msg, &msg_len, FLAPS_MSG);
-			allow_on_rwy_ND_alert = B_FALSE;
-			ND_alert(ND_ALERT_FLAPS, ND_ALERT_CAUTION, NULL, -1);
-		}
+	if (dist < state.min_takeoff_dist && !state.landing && length_check) {
+		dist_to_msg(dist, &msg, &msg_len, B_TRUE);
+		dist_ND = dist;
+		level = ND_ALERT_NONROUTINE;
+		append_msglist(&msg, &msg_len, RMNG_MSG);
+	}
+
+	if ((flaprqst < state.min_takeoff_flap ||
+	    flaprqst > state.max_takeoff_flap) && !state.landing &&
+	    !gpws_flaps_ovrd() && flap_check) {
+		append_msglist(&msg, &msg_len, FLAPS_MSG);
+		append_msglist(&msg, &msg_len, FLAPS_MSG);
+		allow_on_rwy_ND_alert = B_FALSE;
+		ND_alert(ND_ALERT_FLAPS, ND_ALERT_CAUTION, NULL, -1);
 	}
 
 	play_msg(msg, msg_len, MSG_PRIO_HIGH);
@@ -863,20 +883,25 @@ on_rwy_check(const char *arpt_id, const char *rwy_id, double hdg,
 	    state.on_rwy_warnings == 0) ||
 	    (now - state.on_rwy_timer - SEC2USEC(state.on_rwy_warn_initial) >
 	    state.on_rwy_warnings * SEC2USEC(state.on_rwy_warn_repeat))) &&
-	    state.on_rwy_warnings < state.on_rwy_warn_max_n) {
+	    state.on_rwy_warnings < state.on_rwy_warn_max_n &&
+	    state.monitors[ON_RWY_HOLDING_MON]) {
 		state.on_rwy_warnings++;
 		perform_on_rwy_ann(rwy_id, NULL_VECT2, NULL_VECT2, NULL_VECT2,
-		    B_TRUE, B_TRUE, 2);
+		    B_FALSE, B_FALSE, B_TRUE, 2);
 	}
 
 	if (rhdg > HDG_ALIGN_THRESH)
 		return;
 
 	if (rwy_key_tbl_get(&state.on_rwy_ann, arpt_id, rwy_id) == B_FALSE) {
-		if (XPLMGetDataf(drs.gs) < SPEED_THRESH)
+		if (XPLMGetDataf(drs.gs) < SPEED_THRESH &&
+		    state.monitors[ON_RWY_LINEUP_MON]) {
 			perform_on_rwy_ann(rwy_id, pos_v, thr_v, opp_thr_v,
-			    strcmp(state.rejected_takeoff, "") != 0,
-			    B_FALSE, 1);
+			    state.monitors[ON_RWY_LINEUP_SHORT_MON] &&
+			    *state.rejected_takeoff == 0,
+			    state.monitors[ON_RWY_FLAP_MON] &&
+			    *state.rejected_takeoff == 0, B_FALSE, 1);
+		}
 		rwy_key_tbl_set(&state.on_rwy_ann, arpt_id, rwy_id, B_TRUE);
 	}
 }
@@ -905,7 +930,8 @@ takeoff_rwy_dist_check(vect2_t opp_thr_v, vect2_t pos_v)
 		return;
 
 	double dist = vect2_abs(vect2_sub(opp_thr_v, pos_v));
-	if (dist < state.min_takeoff_dist) {
+	if (dist < state.min_takeoff_dist &&
+	    state.monitors[ON_RWY_TKOFF_SHORT_MON]) {
 		msg_type_t *msg = NULL;
 		size_t msg_len = 0;
 		append_msglist(&msg, &msg_len, CAUTION_MSG);
@@ -1007,7 +1033,7 @@ stop_check(const runway_t *rwy, int end, double hdg, vect2_t pos_v)
 		 * call that fact out.
 		 */
 		if (dist < IMMEDIATE_STOP_DIST && rhdg < HDG_ALIGN_THRESH &&
-		    gs > SLOW_ROLL_THRESH)
+		    gs > SLOW_ROLL_THRESH && state.monitors[RWY_END_MON])
 			perform_rwy_dist_remaining_callouts(opp_thr_v, pos_v,
 			    B_FALSE);
 		else
@@ -1039,7 +1065,7 @@ stop_check(const runway_t *rwy, int end, double hdg, vect2_t pos_v)
 			    rwy->length - state.long_land_lim_abs,
 			    rwy->length * (1 - state.long_land_lim_fract)),
 			    MIN(rwy->length, state.min_landing_dist));
-			if (dist < dist_lim) {
+			if (dist < dist_lim && state.monitors[LONG_LAND_MON]) {
 				if (!state.long_landing_ann) {
 					msg_type_t *msg = NULL;
 					size_t msg_len = 0;
@@ -1088,12 +1114,15 @@ stop_check(const runway_t *rwy, int end, double hdg, vect2_t pos_v)
 	 *    threshold and our pitch angle to the runway indicates that
 	 *    rotation has not yet been initiated.
 	 */
-	if (strcmp(state.rejected_takeoff, rwy_end->id) == 0 ||
+	if ((strcmp(state.rejected_takeoff, rwy_end->id) == 0 &&
+	    state.monitors[DIST_RMNG_RTO_MON]) ||
 	    (state.landing && dist < MAX(rwy->length / 2,
-	    state.stop_dist_cutoff) && !decel_check(dist)) ||
+	    state.stop_dist_cutoff) && !decel_check(dist) &&
+	    state.monitors[DIST_RMNG_LAND_MON]) ||
 	    (!state.landing && dist < state.min_rotation_dist &&
 	    XPLMGetDataf(drs.rad_alt) < RADALT_GRD_THRESH &&
-	    rpitch < state.min_rotation_angle))
+	    rpitch < state.min_rotation_angle &&
+	    state.monitors[LATE_ROTATION_MON]))
 		perform_rwy_dist_remaining_callouts(opp_thr_v, pos_v, B_FALSE);
 }
 
@@ -1189,7 +1218,7 @@ ground_on_runway_aligned(void)
 	if (!on_rwy && XPLMGetDataf(drs.rad_alt) < RADALT_GRD_THRESH &&
 	    ((!state.landing && XPLMGetDataf(drs.gs) >= SPEED_THRESH) ||
 	    (state.landing && XPLMGetDataf(drs.gs) >= HIGH_SPEED_THRESH))) {
-		if (!state.on_twy_ann) {
+		if (!state.on_twy_ann && state.monitors[TWY_TKOFF_MON]) {
 			msg_type_t *msg = NULL;
 			size_t msg_len = 0;
 
@@ -1390,18 +1419,51 @@ apch_spd_limit(double height_abv_thr)
 	return (land_spd + spd_margin);
 }
 
+static void
+ann_apch_cfg(msg_type_t **msg, size_t *msg_len, bool_t add_pause,
+    msg_type_t msg_type, nd_alert_level_t nd_alert)
+{
+	append_msglist(msg, msg_len, msg_type);
+	if (add_pause)
+		append_msglist(msg, msg_len, PAUSE_MSG);
+	append_msglist(msg, msg_len, msg_type);
+	ND_alert(nd_alert, ND_ALERT_CAUTION, NULL, -1);
+}
+
+static void
+ann_unstable_apch(msg_type_t **msg, size_t *msg_len)
+{
+	if (!state.monitors[APCH_UNSTABLE_MON])
+		return;
+	append_msglist(msg, msg_len, UNSTABLE_MSG);
+	append_msglist(msg, msg_len, UNSTABLE_MSG);
+	ND_alert(ND_ALERT_UNSTABLE, ND_ALERT_CAUTION, NULL, -1);
+}
+
 static bool_t
 apch_cfg_chk(const char *arpt_id, const char *rwy_id, double height_abv_thr,
     double gpa_act, double rwy_gpa, double win_ceil, double win_floor,
     msg_type_t **msg, size_t *msg_len, rwy_key_tbl_t *flap_ann_table,
-    rwy_key_tbl_t *gpa_ann_table, rwy_key_tbl_t *spd_ann_table, bool_t critical,
-    bool_t add_pause, double dist_from_thr, bool_t check_gear)
+    rwy_key_tbl_t *gpa_ann_table, rwy_key_tbl_t *spd_ann_table,
+    bool_t critical, bool_t upper_gate, bool_t add_pause, double dist_from_thr,
+    bool_t check_gear)
 {
 	ASSERT(arpt_id != NULL);
 	ASSERT(rwy_id != NULL);
 
 	double clb_rate = conv_per_min(MET2FEET(XPLMGetDatad(drs.elev) -
 	    state.last_elev));
+	int too_fast_mon, too_high_mon, flaps_mon;
+
+	if (upper_gate) {
+		too_fast_mon = APCH_TOO_FAST_UPPER_MON;
+		too_high_mon = APCH_TOO_HIGH_UPPER_MON;
+		flaps_mon = APCH_FLAPS_UPPER_MON;
+	} else {
+		too_fast_mon = APCH_TOO_FAST_LOWER_MON;
+		too_high_mon = APCH_TOO_HIGH_LOWER_MON;
+		flaps_mon = APCH_FLAPS_LOWER_MON;
+	}
 
 	if (height_abv_thr < win_ceil && height_abv_thr > win_floor &&
 	    (!gear_is_up() || !check_gear) &&
@@ -1411,98 +1473,47 @@ apch_cfg_chk(const char *arpt_id, const char *rwy_id, double height_abv_thr,
 		dbg_log(apch_cfg_chk, 2, "gpa_act = %.02f rwy_gpa = %.02f",
 		    gpa_act, rwy_gpa);
 		if (rwy_key_tbl_get(flap_ann_table, arpt_id, rwy_id) == 0 &&
-		    XPLMGetDataf(drs.flaprqst) < state.min_landing_flap) {
+		    XPLMGetDataf(drs.flaprqst) < state.min_landing_flap &&
+		    !gpws_flaps_ovrd() && state.monitors[flaps_mon]) {
 			dbg_log(apch_cfg_chk, 1, "FLAPS: flaprqst = %f "
 			    "min_flap = %f", XPLMGetDataf(drs.flaprqst),
 			    state.min_landing_flap);
-			if (gpws_flaps_ovrd()) {
-				dbg_log(apch_cfg_chk, 1,
-				    "FLAPS: flaps ovrd active");
-			} else {
-				if (!critical) {
-					append_msglist(msg, msg_len, FLAPS_MSG);
-					if (add_pause)
-						append_msglist(msg, msg_len,
-						    PAUSE_MSG);
-					append_msglist(msg, msg_len, FLAPS_MSG);
-					ND_alert(ND_ALERT_FLAPS,
-					    ND_ALERT_CAUTION, NULL, -1);
-				} else {
-					append_msglist(msg, msg_len,
-					    UNSTABLE_MSG);
-					append_msglist(msg, msg_len,
-					    UNSTABLE_MSG);
-					ND_alert(ND_ALERT_UNSTABLE,
-					    ND_ALERT_CAUTION, NULL, -1);
-				}
-			}
+			if (!critical)
+				ann_apch_cfg(msg, msg_len, add_pause,
+				    FLAPS_MSG, ND_ALERT_FLAPS);
+			else
+				ann_unstable_apch(msg, msg_len);
 			rwy_key_tbl_set(flap_ann_table, arpt_id, rwy_id,
 			    B_TRUE);
 			return (B_TRUE);
 		} else if (rwy_key_tbl_get(gpa_ann_table, arpt_id, rwy_id) ==
-		    0 && rwy_gpa != 0 &&
-		    gpa_act > gpa_limit(rwy_gpa, dist_from_thr)) {
+		    0 && rwy_gpa != 0 && !gpws_terr_ovrd() &&
+		    gpa_act > gpa_limit(rwy_gpa, dist_from_thr) &&
+		    state.monitors[too_high_mon]) {
 			dbg_log(apch_cfg_chk, 1, "TOO HIGH: "
 			    "gpa_act = %.02f gpa_limit = %.02f",
 			    gpa_act, gpa_limit(rwy_gpa, dist_from_thr));
-			if (gpws_terr_ovrd()) {
-				dbg_log(apch_cfg_chk, 1,
-				    "TOO HIGH: terr ovrd active");
-			} else {
-				if (!critical) {
-					append_msglist(msg, msg_len,
-					    TOO_HIGH_MSG);
-					if (add_pause)
-						append_msglist(msg, msg_len,
-						    PAUSE_MSG);
-					append_msglist(msg, msg_len,
-					    TOO_HIGH_MSG);
-					ND_alert(ND_ALERT_TOO_HIGH,
-					    ND_ALERT_CAUTION, NULL, -1);
-				} else {
-					append_msglist(msg, msg_len,
-					    UNSTABLE_MSG);
-					append_msglist(msg, msg_len,
-					    UNSTABLE_MSG);
-					ND_alert(ND_ALERT_UNSTABLE,
-					    ND_ALERT_CAUTION, NULL, -1);
-				}
-			}
+			if (!critical)
+				ann_apch_cfg(msg, msg_len, add_pause,
+				    TOO_HIGH_MSG, ND_ALERT_TOO_HIGH);
+			else
+				ann_unstable_apch(msg, msg_len);
 			rwy_key_tbl_set(gpa_ann_table, arpt_id, rwy_id, B_TRUE);
 			return (B_TRUE);
 		} else if (rwy_key_tbl_get(spd_ann_table, arpt_id, rwy_id) ==
-		    0 && state.too_fast_enabled && XPLMGetDataf(drs.airspeed) >
-		    apch_spd_limit(height_abv_thr)) {
+		    0 && state.monitors[too_fast_mon] && !gpws_terr_ovrd() &&
+		    !gpws_flaps_ovrd() && XPLMGetDataf(drs.airspeed) >
+		    apch_spd_limit(height_abv_thr) &&
+		    state.monitors[too_fast_mon]) {
 			dbg_log(apch_cfg_chk, 1, "TOO FAST: "
 			    "airspeed = %.0f apch_spd_limit = %.0f",
 			    XPLMGetDataf(drs.airspeed), apch_spd_limit(
 			    height_abv_thr));
-			if (gpws_terr_ovrd()) {
-				dbg_log(apch_cfg_chk, 1,
-				    "TOO FAST: terr ovrd active");
-			} else if (gpws_flaps_ovrd()) {
-				dbg_log(apch_cfg_chk, 1,
-				    "TOO FAST: flaps ovrd active");
-			} else {
-				if (!critical) {
-					append_msglist(msg, msg_len,
-					    TOO_FAST_MSG);
-					if (add_pause)
-						append_msglist(msg, msg_len,
-						    PAUSE_MSG);
-					append_msglist(msg, msg_len,
-					    TOO_FAST_MSG);
-					ND_alert(ND_ALERT_TOO_FAST,
-					    ND_ALERT_CAUTION, NULL, -1);
-				} else {
-					append_msglist(msg, msg_len,
-					    UNSTABLE_MSG);
-					append_msglist(msg, msg_len,
-					    UNSTABLE_MSG);
-					ND_alert(ND_ALERT_UNSTABLE,
-					    ND_ALERT_CAUTION, NULL, -1);
-				}
-			}
+			if (!critical)
+				ann_apch_cfg(msg, msg_len, add_pause,
+				    TOO_FAST_MSG, ND_ALERT_TOO_FAST);
+			else
+				ann_unstable_apch(msg, msg_len);
 			rwy_key_tbl_set(spd_ann_table, arpt_id, rwy_id, B_TRUE);
 			return (B_TRUE);
 		}
@@ -1540,7 +1551,7 @@ air_runway_approach_arpt_rwy(const airport_t *arpt, const runway_t *rwy,
 		double above_tch = FEET2MET(MET2FEET(XPLMGetDatad(drs.elev)) -
 		    (telev + tch));
 
-		if (state.too_high_enabled && tch != 0 && rwy_gpa != 0 &&
+		if (tch != 0 && rwy_gpa != 0 &&
 		    fabs(elev - telev) < BOGUS_THR_ELEV_LIMIT)
 			gpa_act = RAD2DEG(atan(above_tch / dist));
 		else
@@ -1550,17 +1561,20 @@ air_runway_approach_arpt_rwy(const airport_t *arpt, const runway_t *rwy,
 		    gpa_act, rwy_gpa, RWY_APCH_FLAP1_THRESH,
 		    RWY_APCH_FLAP2_THRESH, &msg, &msg_len,
 		    &state.air_apch_flap1_ann, &state.air_apch_gpa1_ann,
-		    &state.air_apch_spd1_ann, B_FALSE, B_TRUE, dist, B_TRUE) ||
-		    apch_cfg_chk(arpt_id, rwy_id, alt - telev,
-		    gpa_act, rwy_gpa, RWY_APCH_FLAP2_THRESH,
-		    RWY_APCH_FLAP3_THRESH, &msg, &msg_len,
+		    &state.air_apch_spd1_ann, B_FALSE, B_TRUE, B_TRUE, dist,
+		    B_TRUE) ||
+		    apch_cfg_chk(arpt_id, rwy_id, alt - telev, gpa_act,
+		    rwy_gpa, RWY_APCH_FLAP2_THRESH, RWY_APCH_FLAP3_THRESH,
+		    &msg, &msg_len,
 		    &state.air_apch_flap2_ann, &state.air_apch_gpa2_ann,
-		    &state.air_apch_spd2_ann, B_FALSE, B_FALSE, dist,
-		    B_FALSE) || apch_cfg_chk(arpt_id, rwy_id, alt - telev,
-		    gpa_act, rwy_gpa, RWY_APCH_FLAP3_THRESH,
-		    RWY_APCH_FLAP4_THRESH, &msg, &msg_len,
+		    &state.air_apch_spd2_ann, B_FALSE, B_FALSE, B_FALSE, dist,
+		    B_FALSE) ||
+		    apch_cfg_chk(arpt_id, rwy_id, alt - telev, gpa_act,
+		    rwy_gpa, RWY_APCH_FLAP3_THRESH, RWY_APCH_FLAP4_THRESH,
+		    &msg, &msg_len,
 		    &state.air_apch_flap3_ann, &state.air_apch_gpa3_ann,
-		    &state.air_apch_spd3_ann, B_TRUE, B_FALSE, dist, B_FALSE))
+		    &state.air_apch_spd3_ann, B_TRUE, B_FALSE, B_FALSE, dist,
+		    B_FALSE))
 			msg_prio = MSG_PRIO_HIGH;
 
 		if (alt - telev < RWY_APCH_ALT_MAX &&
@@ -1572,7 +1586,8 @@ air_runway_approach_arpt_rwy(const airport_t *arpt, const runway_t *rwy,
 		if (alt - telev < SHORT_RWY_APCH_ALT_MAX &&
 		    alt - telev > SHORT_RWY_APCH_ALT_MIN &&
 		    rwy_end->land_len < state.min_landing_dist &&
-		    !state.air_apch_short_rwy_ann) {
+		    !state.air_apch_short_rwy_ann &&
+		    state.monitors[APCH_RWY_IN_AIR_SHORT_MON]) {
 			append_msglist(&msg, &msg_len, CAUTION_MSG);
 			append_msglist(&msg, &msg_len, SHORT_RWY_MSG);
 			append_msglist(&msg, &msg_len, SHORT_RWY_MSG);
@@ -1658,7 +1673,8 @@ air_runway_approach(void)
 		if (XPLMGetDataf(drs.rad_alt) <= OFF_RWY_HEIGHT_MAX) {
 			/* only annunciate if we're above the minimum height */
 			if (XPLMGetDataf(drs.rad_alt) >= OFF_RWY_HEIGHT_MIN &&
-			    !state.off_rwy_ann && !gpws_terr_ovrd()) {
+			    !state.off_rwy_ann && !gpws_terr_ovrd() &&
+			    state.monitors[TWY_LAND_MON]) {
 				msg_type_t *msg = NULL;
 				size_t msg_len = 0;
 
@@ -1713,8 +1729,7 @@ find_nearest_curarpt(void)
 static void
 altimeter_setting(void)
 {
-	if (!state.alt_setting_enabled ||
-	    XPLMGetDataf(drs.rad_alt) < RADALT_GRD_THRESH)
+	if (XPLMGetDataf(drs.rad_alt) < RADALT_GRD_THRESH)
 		return;
 
 	const airport_t *cur_arpt = find_nearest_curarpt();
@@ -1841,10 +1856,10 @@ altimeter_setting(void)
 		    ALTM_SETTING_ALT_CHK_LIMIT)))) {
 			double d_qnh = 0, d_qfe = 0;
 
-			if (state.qnh_alt_enabled)
+			if (state.monitors[ALTM_QNH_MON])
 				d_qnh = fabs(elev - XPLMGetDataf(drs.baro_alt));
 			if (state.TATL_field_elev != TATL_FIELD_ELEV_UNSET &&
-			    state.qfe_alt_enabled)
+			    state.monitors[ALTM_QFE_MON])
 				d_qfe = fabs(XPLMGetDataf(drs.baro_alt) -
 				    (elev - state.TATL_field_elev));
 			dbg_log(altimeter, 1, "alt check; d_qnh: %.1f "
@@ -1867,7 +1882,8 @@ altimeter_setting(void)
 			double d_ref = fabs(XPLMGetDataf(drs.baro_set) -
 			    STD_BARO_REF);
 			dbg_log(altimeter, 1, "fl check; d_ref: %.1f", d_ref);
-			if (d_ref > ALTM_SETTING_BARO_ERR_LIMIT) {
+			if (d_ref > ALTM_SETTING_BARO_ERR_LIMIT &&
+			    state.monitors[ALTM_QNE_MON]) {
 				msg_type_t *msg = NULL;
 				size_t msg_len = 0;
 				append_msglist(&msg, &msg_len, ALT_SET_MSG);

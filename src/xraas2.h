@@ -37,8 +37,44 @@ typedef enum TATL_state_e {
 	TATL_STATE_FL
 } TATL_state_t;
 
+typedef struct {
+	bool_t		enabled;
+	const char	*name;
+	const char	*conf_key;
+} monitor_t;
+
+enum {
+	APCH_RWY_ON_GND_MON = 0,
+	APCH_RWY_IN_AIR_MON,
+	APCH_RWY_IN_AIR_SHORT_MON,
+	ON_RWY_LINEUP_MON,
+	ON_RWY_LINEUP_SHORT_MON,
+	ON_RWY_FLAP_MON,
+	ON_RWY_TKOFF_SHORT_MON,
+	ON_RWY_HOLDING_MON,
+	TWY_TKOFF_MON,
+	DIST_RMNG_LAND_MON,
+	DIST_RMNG_RTO_MON,
+	TWY_LAND_MON,
+	RWY_END_MON,
+	APCH_TOO_HIGH_UPPER_MON,
+	APCH_TOO_HIGH_LOWER_MON,
+	APCH_TOO_FAST_UPPER_MON,
+	APCH_TOO_FAST_LOWER_MON,
+	APCH_FLAPS_UPPER_MON,
+	APCH_FLAPS_LOWER_MON,
+	APCH_UNSTABLE_MON,
+	ALTM_QNE_MON,
+	ALTM_QNH_MON,
+	ALTM_QFE_MON,
+	LONG_LAND_MON,
+	LATE_ROTATION_MON,
+	NUM_MONITORS
+};
+
 typedef struct xraas_state {
 	bool_t		enabled;
+
 	int		min_engines;		/* count */
 	int		min_mtow;		/* kg */
 	bool_t		allow_helos;
@@ -48,8 +84,11 @@ typedef struct xraas_state {
 	bool_t		override_replay;
 	bool_t		use_tts;
 	bool_t		speak_units;
-
 	bool_t		use_imperial;
+
+	/* monitor enablings */
+	bool_t		monitors[NUM_MONITORS];
+
 	int		min_takeoff_dist;		/* meters */
 	int		min_landing_dist;		/* meters */
 	int		min_rotation_dist;		/* meters */
@@ -74,17 +113,11 @@ typedef struct xraas_state {
 	int		on_rwy_warn_repeat;		/* seconds */
 	int		on_rwy_warn_max_n;		/* count */
 
-	bool_t		too_high_enabled;
-	bool_t		too_fast_enabled;
 	double		gpa_limit_mult;			/* multiplier */
 	double		gpa_limit_max;			/* degrees */
 
 	char		GPWS_priority_dataref[128];
 	char		GPWS_inop_dataref[128];
-
-	bool_t		alt_setting_enabled;
-	bool_t		qnh_alt_enabled;
-	bool_t		qfe_alt_enabled;
 
 	bool_t		us_runway_numbers;
 

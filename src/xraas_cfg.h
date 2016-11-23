@@ -25,6 +25,7 @@
 extern "C" {
 #endif
 
+extern const char *const monitor_conf_keys[NUM_MONITORS];
 bool_t load_configs(xraas_state_t *state);
 
 #ifdef	__cplusplus

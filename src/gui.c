@@ -40,6 +40,7 @@
 #include "list.h"
 #include "nd_alert.h"
 #include "xraas2.h"
+#include "xraas_cfg.h"
 
 #include "gui.h"
 #include "gui_tooltips.h"
@@ -56,22 +57,24 @@
 #endif	/* !IBM */
 
 enum {
-	MAIN_WINDOW_WIDTH =	630,
-	MAIN_WINDOW_HEIGHT =	540,
-	COLUMN_X =		270,
-
 	LAYOUT_START_X =	10,
-	LAYOUT_START_Y =	30,
+	LAYOUT_START_Y =	40,
 
 	BUTTON_HEIGHT =		20,
 	BUTTON_WIDTH =		200,
 
-	TEXT_FIELD_WIDTH =	290,
+	TEXT_FIELD_WIDTH =	270,
 	TEXT_FIELD_HEIGHT =	20,
 	WINDOW_MARGIN =		10,
 
 	TOOLTIP_LINE_HEIGHT =	13,
-	TOOLTIP_WINDOW_OFFSET =	5
+	TOOLTIP_WINDOW_OFFSET =	5,
+
+	COLUMN_X =		300,
+	COLUMN_Y =		BUTTON_HEIGHT * NUM_MONITORS + WINDOW_MARGIN,
+	BUTTON_CHIN_Y =		120,
+	MAIN_WINDOW_WIDTH =	3 * COLUMN_X + 4 * WINDOW_MARGIN,
+	MAIN_WINDOW_HEIGHT =	COLUMN_Y + BUTTON_CHIN_Y
 };
 
 #define	TOOLTIP_INTVAL		0.1
@@ -109,11 +112,7 @@ static struct {
 	XPWidgetID	startup_notify;
 	XPWidgetID	use_imperial;
 	XPWidgetID	us_runway_numbers;
-	XPWidgetID	too_high_enabled;
-	XPWidgetID	too_fast_enabled;
-	XPWidgetID	alt_setting_enabled;
-	XPWidgetID	qnh_alt_enabled;
-	XPWidgetID	qfe_alt_enabled;
+	XPWidgetID	monitors[NUM_MONITORS];
 	XPWidgetID	disable_ext_view;
 	XPWidgetID	override_electrical;
 	XPWidgetID	override_replay;
@@ -177,6 +176,34 @@ static XPWidgetID cur_tt_win = NULL;
 static int last_mouse_x, last_mouse_y;
 static uint64_t mouse_moved_time;
 
+static const char *monitor_names[NUM_MONITORS] = {
+    "Approaching runway on ground",	/* APCH_RWY_ON_GND_MON */
+    "Approaching runway in air",	/* APCH_RWY_IN_AIR_MON */
+    "Approaching short runway in air",	/* APCH_RWY_IN_AIR_SHORT_MON */
+    "On runway lined up",		/* ON_RWY_LINEUP_MON */
+    "On short runway lined up",		/* ON_RWY_LINEUP_SHORT_MON */
+    "On runway lined up flaps",		/* ON_RWY_FLAP_MON */
+    "Short runway takeoff",		/* ON_RWY_TKOFF_SHORT_MON */
+    "On runway extended holding",	/* ON_RWY_HOLDING_MON */
+    "Taxiway takeoff",			/* TWY_TKOFF_MON */
+    "Distance remaining on landing",	/* DIST_RMNG_LAND_MON */
+    "Distance remaining on RTO",	/* DIST_RMNG_RTO_MON */
+    "Taxiway landing",			/* TWY_LAND_MON */
+    "Approaching runway end",		/* RWY_END_MON */
+    "Too high approach (upper gate)",	/* APCH_TOO_HIGH_UPPER_MON */
+    "Too high approach (lower gate)",	/* APCH_TOO_HIGH_LOWER_MON */
+    "Too fast approach (upper gate)",	/* APCH_TOO_FAST_UPPER_MON */
+    "Too fast approach (lower gate)",	/* APCH_TOO_FAST_LOWER_MON */
+    "Landing flaps (upper gate)",	/* APCH_FLAPS_UPPER_MON */
+    "Landing flaps (lower gate)",	/* APCH_FLAPS_LOWER_MON */
+    "Unstable approach",		/* APCH_UNSTABLE_MON */
+    "QNE altimeter setting",		/* ALTM_QNE_MON */
+    "QNH altimeter setting",		/* ALTM_QNH_MON */
+    "QFE altimeter setting",		/* ALTM_QFE_MON */
+    "Long landing",			/* LONG_LAND_MON */
+    "Late rotation"			/* LATE_ROTATION_MON */
+};
+
 static void
 nd_alert2str(int level, char buf[32])
 {
@@ -215,11 +242,11 @@ gen_config(void)
 	GEN_BOOL_CONF(startup_notify);
 	GEN_BOOL_CONF(use_imperial);
 	GEN_BOOL_CONF(us_runway_numbers);
-	GEN_BOOL_CONF(too_high_enabled);
-	GEN_BOOL_CONF(too_fast_enabled);
-	GEN_BOOL_CONF(alt_setting_enabled);
-	GEN_BOOL_CONF(qnh_alt_enabled);
-	GEN_BOOL_CONF(qfe_alt_enabled);
+	for (int i = 0; i < NUM_MONITORS; i++)
+		append_format(&conf_text, &conf_sz, "%s = %s" NEWLINE,
+		    monitor_conf_keys[i],
+		    XPGetWidgetProperty(buttons.monitors[i],
+		    xpProperty_ButtonState, NULL) ? "true" : "false");
 	GEN_BOOL_CONF(disable_ext_view);
 	GEN_BOOL_CONF(override_electrical);
 	GEN_BOOL_CONF(override_replay);
@@ -377,7 +404,7 @@ create_widget_rel(int x, int y, bool_t y_from_bottom, int width, int height,
 }
 
 static void
-tooltip_new(tooltip_set_t *tts, int x, int y, int w, int h, const char *lines[])
+tooltip_new(tooltip_set_t *tts, int x, int y, int w, int h, const char **lines)
 {
 	ASSERT(lines[0] != NULL);
 
@@ -676,9 +703,9 @@ layout_text_field(XPWidgetID window, tooltip_set_t *tts, int x, int y,
 		(void) create_widget_rel(x + TEXT_FIELD_WIDTH * 0.95, y,
 		    B_FALSE, TEXT_FIELD_WIDTH * 0.05, TEXT_FIELD_HEIGHT - 5, 1,
 		    units, 0, window, xpWidgetClass_Caption);
-	widget = create_widget_rel(x + TEXT_FIELD_WIDTH * cap_width, y, B_FALSE,
-	    TEXT_FIELD_WIDTH * (0.95 - cap_width), TEXT_FIELD_HEIGHT - 5, 1,
-	    "", 0, window, xpWidgetClass_TextField);
+	widget = create_widget_rel(x + TEXT_FIELD_WIDTH * cap_width, y + 2,
+	    B_FALSE, TEXT_FIELD_WIDTH * (0.95 - cap_width),
+	    TEXT_FIELD_HEIGHT - 5, 1, "", 0, window, xpWidgetClass_TextField);
 	XPSetWidgetProperty(widget, xpProperty_TextFieldType, xpTextEntryField);
 	XPSetWidgetProperty(widget, xpProperty_Enabled, 1);
 	if (max_chars != 0)
@@ -706,7 +733,7 @@ layout_scroll_control(XPWidgetID window, tooltip_set_t *tts,
 	(void) create_widget_rel(x, y, B_FALSE, TEXT_FIELD_WIDTH * 0.6,
 	    TEXT_FIELD_HEIGHT - 5, 1, label, 0, window, xpWidgetClass_Caption);
 
-	widget = create_widget_rel(x + TEXT_FIELD_WIDTH * 0.6, y, B_FALSE,
+	widget = create_widget_rel(x + TEXT_FIELD_WIDTH * 0.6, y + 3, B_FALSE,
 	    TEXT_FIELD_WIDTH * 0.35, TEXT_FIELD_HEIGHT - 5, 1, "", 0,
 	    window, xpWidgetClass_ScrollBar);
 	XPSetWidgetProperty(widget, xpProperty_ScrollBarType,
@@ -751,9 +778,32 @@ create_main_window(void)
 
 	tts = tooltip_set_new(main_win);
 
+	(void) create_widget_rel(LAYOUT_START_X + WINDOW_MARGIN,
+	    LAYOUT_START_Y - 15, B_FALSE, COLUMN_X, 12, 1, "Global settings",
+	    0, main_win, xpWidgetClass_Caption);
+	(void) create_widget_rel(LAYOUT_START_X, LAYOUT_START_Y, B_FALSE,
+	    COLUMN_X, COLUMN_Y, 1, "", 0, main_win, xpWidgetClass_SubWindow);
+
+	(void) create_widget_rel(LAYOUT_START_X + WINDOW_MARGIN +
+	    COLUMN_X + WINDOW_MARGIN,
+	    LAYOUT_START_Y - 15, B_FALSE, COLUMN_X, 12, 1, "Monitor settings",
+	    0, main_win, xpWidgetClass_Caption);
+	(void) create_widget_rel(LAYOUT_START_X + COLUMN_X + WINDOW_MARGIN,
+	    LAYOUT_START_Y, B_FALSE, COLUMN_X, COLUMN_Y, 1, "",
+	    0, main_win, xpWidgetClass_SubWindow);
+
+	(void) create_widget_rel(LAYOUT_START_X + WINDOW_MARGIN +
+	    2 * (COLUMN_X + WINDOW_MARGIN),
+	    LAYOUT_START_Y - 15, B_FALSE, COLUMN_X, 12, 1,
+	    "Customize parameters", 0, main_win, xpWidgetClass_Caption);
+	(void) create_widget_rel(LAYOUT_START_X +
+	    2 * (COLUMN_X + WINDOW_MARGIN),
+	    LAYOUT_START_Y, B_FALSE, COLUMN_X, COLUMN_Y, 1, "",
+	    0, main_win, xpWidgetClass_SubWindow);
+
 #define	LAYOUT_BUTTON(var, text, type, behavior, tooltip) \
 	do { \
-		buttons.var = create_widget_rel(x, y, B_FALSE, 20, \
+		buttons.var = create_widget_rel(x, y + 2, B_FALSE, 20, \
 		    BUTTON_HEIGHT - 5, 1, "", 0, main_win, \
 		    xpWidgetClass_Button); \
 		XPSetWidgetProperty(buttons.var, xpProperty_ButtonType, \
@@ -768,7 +818,7 @@ create_main_window(void)
 	} while (0)
 
 	x = LAYOUT_START_X;
-	y = LAYOUT_START_Y;
+	y = LAYOUT_START_Y + WINDOW_MARGIN / 2;
 	LAYOUT_BUTTON(enabled, "Enabled",
 	    PushButton, CheckBox, enabled_tooltip);
 	LAYOUT_BUTTON(use_imperial, "Call out distances in feet",
@@ -779,16 +829,6 @@ create_main_window(void)
 	    PushButton, CheckBox, voice_female_tooltip);
 	LAYOUT_BUTTON(speak_units, "Speak units",
 	    PushButton, CheckBox, speak_units_tooltip);
-	LAYOUT_BUTTON(too_high_enabled, "TOO HIGH approach monitor",
-	    PushButton, CheckBox, too_high_enabled_tooltip);
-	LAYOUT_BUTTON(too_fast_enabled, "TOO FAST approach monitor",
-	    PushButton, CheckBox, too_fast_enabled_tooltip);
-	LAYOUT_BUTTON(alt_setting_enabled, "Altimeter setting monitor",
-	    PushButton, CheckBox, alt_setting_enabled_tooltip);
-	LAYOUT_BUTTON(qnh_alt_enabled, "QNH altimeter setting mode",
-	    PushButton, CheckBox, qnh_alt_mode_tooltip);
-	LAYOUT_BUTTON(qfe_alt_enabled, "QFE altimeter setting mode",
-	    PushButton, CheckBox, qfe_alt_mode_tooltip);
 	LAYOUT_BUTTON(allow_helos, "Start up in helicopters",
 	    PushButton, CheckBox, allow_helos_tooltip);
 	LAYOUT_BUTTON(startup_notify, "Show startup notification",
@@ -799,8 +839,8 @@ create_main_window(void)
 	    PushButton, CheckBox, nd_alerts_enabled_tooltip);
 	LAYOUT_BUTTON(nd_alert_overlay_enabled, "Visual alert overlay",
 	    PushButton, CheckBox, nd_alert_overlay_enabled_tooltip);
-	LAYOUT_BUTTON(nd_alert_overlay_force, "Always show visual alerts "
-	    "using overlay",
+	LAYOUT_BUTTON(nd_alert_overlay_force,
+	    "Always show visual alerts using overlay",
 	    PushButton, CheckBox, nd_alert_overlay_force_tooltip);
 	LAYOUT_BUTTON(override_electrical, "Override electrical check",
 	    PushButton, CheckBox, override_electrical_tooltip);
@@ -814,10 +854,17 @@ create_main_window(void)
 	LAYOUT_BUTTON(openal_shared, "Shared audio driver context",
 	    PushButton, CheckBox, openal_shared_tooltip);
 
+	x = LAYOUT_START_X + COLUMN_X + WINDOW_MARGIN;
+	y = LAYOUT_START_Y + WINDOW_MARGIN / 2;
+
+	for (int i = 0; i < NUM_MONITORS; i++)
+		LAYOUT_BUTTON(monitors[i], monitor_names[i], PushButton,
+		    CheckBox, monitor_tooltips[i]);
+
 #undef	LAYOUT_BUTTON
 
-	x = LAYOUT_START_X + COLUMN_X;
-	y = LAYOUT_START_Y;
+	x = LAYOUT_START_X + 2 * (COLUMN_X + WINDOW_MARGIN);
+	y = LAYOUT_START_Y + WINDOW_MARGIN / 2;
 	scrollbars.voice_volume = layout_scroll_control(main_win, tts,
 	    &main_win_scrollbar_cbs, x, y, "Audio volume", 0, 100, 10,
 	    B_FALSE, 1.0, "%", NULL, voice_volume_tooltip);
@@ -849,15 +896,15 @@ create_main_window(void)
 	    B_FALSE);
 	y += TEXT_FIELD_HEIGHT;
 	text_fields.on_rwy_warn_initial = layout_text_field(main_win, tts, x, y,
-	    "ON RUNWAY annuncation (initial)", 3, "sec",
+	    "Runway extended holding (initial)", 3, "sec",
 	    on_rwy_warn_initial_tooltip, B_FALSE);
 	y += TEXT_FIELD_HEIGHT;
 	text_fields.on_rwy_warn_repeat = layout_text_field(main_win, tts, x, y,
-	    "ON RUNWAY annuncation (repeat)", 3, "sec",
+	    "Runway extended holding (repeat)", 3, "sec",
 	    on_rwy_warn_repeat_tooltip, B_FALSE);
 	y += TEXT_FIELD_HEIGHT;
 	text_fields.on_rwy_warn_max_n = layout_text_field(main_win, tts, x, y,
-	    "ON RUNWAY annuncation maximum", 2, NULL,
+	    "Runway extended holding maximum", 2, NULL,
 	    on_rwy_warn_max_n_tooltip, B_FALSE);
 	y += TEXT_FIELD_HEIGHT;
 	scrollbars.gpa_limit_mult = layout_scroll_control(main_win, tts,
@@ -956,11 +1003,9 @@ update_main_window(void)
 	UPDATE_BUTTON_STATE(startup_notify);
 	UPDATE_BUTTON_STATE(use_imperial);
 	UPDATE_BUTTON_STATE(us_runway_numbers);
-	UPDATE_BUTTON_STATE(too_high_enabled);
-	UPDATE_BUTTON_STATE(too_fast_enabled);
-	UPDATE_BUTTON_STATE(alt_setting_enabled);
-	UPDATE_BUTTON_STATE(qnh_alt_enabled);
-	UPDATE_BUTTON_STATE(qfe_alt_enabled);
+	for (int i = 0; i < NUM_MONITORS; i++)
+		XPSetWidgetProperty(buttons.monitors[i],
+		    xpProperty_ButtonState, xraas_state->monitors[i]);
 	UPDATE_BUTTON_STATE(disable_ext_view);
 	UPDATE_BUTTON_STATE(override_electrical);
 	UPDATE_BUTTON_STATE(override_replay);

@@ -134,6 +134,7 @@ play_msg(msg_type_t *msg, size_t msg_len, msg_prio_t prio)
 		dbg_log(snd, 1, "TTS: \"%s\"", buf);
 		XPLMSpeakString(buf);
 		free(buf);
+		free(msg);
 		return;
 	}
 
