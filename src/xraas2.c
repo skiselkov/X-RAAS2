@@ -1428,7 +1428,7 @@ apch_spd_limit(double height_abv_thr)
 
 static void
 ann_apch_cfg(msg_type_t **msg, size_t *msg_len, bool_t add_pause,
-    msg_type_t msg_type, nd_alert_level_t nd_alert)
+    msg_type_t msg_type, nd_alert_msg_type_t nd_alert)
 {
 	append_msglist(msg, msg_len, msg_type);
 	if (add_pause)
