@@ -809,7 +809,7 @@ ground_runway_approach(void)
 static void
 perform_on_rwy_ann(const char *rwy_id, vect2_t pos_v, vect2_t thr_v,
     vect2_t opp_thr_v, bool_t length_check, bool_t flap_check,
-    bool_t non_routine, int repeats)
+    bool_t non_routine, int repeats, int monitor)
 {
 	msg_type_t *msg = NULL;
 	size_t msg_len = 0;
@@ -817,6 +817,7 @@ perform_on_rwy_ann(const char *rwy_id, vect2_t pos_v, vect2_t thr_v,
 	int dist_ND = -1;
 	double flaprqst = XPLMGetDataf(drs.flaprqst);
 	bool_t allow_on_rwy_ND_alert = B_TRUE;
+	bool_t monitor_override = B_FALSE;
 	nd_alert_level_t level = (non_routine ? ND_ALERT_NONROUTINE :
 	    ND_ALERT_ROUTINE);
 
@@ -842,6 +843,7 @@ perform_on_rwy_ann(const char *rwy_id, vect2_t pos_v, vect2_t thr_v,
 		dist_ND = dist;
 		level = ND_ALERT_NONROUTINE;
 		append_msglist(&msg, &msg_len, RMNG_MSG);
+		monitor_override = B_TRUE;
 	}
 
 	if ((flaprqst < state.min_takeoff_flap ||
@@ -851,6 +853,12 @@ perform_on_rwy_ann(const char *rwy_id, vect2_t pos_v, vect2_t thr_v,
 		append_msglist(&msg, &msg_len, FLAPS_MSG);
 		allow_on_rwy_ND_alert = B_FALSE;
 		ND_alert(ND_ALERT_FLAPS, ND_ALERT_CAUTION, NULL, -1);
+		monitor_override = B_TRUE;
+	}
+
+	if (!state.monitors[monitor] && !monitor_override) {
+		free(msg);
+		return;
 	}
 
 	play_msg(msg, msg_len, MSG_PRIO_HIGH);
@@ -883,24 +891,23 @@ on_rwy_check(const char *arpt_id, const char *rwy_id, double hdg,
 	    state.on_rwy_warnings == 0) ||
 	    (now - state.on_rwy_timer - SEC2USEC(state.on_rwy_warn_initial) >
 	    state.on_rwy_warnings * SEC2USEC(state.on_rwy_warn_repeat))) &&
-	    state.on_rwy_warnings < state.on_rwy_warn_max_n &&
-	    state.monitors[ON_RWY_HOLDING_MON]) {
+	    state.on_rwy_warnings < state.on_rwy_warn_max_n) {
 		state.on_rwy_warnings++;
 		perform_on_rwy_ann(rwy_id, NULL_VECT2, NULL_VECT2, NULL_VECT2,
-		    B_FALSE, B_FALSE, B_TRUE, 2);
+		    B_FALSE, B_FALSE, B_TRUE, 2, ON_RWY_HOLDING_MON);
 	}
 
 	if (rhdg > HDG_ALIGN_THRESH)
 		return;
 
 	if (rwy_key_tbl_get(&state.on_rwy_ann, arpt_id, rwy_id) == B_FALSE) {
-		if (XPLMGetDataf(drs.gs) < SPEED_THRESH &&
-		    state.monitors[ON_RWY_LINEUP_MON]) {
+		if (XPLMGetDataf(drs.gs) < SPEED_THRESH) {
 			perform_on_rwy_ann(rwy_id, pos_v, thr_v, opp_thr_v,
 			    state.monitors[ON_RWY_LINEUP_SHORT_MON] &&
 			    *state.rejected_takeoff == 0,
 			    state.monitors[ON_RWY_FLAP_MON] &&
-			    *state.rejected_takeoff == 0, B_FALSE, 1);
+			    *state.rejected_takeoff == 0, B_FALSE, 1,
+			    ON_RWY_LINEUP_MON);
 		}
 		rwy_key_tbl_set(&state.on_rwy_ann, arpt_id, rwy_id, B_TRUE);
 	}
