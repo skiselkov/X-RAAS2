@@ -31,6 +31,7 @@
 #include <XPLMGraphics.h>
 #include <XPLMProcessing.h>
 #include <XPLMMenus.h>
+#include <XPLMUtilities.h>
 #include <XPWidgets.h>
 #include <XPStandardWidgets.h>
 
@@ -56,9 +57,9 @@
 #define	NEWLINE "\n"
 #endif	/* !IBM */
 
-#define	COPYRIGHT1	"Copyright 2016 Saso Kiselkov, All rights reserved. " \
-			"X-RAAS is open-source software."
-#define	COPYRIGHT2	"See COPYING for more information."
+#define	COPYRIGHT1	"Copyright 2016 Saso Kiselkov. All rights reserved."
+#define	COPYRIGHT2	"X-RAAS is open-source software. See COPYING for " \
+			"more information."
 #define	TOOLTIP_HINT	"Hint: hover your mouse cursor over any knob to " \
 			"show a short description of what it does."
 
@@ -176,6 +177,12 @@ typedef struct {
 	void		(*formatter)(int value, char buf[32]);
 	list_node_t	node;
 } scrollbar_cb_t;
+
+static XPLMCommandRef
+    toggle_cfg_gui_cmd = NULL,
+    toggle_dbg_gui_cmd = NULL,
+    recreate_cache_cmd = NULL,
+    raas_reset_cmd = NULL;
 
 static list_t tooltip_sets;
 static tooltip_t *cur_tt = NULL;
@@ -1097,12 +1104,64 @@ update_main_window(void)
 #undef	UPDATE_SCROLLBAR
 }
 
+static int
+command_cb(XPLMCommandRef cmd, XPLMCommandPhase phase, void *refcon)
+{
+	UNUSED(cmd);
+	if (phase == xplm_CommandBegin) {
+		if (cmd == toggle_cfg_gui_cmd) {
+			if (!XPIsWidgetVisible(main_win))
+				XPShowWidget(main_win);
+			else
+				XPHideWidget(main_win);
+		} else
+			menu_cb(NULL, refcon);
+	}
+	return (1);
+}
+
+static void
+register_commands(void)
+{
+	toggle_cfg_gui_cmd = XPLMCreateCommand("xraas/toggle_config_gui",
+	    "Shows/hides the X-RAAS configuration window");
+	XPLMRegisterCommandHandler(toggle_cfg_gui_cmd, command_cb, 0,
+	    (void *)CONFIG_GUI_CMD);
+	toggle_dbg_gui_cmd = XPLMCreateCommand("xraas/toggle_debug_gui",
+	    "Toggles the X-RAAS debug overlay");
+	XPLMRegisterCommandHandler(toggle_dbg_gui_cmd, command_cb, 0,
+	    (void *)DBG_GUI_TOGGLE_CMD);
+	recreate_cache_cmd = XPLMCreateCommand("xraas/recreate_data_cache",
+	    "Tells X-RAAS to recreate its data cache from the current AIRAC "
+	    "database");
+	XPLMRegisterCommandHandler(recreate_cache_cmd, command_cb, 0,
+	    (void *)RECREATE_CACHE_CMD);
+	raas_reset_cmd = XPLMCreateCommand("xraas/reset",
+	    "Resets X-RAAS as if it had been power-cycled");
+	XPLMRegisterCommandHandler(raas_reset_cmd, command_cb, 0,
+	    (void *)RAAS_RESET_CMD);
+}
+
+static void
+unregister_commands(void)
+{
+	XPLMUnregisterCommandHandler(toggle_cfg_gui_cmd, command_cb, 0,
+	    (void *)CONFIG_GUI_CMD);
+	XPLMUnregisterCommandHandler(toggle_dbg_gui_cmd, command_cb, 0,
+	    (void *)DBG_GUI_TOGGLE_CMD);
+	XPLMUnregisterCommandHandler(recreate_cache_cmd, command_cb, 0,
+	    (void *)RECREATE_CACHE_CMD);
+	XPLMUnregisterCommandHandler(raas_reset_cmd, command_cb, 0,
+	    (void *)RAAS_RESET_CMD);
+}
+
 void
 gui_init(void)
 {
 	tooltip_init();
 	create_menu();
 	create_main_window();
+	register_commands();
 }
 
 void
@@ -1111,6 +1170,7 @@ gui_fini(void)
 	destroy_menu();
 	destroy_main_window();
 	tooltip_fini();
+	unregister_commands();
 }
 
 void

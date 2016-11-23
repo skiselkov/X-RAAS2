@@ -98,6 +98,9 @@ reset_config(xraas_state_t *state)
 	for (int i = 0; i < NUM_MONITORS; i++)
 		state->monitors[i] = B_TRUE;
 
+	/* The QFE monitor is the exception - off by default */
+	state->monitors[ALTM_QFE_MON] = B_FALSE;
+
 	openal_set_shared_ctx(B_FALSE);
 
 	memset(&xraas_debug_config, 0, sizeof (xraas_debug_config));
