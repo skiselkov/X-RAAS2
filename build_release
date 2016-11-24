@@ -47,6 +47,7 @@ FILES=(
     data/msgs/female/avail.wav
     data/msgs/female/caution.wav
     data/msgs/female/center.wav
+    data/msgs/female/deep_land.wav
     data/msgs/female/feet.wav
     data/msgs/female/flaps.wav
     data/msgs/female/hundred.wav
@@ -81,6 +82,7 @@ FILES=(
     data/msgs/male/avail.wav
     data/msgs/male/caution.wav
     data/msgs/male/center.wav
+    data/msgs/male/deep_land.wav
     data/msgs/male/feet.wav
     data/msgs/male/flaps.wav
     data/msgs/male/hundred.wav
