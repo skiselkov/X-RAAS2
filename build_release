@@ -15,7 +15,36 @@
 
 # Copyright 2016 Saso Kiselkov. All rights reserved.
 
-FILES=(
+######################################
+#
+# MASTER X-RAAS BUILD SCRIPT
+#
+# This is the master X-RAAS build script. Run this to fire off a release
+# build on your platform. We currently support the following build platforms:
+#
+#	*) Ubuntu 16.04 LTS (or later): this builds the Linux and Windows
+#	   32 & 64-bit flavors. Refer to qmake/build-win-lin for details of
+#	   the required build packages.
+#	*) Mac OS 10.9.5 (or later): this builds the Mac OS 32 & 64-bit
+#	   flavors. Refer to qmake/build-mac for details.
+#
+# In each case, you'll want to have your basic build environment working
+# (i.e. build packages installed on Linux, Xcode on Mac).
+#
+# The build process proceeds in three steps:
+#
+#	1) Build all included dependencies for all target platforms. ATM this
+#	   is just FreeType. We build a static, stand-alone, symbol-hidden
+#	   version of the library. We don't want to export any of its symbols
+#	   outside the plugin.
+#	2) Build the plugin itself for all target platforms using qmake.
+#	3) Assemble the final 'X-RAAS2' plugin package. The output package
+#	   will be located in this top-level directory in a form that is
+#	   ready for zipping for distribution and installation into X-Plane.
+#
+######################################
+
+DIST_FILES=(
     COPYING
     README.md
     api/COPYING
@@ -112,8 +141,8 @@ function install_file() {
 }
 
 function install_xtra_files() {
-	for (( I=0; $I < ${#FILES[@]}; I=$I + 1 )); do
-		install_file "${FILES[$I]}" "X-RAAS2"
+	for (( I=0; $I < ${#DIST_FILES[@]}; I=$I + 1 )); do
+		install_file "${DIST_FILES[$I]}" "X-RAAS2"
 	done
 }
 
@@ -132,8 +161,10 @@ Linux)
 	    install_xtra_files
 	;;
 Darwin)
-	cmake . && make clean && make -j 8 && mkdir -p X-RAAS2/64 && \
-	    cp bin/xraas2/mac.xpl X-RAAS2/64 && install_xtra_files
+	( cd qmake && ./build-mac ) && mkdir -p X-RAAS2/64 && \
+	    cp qmake/output/mac.xpl X-RAAS2 && \
+	    cp qmake/output/64/mac.xpl X-RAAS2/64 && \
+	    install_xtra_files
 	;;
 *)
 	echo "Unsupported platform" >&2

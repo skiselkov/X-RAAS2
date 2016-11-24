@@ -53,7 +53,7 @@ include_directories(plugin PUBLIC "../SDK/CHeaders/XPLM/"
 
 if (APPLE)
 	include_directories(plugin PUBLIC
-	    "../FreeType/freetype-mac/include/freetype2")
+	    "../FreeType/freetype-mac-64/include/freetype2")
 else()
 	include_directories(plugin PUBLIC
 	    "../FreeType/freetype-linux-64/include/freetype2")
@@ -94,7 +94,7 @@ if(APPLE)
 	set(PLUGIN_OUTPUT_FILENAME "mac.xpl")
 	SET_TARGET_PROPERTIES(plugin PROPERTIES LINK_FLAGS
 	    "${CMAKE_SHARED_LINKER_FLAGS} -fPIC -fvisibility=hidden -bundle \
-	    -L../FreeType/freetype-mac/lib -lfreetype")
+	    -L../FreeType/freetype-mac-64/lib -lfreetype")
 elseif(UNIX)
 	set(PLUGIN_OUTPUT_FILENAME "lin.xpl")
 	SET_TARGET_PROPERTIES(plugin PROPERTIES LINK_FLAGS

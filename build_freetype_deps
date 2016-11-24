@@ -59,8 +59,9 @@ case `uname` in
 		build_freetype "win-32" "--host=i686-w64-mingw32"
 		;;
 	Darwin)
-		NCPUS=4
-		build_freetype "mac"
+		NCPUS=$(( $(sysctl -n hw.ncpu) + 1 ))
+		build_freetype "mac-64"
+		build_freetype "mac-32" "" "-m32" "-m32"
 		;;
 	*)
 		echo "Unsupported build platform" >&2

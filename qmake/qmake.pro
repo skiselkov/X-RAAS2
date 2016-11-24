@@ -41,7 +41,9 @@ DEFINES += _GNU_SOURCE DEBUG _FILE_OFFSET_BITS=64 _USE_MATH_DEFINES
 DEFINES += XPLM200 XPLM210
 
 # Just a generally good idea not to depend on shipped libgcc.
-LIBS += -static-libgcc
+!macx {
+	QMAKE_LFLAGS += -static-libgcc
+}
 
 win32 {
 	CONFIG += dll
@@ -74,15 +76,15 @@ unix:!macx {
 	QMAKE_LFLAGS += -nodefaultlibs
 }
 
-unix:!macx:contains(QMAKE_CFLAGS, -m64) {
-	LIBS += -L../FreeType/freetype-linux-64/lib -lfreetype
+linux-g++-64 {
+	QMAKE_LFLAGS += -L../FreeType/freetype-linux-64/lib -lfreetype
 }
 
-unix:!macx:contains(QMAKE_CFLAGS, -m32) {
+linux-g++-32 {
 	# The stack protector forces us to depend on libc,
 	# but we'd prefer to be static.
 	QMAKE_CFLAGS += -fno-stack-protector
-	LIBS += -L../FreeType/freetype-linux-32/lib -lfreetype
+	QMAKE_LFLAGS += -L../FreeType/freetype-linux-32/lib -lfreetype
 }
 
 macx {
@@ -92,9 +94,17 @@ macx {
 	QMAKE_LFLAGS += -F../SDK/Libraries/Mac
 	QMAKE_LFLAGS += -framework XPLM -framework XPWidgets
 	QMAKE_LFLAGS += -framework OpenGL -framework OpenAL
-
-	LIBS += -L../FreeType/freetype-mac/lib -lfreetype
 }
+
+macx-clang {
+	QMAKE_LFLAGS += -L../FreeType/freetype-mac-64/lib -lfreetype
+}
+
+macx-clang-32 {
+	QMAKE_LFLAGS += -L../FreeType/freetype-mac-32/lib -lfreetype
+}
+
+message($$QMAKE_LFLAGS)
 
 HEADERS += ../src/*.h ../api/c/XRAAS_ND_msg_decode.h
 SOURCES += ../src/*.c ../api/c/XRAAS_ND_msg_decode.c
