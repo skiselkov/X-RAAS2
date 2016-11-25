@@ -111,12 +111,15 @@ typedef struct {
 	char		*fname;
 } apt_dats_entry_t;
 
-static airport_t *apt_dat_lookup(avl_tree_t *apt_dat, const char *icao);
+static airport_t *apt_dat_lookup(airportdb_t *db, const char *icao);
 static void apt_dat_insert(avl_tree_t *apt_dat, airport_t *arpt);
 static void free_airport(airport_t *arpt);
 
 /*
- * Given an arbitrary geographical position,
+ * Given an arbitrary geographical position, returns the geo_table tile
+ * coordinate which the input position corresponds to. If div_by_10 is
+ * true, the coordinate is not in whole 1-degree resolution, but in 10-degree
+ * resolution. This is used in the data cache to select the subdirectory.
  */
 static geo_pos2_t
 geo_pos2tile_pos(geo_pos2_t pos, bool_t div_by_10)
@@ -128,6 +131,9 @@ geo_pos2tile_pos(geo_pos2_t pos, bool_t div_by_10)
 		return (GEO_POS2(floor(pos.lat), floor(pos.lon)));
 }
 
+/*
+ * AVL tree comparator for airports based on their ICAO code.
+ */
 static int
 airport_compar(const void *a, const void *b)
 {
@@ -141,6 +147,9 @@ airport_compar(const void *a, const void *b)
 		return (1);
 }
 
+/*
+ * AVL tree comparator for tile_t's based on latitude and longitude.
+ */
 static int
 tile_compar(const void *a, const void *b)
 {
@@ -160,6 +169,9 @@ tile_compar(const void *a, const void *b)
 	}
 }
 
+/*
+ * AVL tree comparator for runway_t's based on the joint runway ID.
+ */
 static int
 runway_compar(const void *a, const void *b)
 {
@@ -269,12 +281,15 @@ rwy_is_hard(int t)
 	return (t == 1 || t == 2 || t == 15);
 }
 
+/*
+ * Performs a lookup for an airport based on ICAO code in an airportdb_t.
+ */
 static airport_t *
-apt_dat_lookup(avl_tree_t *apt_dat, const char *icao)
+apt_dat_lookup(airportdb_t *db, const char *icao)
 {
 	airport_t srch;
 	my_strlcpy(srch.icao, icao, sizeof (srch.icao));
-	return (avl_find(apt_dat, &srch, NULL));
+	return (avl_find(&db->apt_dat, &srch, NULL));
 }
 
 static void
@@ -462,7 +477,7 @@ parse_apt_dat_1_line(airportdb_t *db, const char *filename,
 
 	new_icao = comps[4];
 	pos.elev = atof(comps[1]);
-	arpt = apt_dat_lookup(&db->apt_dat, new_icao);
+	arpt = apt_dat_lookup(db, new_icao);
 	if (ncomps >= 9 && strstr(comps[5], "TA:") == comps[5] &&
 	    strstr(comps[6], "TL:") == comps[6] &&
 	    strstr(comps[7], "LAT:") == comps[7] &&
@@ -764,7 +779,7 @@ parse_airports_txt_A_line(airportdb_t *db, const char *filename,
 		goto out;
 	}
 	icao = comps[1];
-	arpt = apt_dat_lookup(&db->apt_dat, icao);
+	arpt = apt_dat_lookup(db, icao);
 	if (arpt == NULL)
 		goto out;
 
@@ -1593,7 +1608,7 @@ airport_t *
 airport_lookup(airportdb_t *db, const char *icao, geo_pos2_t pos)
 {
 	load_airports_in_tile(db, pos);
-	return (apt_dat_lookup(&db->apt_dat, icao));
+	return (apt_dat_lookup(db, icao));
 }
 
 airport_t *
