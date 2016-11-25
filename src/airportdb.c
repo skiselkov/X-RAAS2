@@ -451,14 +451,13 @@ parse_apt_dat_1_line(airportdb_t *db, const char *filename,
 	geo_pos3_t pos = NULL_GEO_POS3;
 	char **comps;
 	size_t ncomps;
-	airport_t *arpt;
+	airport_t *arpt = NULL;
 
 	comps = strsplit(line, " ", B_TRUE, &ncomps);
 	if (ncomps < 5) {
 		dbg_log(tile, 0, "%s:%d: malformed airport entry, skipping. "
 		    "Offending line:\n%s", filename, line_num, line);
-		free_strlist(comps, ncomps);
-		return (NULL);
+		goto out;
 	}
 
 	new_icao = comps[4];
@@ -497,9 +496,8 @@ parse_apt_dat_1_line(airportdb_t *db, const char *filename,
 		 */
 		arpt = NULL;
 	}
-
+out:
 	free_strlist(comps, ncomps);
-
 	return (arpt);
 }
 
@@ -516,15 +514,13 @@ parse_apt_dat_100_line(airport_t *arpt, const char *filename,
 	if (ncomps < 8 + 9 + 5) {
 		dbg_log(tile, 0, "%s:%d: malformed runway entry, skipping. "
 		    "Offending line:\n%s", filename, line_num, line);
-		free_strlist(comps, ncomps);
-		return;
+		goto out;
 	}
 
 	if (!rwy_is_hard(atoi(comps[2]))) {
 		dbg_log(tile, 2, "%s:%d: skipping non-hard-surface runway",
 		    filename, line_num);
-		free_strlist(comps, ncomps);
-		return;
+		goto out;
 	}
 
 	rwy = calloc(1, sizeof (*rwy));
@@ -553,8 +549,7 @@ parse_apt_dat_100_line(airport_t *arpt, const char *filename,
 		    "north/south", arpt->icao, rwy->ends[0].thr.lat,
 		    rwy->ends[1].thr.lat);
 		free(rwy);
-		free_strlist(comps, ncomps);
-		return;
+		goto out;
 	}
 
 	if (ncomps >= 28 && strstr(comps[22], "GPA1:") == comps[22] &&
@@ -576,13 +571,12 @@ parse_apt_dat_100_line(airport_t *arpt, const char *filename,
 		    "duplicate runway entry %s/%s at airport %s",
 		    filename, rwy->ends[0].id, rwy->ends[1].id, arpt->icao);
 		free(rwy);
-		free_strlist(comps, ncomps);
-		return;
+		goto out;
 	}
 	avl_insert(&arpt->rwys, rwy, where);
 	if (IS_NULL_GEO_POS(arpt->refpt))
 		airport_auto_refpt(arpt);
-
+out:
 	free_strlist(comps, ncomps);
 }
 
@@ -754,6 +748,88 @@ rwy_fuzzy_match(const runway_t *rwy, int endpt, const char *orwy_id,
 	}
 }
 
+static airport_t *
+parse_airports_txt_A_line(airportdb_t *db, const char *filename,
+    int line_num, const char *line)
+{
+	char *icao;
+	airport_t *arpt = NULL;
+	char **comps;
+	size_t ncomps;
+
+	comps = strsplit(line, ",", B_FALSE, &ncomps);
+	if (ncomps < 8) {
+		dbg_log(tile, 0, "%s:%d: malformed airport entry, skipping. "
+		    "Offending line:\n%s", filename, line_num, line);
+		goto out;
+	}
+	icao = comps[1];
+	arpt = apt_dat_lookup(&db->apt_dat, icao);
+	if (arpt == NULL)
+		goto out;
+
+	if (arpt->geo_linked)
+		geo_unlink_airport(db, arpt);
+	arpt->refpt = GEO_POS3(atof(comps[3]), atof(comps[4]),
+	    arpt->refpt.elev);
+	if (fabs(arpt->refpt.lat) >= ARPT_LAT_LIMIT) {
+		dbg_log(tile, 1, "Removing airport %s: lat %f too "
+		    "far north/south", arpt->icao, arpt->refpt.lat);
+		avl_remove(&db->apt_dat, arpt);
+		free_airport(arpt);
+		arpt = NULL;
+		goto out;
+	}
+	geo_link_airport(db, arpt);
+	arpt->TA = atof(comps[6]);
+	arpt->TL = atof(comps[7]);
+	arpt->in_arpts_txt = B_TRUE;
+out:
+	free_strlist(comps, ncomps);
+	return (arpt);
+}
+
+static void
+parse_airports_txt_R_line(airport_t *arpt, const char *filename,
+    int line_num, const char *line)
+{
+	char **comps;
+	size_t ncomps;
+	char *rwy_id;
+	double telev, gpa, tch;
+	geo_pos2_t new_thr_pos;
+
+	comps = strsplit(line, ",", B_FALSE, &ncomps);
+	if (ncomps < 13) {
+		dbg_log(tile, 0, "%s:%d: malformed runway entry, skipping. "
+		    "Offending line:\n%s", filename, line_num, line);
+		goto out;
+	}
+
+	rwy_id = comps[1];
+	new_thr_pos = GEO_POS2(atof(comps[8]), atof(comps[9]));
+	telev = atof(comps[10]);
+	gpa = atof(comps[11]);
+	tch = atof(comps[12]);
+
+	for (runway_t *rwy = avl_first(&arpt->rwys); rwy != NULL;
+	    rwy = AVL_NEXT(&arpt->rwys, rwy)) {
+		if (rwy_fuzzy_match(rwy, 0, rwy_id, new_thr_pos)) {
+			rwy->ends[0].thr.elev = telev;
+			rwy->ends[0].gpa = gpa;
+			rwy->ends[0].tch = tch;
+			break;
+		} else if (rwy_fuzzy_match(rwy, 1, rwy_id, new_thr_pos)) {
+			rwy->ends[1].thr.elev = telev;
+			rwy->ends[1].gpa = gpa;
+			rwy->ends[1].tch = tch;
+			break;
+		}
+	}
+out:
+	free_strlist(comps, ncomps);
+}
+
 /*
  * Reloads ~/GNS430/navdata/Airports.txt and populates our apt_dat airports
  * with the latest info in it, notably:
@@ -768,8 +844,6 @@ load_airports_txt(airportdb_t *db)
 	char *line = NULL;
 	size_t linecap = 0;
 	int line_num = 0;
-	char **comps;
-	size_t ncomps;
 	airport_t *arpt = NULL;
 
 	/* We first try the Custom Data version, as that's more up to date */
@@ -800,82 +874,10 @@ load_airports_txt(airportdb_t *db)
 			continue;
 		strip_space(line);
 		if (strstr(line, "A,") == line) {
-			char *icao;
-
-			comps = strsplit(line, ",", B_FALSE, &ncomps);
-			if (ncomps < 8) {
-				dbg_log(tile, 0, "%s:%d: malformed airport "
-				    "entry, skipping. Offending line:\n%s",
-				    fname, line_num, line);
-				free_strlist(comps, ncomps);
-				continue;
-			}
-			icao = comps[1];
-			arpt = apt_dat_lookup(&db->apt_dat, icao);
-
-			if (arpt != NULL) {
-				if (arpt->geo_linked)
-					geo_unlink_airport(db, arpt);
-				arpt->refpt = GEO_POS3(atof(comps[3]),
-				    atof(comps[4]), arpt->refpt.elev);
-				if (fabs(arpt->refpt.lat) >= ARPT_LAT_LIMIT) {
-					dbg_log(tile, 1, "Removing airport "
-					    "%s: lat %f too far north/south",
-					    arpt->icao, arpt->refpt.lat);
-					avl_remove(&db->apt_dat, arpt);
-					free_airport(arpt);
-					free_strlist(comps, ncomps);
-					arpt = NULL;
-					continue;
-				}
-				geo_link_airport(db, arpt);
-				arpt->TA = atof(comps[6]);
-				arpt->TL = atof(comps[7]);
-				arpt->in_arpts_txt = B_TRUE;
-			}
-			free_strlist(comps, ncomps);
-		} else if (strstr(line, "R,") == line) {
-			char *rwy_id;
-			double telev, gpa, tch;
-			geo_pos2_t new_thr_pos;
-
-			if (arpt == NULL) {
-				/* airport not in scenery database, skip it */
-				continue;
-			}
-
-			comps = strsplit(line, ",", B_FALSE, &ncomps);
-			if (ncomps < 13) {
-				dbg_log(tile, 0, "%s:%d: malformed runway "
-				    "entry, skipping. Offending line:\n%s",
-				    fname, line_num, line);
-				free_strlist(comps, ncomps);
-				continue;
-			}
-
-			rwy_id = comps[1];
-			new_thr_pos = GEO_POS2(atof(comps[8]), atof(comps[9]));
-			telev = atof(comps[10]);
-			gpa = atof(comps[11]);
-			tch = atof(comps[12]);
-
-			for (runway_t *rwy = avl_first(&arpt->rwys);
-			    rwy != NULL; rwy = AVL_NEXT(&arpt->rwys, rwy)) {
-				if (rwy_fuzzy_match(rwy, 0, rwy_id,
-				    new_thr_pos)) {
-					rwy->ends[0].thr.elev = telev;
-					rwy->ends[0].gpa = gpa;
-					rwy->ends[0].tch = tch;
-					break;
-				} else if (rwy_fuzzy_match(rwy, 1, rwy_id,
-				    new_thr_pos)) {
-					rwy->ends[1].thr.elev = telev;
-					rwy->ends[1].gpa = gpa;
-					rwy->ends[1].tch = tch;
-					break;
-				}
-			}
-			free_strlist(comps, ncomps);
+			arpt = parse_airports_txt_A_line(db, fname, line_num,
+			    line);
+		} else if (strstr(line, "R,") == line && arpt != NULL) {
+			parse_airports_txt_R_line(arpt, fname, line_num, line);
 		}
 	}
 
