@@ -270,7 +270,7 @@ load_configs(xraas_state_t *state)
 {
 	reset_state(state);
 	/* order is important here, first load the global one */
-	if (!load_config(state, xraas_plugindir))
+	if (!load_config(state, xraas_prefsdir))
 		return (B_FALSE);
 	if (!load_config(state, xraas_acf_dirpath))
 		return (B_FALSE);

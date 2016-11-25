@@ -152,13 +152,13 @@ static xraas_state_t state;
 const xraas_state_t *xraas_state = &state;
 
 static char xpdir[512] = { 0 };
-static char xpprefsdir[512] = { 0 };
+static char prefsdir[512] = { 0 };
 static char plugindir[512] = { 0 };
 static char acf_path[512] = { 0 };
 static char acf_dirpath[512] = { 0 };
 static char acf_filename[512] = { 0 };
 
-const char *xraas_xpprefsdir = xpprefsdir;
+const char *xraas_prefsdir = prefsdir;
 const char *xraas_acf_dirpath = acf_dirpath;
 const char *xraas_plugindir = plugindir;
 
@@ -2180,7 +2180,7 @@ xraas_init(void)
 
 	raas_dr_reset();
 
-	airportdb_create(&state.airportdb, xpdir, xpprefsdir);
+	airportdb_create(&state.airportdb, xpdir, prefsdir);
 	airportdb_created = B_TRUE;
 
 	if (!recreate_apt_dat_cache(&state.airportdb))
@@ -2308,7 +2308,7 @@ XPluginStart(char *outName, char *outSig, char *outDesc)
 	strcpy(outDesc, XRAAS2_PLUGIN_DESC);
 
 	XPLMGetSystemPath(xpdir);
-	XPLMGetPrefsPath(xpprefsdir);
+	XPLMGetPrefsPath(prefsdir);
 	XPLMGetPluginInfo(XPLMGetMyID(), NULL, plugindir, NULL, NULL);
 
 #if	IBM
@@ -2319,7 +2319,7 @@ XPluginStart(char *outName, char *outSig, char *outDesc)
 	 * '\'s to keep consistent with the native path separator scheme.
 	 */
 	fix_pathsep(xpdir);
-	fix_pathsep(xpprefsdir);
+	fix_pathsep(prefsdir);
 	fix_pathsep(plugindir);
 #endif	/* IBM */
 
@@ -2333,7 +2333,7 @@ XPluginStart(char *outName, char *outSig, char *outDesc)
 	}
 
 	/* cut off X-Plane.prf from prefs path */
-	if ((p = strrchr(xpprefsdir, DIRSEP)) != NULL)
+	if ((p = strrchr(prefsdir, DIRSEP)) != NULL)
 		*p = '\0';
 
 	/* cut off the trailing path component (our filename) */

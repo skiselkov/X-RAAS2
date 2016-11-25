@@ -337,7 +337,7 @@ save_config(bool_t acf_config)
 {
 	char *config;
 	char *filename = mkpathname(acf_config ? xraas_acf_dirpath :
-	    xraas_plugindir, "X-RAAS.cfg", NULL);
+	    xraas_prefsdir, "X-RAAS.cfg", NULL);
 	FILE *fp = fopen(filename, "w");
 
 	if (fp == NULL) {
@@ -371,7 +371,7 @@ static void
 reset_config(bool_t acf_config)
 {
 	char *filename = mkpathname(acf_config ? xraas_acf_dirpath :
-	    xraas_plugindir, "X-RAAS.cfg", NULL);
+	    xraas_prefsdir, "X-RAAS.cfg", NULL);
 
 	if (remove_file(filename, B_TRUE)) {
 		xraas_fini();
@@ -605,7 +605,7 @@ menu_cb(void *menu, void *item)
 		    dbg_gui_inited ? xplm_Menu_Checked : xplm_Menu_Unchecked);
 		break;
 	case RECREATE_CACHE_CMD: {
-		char *cachedir = mkpathname(xraas_xpprefsdir, "X-RAAS.cache",
+		char *cachedir = mkpathname(xraas_prefsdir, "X-RAAS.cache",
 		    NULL);
 		if (!remove_directory(cachedir)) {
 			log_init_msg(B_TRUE, INIT_ERR_MSG_TIMEOUT, NULL, NULL,
