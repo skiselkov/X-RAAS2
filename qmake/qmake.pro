@@ -104,7 +104,5 @@ macx-clang-32 {
 	QMAKE_LFLAGS += -L../FreeType/freetype-mac-32/lib -lfreetype
 }
 
-message($$QMAKE_LFLAGS)
-
 HEADERS += ../src/*.h ../api/c/XRAAS_ND_msg_decode.h
 SOURCES += ../src/*.c ../api/c/XRAAS_ND_msg_decode.c
