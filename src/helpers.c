@@ -523,6 +523,40 @@ win_perror(DWORD err, const char *fmt, ...)
 #endif	/* IBM */
 
 /*
+ * Returns true if the file exists. If `isdir' is non-NULL, if the file
+ * exists, isdir is set to indicate if the file is a directory.
+ */
+bool_t
+file_exists(const char *filename, bool_t *isdir)
+{
+#if	IBM
+	int len = strlen(filename);
+	TCHAR filenameT[len + 1];
+	DWORD attr;
+
+	MultiByteToWideChar(CP_UTF8, 0, filename, -1, filenameT, len + 1);
+	attr = GetFileAttributes(filenameT);
+	if (isdir != NULL)
+		*isdir = !!(attr & FILE_ATTRIBUTE_DIRECTORY);
+	return (attr != INVALID_FILE_ATTRIBUTES);
+#else	/* !IBM */
+	struct stat st;
+
+	if (isdir != NULL)
+		*isdir = B_FALSE;
+	if (lstat(filename, &st) < 0) {
+		if (errno != ENOENT)
+			logMsg("Error checking if file %s exists: %s",
+			    filename, strerror(errno));
+		return (B_FALSE);
+	}
+	if (isdir != NULL)
+		*isdir = S_ISDIR(st.st_mode);
+	return (B_TRUE);
+#endif	/* !IBM */
+}
+
+/*
  * Creates an empty directory at `dirname' with default permissions.
  */
 bool_t
@@ -561,20 +595,15 @@ win_rmdir(const LPTSTR dirnameT)
 	int dirname_len = wcslen(dirnameT);
 	TCHAR srchnameT[dirname_len + 4];
 
-	StringCchPrintf(srchnameT, dirname_len, TEXT("%s\\*"), dirnameT);
+	StringCchPrintf(srchnameT, dirname_len + 4, TEXT("%s\\*"), dirnameT);
 	h_find = FindFirstFile(srchnameT, &find_data);
 	if (h_find == INVALID_HANDLE_VALUE) {
 		int err = GetLastError();
-		if (err != ERROR_FILE_NOT_FOUND) {
-			char dirname[MAX_PATH];
-			WideCharToMultiByte(CP_UTF8, 0, dirnameT, -1,
-			    dirname, sizeof (dirname), NULL, NULL);
-			win_perror(GetLastError(), "Error listing directory %s",
-			    dirname);
-			return (B_FALSE);
-		} else {
-			return (B_TRUE);
-		}
+		char dirname[MAX_PATH];
+		WideCharToMultiByte(CP_UTF8, 0, dirnameT, -1, dirname,
+		    sizeof (dirname), NULL, NULL);
+		win_perror(err, "Error listing directory %s", dirname);
+		return (B_FALSE);
 	}
 	do {
 		TCHAR filepathT[MAX_PATH];
@@ -639,9 +668,6 @@ remove_directory(const char *dirname)
 	struct dirent *de;
 
 	if ((dp = opendir(dirname)) == NULL) {
-		if (errno == ENOENT)
-			/* ignore if the directory doesn't exist anyway */
-			return (B_TRUE);
 		logMsg("Error removing directory %s: %s", dirname,
 		    strerror(errno));
 		return (B_FALSE);

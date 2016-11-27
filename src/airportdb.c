@@ -150,11 +150,10 @@
 #define	RWY_APCH_PROXIMITY_LAT_ANGLE	3.3	/* degrees */
 #define	RWY_APCH_PROXIMITY_LON_DISPL	5500	/* meters */
 /* precomputed, since it doesn't change */
-#define	RWY_APCH_PROXIMITY_LAT_DISPL \
-    RWY_APCH_PROXIMITY_LON_DISPL * \
-    __builtin_tan(DEG2RAD(RWY_APCH_PROXIMITY_LAT_ANGLE))
+#define	RWY_APCH_PROXIMITY_LAT_DISPL	(RWY_APCH_PROXIMITY_LON_DISPL * \
+	__builtin_tan(DEG2RAD(RWY_APCH_PROXIMITY_LAT_ANGLE)))
 #define	XRAAS_CACHE_VERSION		3
-#define	ARPT_LOAD_LIMIT			(8 * 1852)	/* meters, 8nm */
+#define	ARPT_LOAD_LIMIT			NM2MET(8)	/* meters, 8nm */
 #define	ARPT_LAT_LIMIT			80		/* degrees */
 
 #define	VGSI_LAT_DISPL_FACT		2	/* rwy width multiplier */
@@ -1021,7 +1020,8 @@ write_apt_dat(const airportdb_t *db, const airport_t *arpt)
 		fprintf(fp, "100 %.2f 1 0 0 0 0 0 "
 		    "%s %f %f %.1f %.1f 0 0 0 0 "
 		    "%s %f %f %.1f %.1f "
-		    "GPA1:%f GPA2:%f TCH1:%f TCH2:%f TELEV1:%f TELEV2:%f\n",
+		    "GPA1:%.02f GPA2:%.02f TCH1:%.0f TCH2:%.0f "
+		    "TELEV1:%.0f TELEV2:%.0f\n",
 		    rwy->width,
 		    rwy->ends[0].id, rwy->ends[0].thr.lat,
 		    rwy->ends[0].thr.lon, rwy->ends[0].displ,
@@ -1269,7 +1269,7 @@ load_arinc42418_arpt_data(const char *filename, airport_t *arpt)
 				else
 					continue;
 				if (sscanf(comps[3], "%d", &telev) == 1)
-					re->thr.elev = FEET2MET(telev);
+					re->thr.elev = telev;
 				break;
 			}
 out_rwy:
@@ -1291,8 +1291,8 @@ load_CIFP_file(airportdb_t *db, const char *dirpath, const char *filename)
 	char icao[5];
 	bool_t res;
 
+	/* the filename must be "XXXX.dat" */
 	if (strlen(filename) != 8 || strcmp(&filename[4], ".dat"))
-		/* the filename must be "XXXX.dat" */
 		return (B_FALSE);
 	my_strlcpy(icao, filename, sizeof (icao));
 	if (!is_valid_icao_code(icao))
@@ -1317,21 +1317,23 @@ load_CIFP_file(airportdb_t *db, const char *dirpath, const char *filename)
 static bool_t
 load_CIFP_dir(airportdb_t *db, const char *dirpath)
 {
-	TCHAR dirnameT[strlen(dirpath) + 1];
+	int dirpath_len = strlen(dirpath);
+	TCHAR dirnameT[dirpath_len + 1];
+	TCHAR srchnameT[dirpath_len + 4];
 	WIN32_FIND_DATA find_data;
 	HANDLE h_find;
-	int dirname_len = strlen(dirpath);
-	TCHAR srchnameT[dirname_len + 4];
 
-	MultiByteToWideChar(CP_UTF8, 0, dirpath, -1, dirnameT,
-	    sizeof (dirnameT));
-	StringCchPrintf(srchnameT, dirname_len, TEXT("%s\\*"), dirnameT);
+	MultiByteToWideChar(CP_UTF8, 0, dirpath, -1, dirnameT, dirpath_len + 1);
+	StringCchPrintf(srchnameT, dirpath_len + 4, TEXT("%s\\*"), dirnameT);
 	h_find = FindFirstFile(srchnameT, &find_data);
 	if (h_find == INVALID_HANDLE_VALUE)
 		return (B_FALSE);
 
 	do {
-		char filename[MAX_PATH];
+		if (wcscmp(find_data.cFileName, TEXT(".")) == 0 ||
+		    wcscmp(find_data.cFileName, TEXT("..")) == 0)
+			continue;
+		char filename[wcslen(find_data.cFileName) + 1];
 		WideCharToMultiByte(CP_UTF8, 0, find_data.cFileName, -1,
 		    filename, sizeof (filename), NULL, NULL);
 		(void) load_CIFP_file(db, dirpath, filename);
@@ -1353,6 +1355,9 @@ load_CIFP_dir(airportdb_t *db, const char *dirpath)
 		return (B_FALSE);
 
 	while ((de = readdir(dp)) != NULL) {
+		if (strcmp(de->d_name, ".") == 0 ||
+		    strcmp(de->d_name, "..") == 0)
+			continue;
 		(void) load_CIFP_file(db, dirpath, de->d_name);
 	}
 
@@ -1710,9 +1715,13 @@ recreate_cache_skeleton(airportdb_t *db, list_t *apt_dat_files)
 {
 	char *filename;
 	FILE *fp;
+	bool_t exists, isdir;
 
 	filename = mkpathname(db->xpprefsdir, XRAAS_CACHE_DIR, NULL);
-	if (!remove_directory(filename) || !create_directory(filename)) {
+	exists = file_exists(filename, &isdir);
+	if ((exists && ((isdir && !remove_directory(filename)) ||
+	    (!isdir && !remove_file(filename, B_FALSE)))) ||
+	    !create_directory(filename)) {
 		free(filename);
 		return (B_FALSE);
 	}

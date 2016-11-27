@@ -208,7 +208,8 @@ long long microclock(void);
 #define	USEC2SEC(usec)	(usec / 1000000ll)
 #define	SEC2USEC(sec)	(sec * 1000000ll)
 
-/* directory manipulation */
+/* file/directory manipulation */
+bool_t file_exists(const char *path, bool_t *isdir);
 bool_t create_directory(const char *dirname);
 bool_t remove_directory(const char *dirname);
 bool_t remove_file(const char *filename, bool_t notfound_ok);
