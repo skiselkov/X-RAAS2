@@ -1726,6 +1726,19 @@ recreate_cache_skeleton(airportdb_t *db, list_t *apt_dat_files)
 	FILE *fp;
 	bool_t exists, isdir;
 
+	filename = mkpathname(db->xpdir, "Output", NULL);
+	if (!file_exists(filename, NULL) && !create_directory(filename)) {
+		free(filename);
+		return (B_FALSE);
+	}
+	free(filename);
+	filename = mkpathname(db->xpdir, "Output", "caches", NULL);
+	if (!file_exists(filename, NULL) && !create_directory(filename)) {
+		free(filename);
+		return (B_FALSE);
+	}
+	free(filename);
+
 	exists = file_exists(db->cachedir, &isdir);
 	if ((exists && ((isdir && !remove_directory(db->cachedir)) ||
 	    (!isdir && !remove_file(db->cachedir, B_FALSE)))) ||
@@ -2206,7 +2219,8 @@ load_airports_in_tile(airportdb_t *db, geo_pos2_t tile_pos)
 	snprintf(lat_lon, sizeof (lat_lon), TILE_NAME_FMT,
 	    tile_pos.lat, tile_pos.lon);
 	fname = mkpathname(cache_dir, lat_lon, NULL);
-	read_apt_dat(db, fname, B_FALSE);
+	if (file_exists(fname, NULL))
+		read_apt_dat(db, fname, B_FALSE);
 	free(cache_dir);
 	free(fname);
 }
