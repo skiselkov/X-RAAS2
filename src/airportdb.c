@@ -24,10 +24,12 @@
 
 #if	IBM
 #include <windows.h>
+#include <strsafe.h>
 #else	/* !IBM */
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <dirent.h>
 #endif	/* !IBM */
 
 #include "assert.h"
@@ -38,6 +40,7 @@
 #include "list.h"
 #include "log.h"
 #include "math.h"
+#include "perf.h"
 #include "types.h"
 #include "xraas2.h"
 
@@ -82,10 +85,67 @@
  * non-regular airports, so we just ignore those. At 80 degrees latitude,
  * 1 degree of longitude still works out to a 19308 meters, which is more
  * than our airport load limit distance (8nm or 14816 meters).
+ *
+ *
+ * AIRPORT DATA CONSTRUCTION METHOD
+ *
+ * For each airport, we need to obtain the following pieces of information:
+ *
+ * 1) The airport ICAO identifier.
+ * 2) The airport reference point latitude, longitude and elevation.
+ * 3) The airport's transition altitude and transition level (if published).
+ * 4) For each runway:
+ *	a) Runway width.
+ *	b) Each threshold's geographical position and elevation.
+ *	c) If the threshold is displaced, the amount of displacement.
+ *	d) For each end, if available, the optimal glidepath angle and
+ *	   threshold clearing height.
+ *
+ * First we examine all installed scenery. That means going through each
+ * apt.dat declared in scenery_packs.ini and the global default apt dat
+ * to find these kinds of records:
+ *
+ * *) '1' records identify airports. See parse_apt_dat_1_line.
+ * *) '21' records identify runway-related lighting fixtures (PAPIs/VASIs).
+ *	See parse_apt_dat_21_line.
+ * *) '100' records identify runways. See parse_apt_dat_100_line.
+ * *) '1302' records identify airport meta-information, such as TA, TL,
+ *	reference point location, etc.
+ *
+ * Prior to X-Plane 11, apt.dat's didn't necessarily contain the '1302'
+ * records, so we had to pull those from the Airports.txt in the navdata
+ * directory for the built-in GNS430. Starting from X-Plane 11, Airports.txt
+ * is gone and this data has been relocated to the apt.dat.
+ *
+ * A further complication of the absence of an Airports.txt is that this
+ * file contained both the GPA and TCH for each runway and although it did
+ * sometimes require some fuzzy matching to account for outdated scenery
+ * not exactly matching the navdata, we could obtain this information from
+ * one place.
+ *
+ * So for X-Plane 11, we've implemented a new method of obtaining this
+ * information. By default, if a runway has an instrument approach (and is
+ * thus interesting to us), it will in almost every case have some kind of
+ * visual glideslope indication system right next to it. We can extract
+ * the location of those from the apt.dat file. These glideslope indicators
+ * are located in the exact touchdown point and have a fixed GPA. So we
+ * simply look for a visual glideslope indicator (a VASI or PAPI) close
+ * to the runway's centerline and that is aligned with the runway, compute
+ * the longitudinal displacement of this indicator from the runway
+ * threshold and using the indicator's GPA compute the optimal TCH.
+ *
+ * Sometimes, broken scenery doesn't have the visual glideslope indicators
+ * either properly placed or even present at all (e.g. RWY09 at KSAN in
+ * some stock versions doesn't have a PAPI even though in the real world
+ * it does). For those cases, we trawl earth_nav.dat, the global index of
+ * navaids, picking out ILS glideslope navaids. These are always associated
+ * with an airport (by ICAO code) and runway (by the runway ID), so if
+ * that runway doesn't have a GPA/TCH set yet, we apply the same
+ * computation trick that we used for the VASIs/PAPIs to the GS antenna.
  */
 
 #define	RWY_PROXIMITY_LAT_FRACT		3
-#define	RWY_PROXIMITY_LON_DISPL		609.57		/* meters, 2000 ft */
+#define	RWY_PROXIMITY_LON_DISPL		609.57	/* meters, 2000 ft */
 
 #define	RWY_APCH_PROXIMITY_LAT_ANGLE	3.3	/* degrees */
 #define	RWY_APCH_PROXIMITY_LON_DISPL	5500	/* meters */
@@ -97,8 +157,29 @@
 #define	ARPT_LOAD_LIMIT			(8 * 1852)	/* meters, 8nm */
 #define	ARPT_LAT_LIMIT			80		/* degrees */
 
+#define	VGSI_LAT_DISPL_FACT		2	/* rwy width multiplier */
+#define	VGSI_HDG_MATCH_THRESH		5	/* degrees */
+#define	ILS_HDG_MATCH_THRESH		2	/* degrees */
+/*
+ * GS emitters don't originate their beam at the ground, so we add a bit of
+ * a fudge factor to account for antenna height to our TCH computation.
+ */
+#define	ILS_GS_GND_OFFSET		5	/* meters */
+
 #define	XRAAS_CACHE_DIR			"X-RAAS.cache"
 #define	TILE_NAME_FMT			"%+03.0f%+04.0f"
+
+/*
+ * Visual Glide Slope Indicator type (PAPI, VASI, etc.).
+ * Type codes used in apt.dat (XP-APT1000-Spec.pdf at data.x-plane.com).
+ */
+typedef enum {
+	VGSI_VASI =		1,
+	VGSI_PAPI_4L =		2,
+	VGSI_PAPI_4R =		3,
+	VGSI_PAPI_20DEG =	4,
+	VGSI_PAPI_3C =		5
+} vgsi_t;
 
 typedef struct tile_s {
 	geo_pos2_t	pos;	/* tile position (see `geo_pos2tile_pos') */
@@ -112,8 +193,10 @@ typedef struct {
 } apt_dats_entry_t;
 
 static airport_t *apt_dat_lookup(airportdb_t *db, const char *icao);
-static void apt_dat_insert(avl_tree_t *apt_dat, airport_t *arpt);
+static void apt_dat_insert(airportdb_t *db, airport_t *arpt);
 static void free_airport(airport_t *arpt);
+
+static void load_airport(airport_t *arpt);
 
 /*
  * Given an arbitrary geographical position, returns the geo_table tile
@@ -288,18 +371,19 @@ static airport_t *
 apt_dat_lookup(airportdb_t *db, const char *icao)
 {
 	airport_t srch;
+	ASSERT(is_valid_icao_code(icao));
 	my_strlcpy(srch.icao, icao, sizeof (srch.icao));
 	return (avl_find(&db->apt_dat, &srch, NULL));
 }
 
 static void
-apt_dat_insert(avl_tree_t *apt_dat, airport_t *arpt)
+apt_dat_insert(airportdb_t *db, airport_t *arpt)
 {
 	avl_index_t where;
 	/* Only allow airports with proper ICAO codes */
 	ASSERT(is_valid_icao_code(arpt->icao));
-	VERIFY(avl_find(apt_dat, arpt, &where) == NULL);
-	avl_insert(apt_dat, arpt, where);
+	VERIFY(avl_find(&db->apt_dat, arpt, &where) == NULL);
+	avl_insert(&db->apt_dat, arpt, where);
 }
 
 /*
@@ -341,8 +425,8 @@ geo_unlink_airport(airportdb_t *db, airport_t *arpt)
 /*
  * Some airports appear in apt.dat files, but not in the Airports.txt, but
  * apt.dat doesn't tell us their airport reference point. Thus we do the
- * next best thing and auto-compute the lat/lon as the arithmetic average
- * of the lat/lon of the first runway's thresholds.
+ * next best thing and auto-compute the lat/lon as the arithmetic mean of
+ * the lat/lon of the first runway's thresholds.
  */
 static void
 airport_auto_refpt(airport_t *arpt)
@@ -436,6 +520,10 @@ find_all_apt_dats(const airportdb_t *db, list_t *list)
 	list_insert_tail(list, e);
 }
 
+/*
+ * This actually performs the final insertion of an airport into the database.
+ * It inserts it into the flat apt_dat and into the geo_table.
+ */
 static void
 read_apt_dat_insert(airportdb_t *db, airport_t *arpt)
 {
@@ -448,15 +536,24 @@ read_apt_dat_insert(airportdb_t *db, airport_t *arpt)
 	 *    small GA fields without TA/TL published and mess with
 	 *    the altimeter setting monitor.
 	 */
-	if (avl_numnodes(&arpt->rwys) != 0 && is_valid_icao_code(arpt->icao)) {
+	if (avl_numnodes(&arpt->rwys) != 0) {
+		ASSERT(is_valid_icao_code(arpt->icao));
 		ASSERT(!IS_NULL_GEO_POS(arpt->refpt));
-		apt_dat_insert(&db->apt_dat, arpt);
+		apt_dat_insert(db, arpt);
 		geo_link_airport(db, arpt);
 	} else {
 		free_airport(arpt);
 	}
 }
 
+/*
+ * Parses an airport line in apt.dat. The default apt.dat spec only supplies
+ * the ICAO code and field elevation on this line. Our extended format which
+ * we use in the data cache also adds the TA, TL and reference point LAT &
+ * LON to this. If the apt.dat being parsed is a standard (non-extended) one,
+ * the additional info is inferred later on from other sources during the
+ * airport data cache creation process.
+ */
 static airport_t *
 parse_apt_dat_1_line(airportdb_t *db, const char *filename,
     const int line_num, const char *line)
@@ -469,6 +566,7 @@ parse_apt_dat_1_line(airportdb_t *db, const char *filename,
 	airport_t *arpt = NULL;
 
 	comps = strsplit(line, " ", B_TRUE, &ncomps);
+	ASSERT(strcmp(comps[0], "1") == 0);
 	if (ncomps < 5) {
 		dbg_log(tile, 0, "%s:%d: malformed airport entry, skipping. "
 		    "Offending line:\n%s", filename, line_num, line);
@@ -476,8 +574,21 @@ parse_apt_dat_1_line(airportdb_t *db, const char *filename,
 	}
 
 	new_icao = comps[4];
+	if (!is_valid_icao_code(new_icao))
+		/* Small local GA fields aren't meant for RAAS */
+		goto out;
+
 	pos.elev = atof(comps[1]);
 	arpt = apt_dat_lookup(db, new_icao);
+	if (arpt != NULL) {
+		/*
+		 * This airport was already known from a previously loaded
+		 * apt.dat. Avoid overwriting its data.
+		 */
+		arpt = NULL;
+		goto out;
+	}
+	/* Parse our optional extended format parameters. */
 	if (ncomps >= 9 && strstr(comps[5], "TA:") == comps[5] &&
 	    strstr(comps[6], "TL:") == comps[6] &&
 	    strstr(comps[7], "LAT:") == comps[7] &&
@@ -491,31 +602,203 @@ parse_apt_dat_1_line(airportdb_t *db, const char *filename,
 		 * it should have gone through the checks.
 		 */
 		ASSERT(fabs(pos.lat) < ARPT_LAT_LIMIT);
-	} else if (arpt != NULL) {
-		pos = arpt->refpt;
-		ASSERT(isnan(pos.lat) || fabs(pos.lat) < ARPT_LAT_LIMIT);
 	}
-
-	if (arpt == NULL) {
-		arpt = calloc(1, sizeof (*arpt));
-		avl_create(&arpt->rwys, runway_compar, sizeof(runway_t),
-		    offsetof(runway_t, node));
-		my_strlcpy(arpt->icao, new_icao, sizeof (arpt->icao));
-		arpt->refpt = pos;
-		arpt->TL = TL;
-		arpt->TA = TA;
-	} else {
-		/*
-		 * This airport was already known from a previously loaded
-		 * apt.dat. Avoid overwriting its data.
-		 */
-		arpt = NULL;
-	}
+	arpt = calloc(1, sizeof (*arpt));
+	avl_create(&arpt->rwys, runway_compar, sizeof (runway_t),
+	    offsetof(runway_t, node));
+	my_strlcpy(arpt->icao, new_icao, sizeof (arpt->icao));
+	arpt->refpt = pos;
+	arpt->TL = TL;
+	arpt->TA = TA;
 out:
 	free_strlist(comps, ncomps);
 	return (arpt);
 }
 
+/*
+ * This is the matching function that attempts to determine if a VGSI
+ * (row code '21' in apt.dat) belongs to a specific runway. Returns the
+ * lateral displacement (in meters) from the runway centerline if the
+ * VGSI matches the runway or a huge number (1e10) otherwise.
+ */
+static double
+runway_vgsi_fuzzy_match(runway_t *rwy, int end, vgsi_t type, vect2_t pos_v,
+    double true_hdg)
+{
+	runway_end_t *re = &rwy->ends[end], *ore = &rwy->ends[!end];
+	vect2_t thr2light_v = vect2_sub(pos_v, re->thr_v);
+	vect2_t thr2thr_v = vect2_sub(ore->thr_v, re->thr_v);
+	vect2_t thr2thr_uv = vect2_unit(thr2thr_v, NULL);
+	vect2_t thr2thr_norm_uv = vect2_norm(thr2thr_uv, B_TRUE);
+	double lat_displ = vect2_dotprod(thr2light_v, thr2thr_norm_uv),
+	    lon_displ = vect2_dotprod(thr2light_v, thr2thr_uv);
+
+	/*
+	 * The checks we perform are:
+	 * 1) the lateral displacement from the runway centerline must be
+	 *	no more than 2x the runway width (VGSI_LAT_DISPL_FACT).
+	 * 2) the longitudinal displacement must be sit between the thresholds
+	 * 3) the true heading of the light fixture must be within 5 degrees
+	 *	of true runway heading (VGSI_HDG_MATCH_THRESH).
+	 * 4) if the VGSI is a left PAPI, it must be on the left
+	 * 5) if the VGSI is a right PAPI, it must be on the right
+	 */
+	if (fabs(lat_displ) > VGSI_LAT_DISPL_FACT * rwy->width ||
+	    lon_displ < 0 || lon_displ > rwy->length ||
+	    fabs(rel_hdg(re->hdg, true_hdg)) > VGSI_HDG_MATCH_THRESH ||
+	    (lat_displ > 0 && type == VGSI_PAPI_4L) ||
+	    (lat_displ < 0 && type == VGSI_PAPI_4R))
+		return (1e10);
+	return (lat_displ);
+}
+
+static void
+find_nearest_runway_to_vgsi(airport_t *arpt, vgsi_t type, vect2_t pos_v,
+    double true_hdg, runway_t **rwy, runway_end_t **re, runway_end_t **ore)
+{
+	double max_displ = 100000;
+	/*
+	 * Runway unknown. Let's try to do a more fuzzy search.
+	 * We will look for the closest runway from which we are
+	 * displaced no more than 2x the runway's width. We also
+	 * check that the sense of the displacement is kept (left
+	 * PAPI on the left side of the runway and vice versa).
+	 */
+	for (runway_t *crwy = avl_first(&arpt->rwys); crwy != NULL;
+	    crwy = AVL_NEXT(&arpt->rwys, crwy)) {
+		double displ;
+		if ((displ = runway_vgsi_fuzzy_match(crwy, 0,
+		    type, pos_v, true_hdg)) < max_displ) {
+			*rwy = crwy;
+			*re = &crwy->ends[0];
+			*ore = &crwy->ends[1];
+			max_displ = displ;
+		} else if ((displ = runway_vgsi_fuzzy_match(crwy, 1,
+		    type, pos_v, true_hdg)) < max_displ) {
+			*rwy = crwy;
+			*re = &crwy->ends[1];
+			*ore = &crwy->ends[0];
+			max_displ = displ;
+		}
+	}
+	if (*rwy != NULL)
+		dbg_log(tile, 3, "VGSI->GPA/TCH: %.2g/%.2g at %s/%s",
+		    max_displ, fabs(rel_hdg(true_hdg, (*re)->hdg)),
+		    arpt->icao, (*re)->id);
+}
+
+/*
+ * Row codes `21' denote lighting objects. We detect if the object is a
+ * PAPI or VASI and use it to compute the GPA and TCH.
+ */
+static void
+parse_apt_dat_21_line(airport_t *arpt, const char *filename, int line_num,
+    const char *line)
+{
+	char **comps;
+	size_t ncomps;
+	vgsi_t type;
+	geo_pos2_t pos;
+	double gpa, displ, true_hdg;
+	const char *rwy_id;
+	runway_t *rwy = NULL;
+	runway_end_t *re = NULL, *ore = NULL;
+	vect2_t pos_v, thr2light_v, thr2thr_v;
+
+	/* Construct the airport fpp to compute the thresholds */
+	load_airport(arpt);
+	comps = strsplit(line, " ", B_TRUE, &ncomps);
+	ASSERT(strcmp(comps[0], "21") == 0);
+	if (ncomps < 7) {
+		dbg_log(tile, 0, "%s:%d: malformed lighting entry, skipping. "
+		    "Offending line:\n%s", filename, line_num, line);
+		goto out;
+	}
+	type = atoi(comps[3]);
+	if (type < VGSI_VASI || type > VGSI_PAPI_3C || type == VGSI_PAPI_20DEG)
+		goto out;
+	pos = GEO_POS2(atof(comps[1]), atof(comps[2]));
+	pos_v = geo2fpp(pos, &arpt->fpp);
+	true_hdg = atof(comps[4]);
+	if (!is_valid_hdg(true_hdg)) {
+		dbg_log(tile, 0, "%s:%d: malformed lighting entry, skipping. "
+		    "Offending line:\n%s", filename, line_num, line);
+		goto out;
+	}
+	gpa = atof(comps[5]);
+	rwy_id = comps[6];
+
+	/*
+	 * Locate the associated runway. The VGSI line should denote which
+	 * runway it belongs to.
+	 */
+	for (rwy = avl_first(&arpt->rwys); rwy != NULL;
+	    rwy = AVL_NEXT(&arpt->rwys, rwy)) {
+		if (strcmp(rwy->ends[0].id, rwy_id) == 0) {
+			re = &rwy->ends[0];
+			ore = &rwy->ends[1];
+			break;
+		} else if (strcmp(rwy->ends[1].id, rwy_id) == 0) {
+			ore = &rwy->ends[0];
+			re = &rwy->ends[1];
+			break;
+		}
+	}
+	if (rwy == NULL) {
+		find_nearest_runway_to_vgsi(arpt, type, pos_v, true_hdg,
+		    &rwy, &re, &ore);
+		if (rwy == NULL)
+			goto out;
+	}
+	/*
+	 * We can compute the longitudinal displacement along the associated
+	 * runway of the light from the runway threshold.
+	 */
+	thr2light_v = vect2_sub(pos_v, re->thr_v);
+	thr2thr_v = vect2_sub(ore->thr_v, re->thr_v);
+	displ = vect2_dotprod(thr2light_v, vect2_unit(thr2thr_v, NULL));
+	/*
+	 * Check that the VGSI sits somewhere between the two thresholds
+	 * and that it's aligned properly. Some scenery is broken like that!
+	 * This condition will only fail if we didn't use the matching in
+	 * find_nearest_runway_to_vgsi, because that function already
+	 * perform these checks.
+	 */
+	if (displ < 0 || displ > rwy->length ||
+	    fabs(rel_hdg(true_hdg, re->hdg) > VGSI_HDG_MATCH_THRESH)) {
+		dbg_log(tile, 2, "%s:%d: misaligned or misplaced PAPI/VASI "
+		    "(%.1f/%.1f, %.0f/%.0f, %s/%s)! Attempting to try and "
+		    "find out where it belongs.", filename, line_num, displ,
+		    rwy->length, true_hdg, re->hdg, arpt->icao, re->id);
+		rwy = NULL;
+		re = NULL;
+		ore = NULL;
+		/* Fallback check - try to match it to ANY runway */
+		find_nearest_runway_to_vgsi(arpt, type, pos_v, true_hdg,
+		    &rwy, &re, &ore);
+		if (rwy == NULL)
+			goto out;
+		thr2light_v = vect2_sub(pos_v, re->thr_v);
+		thr2thr_v = vect2_sub(ore->thr_v, re->thr_v);
+		displ = vect2_dotprod(thr2light_v, vect2_unit(thr2thr_v,
+		    NULL));
+	}
+	/* Finally, given the displacement and GPA, compute the TCH. */
+	re->gpa = gpa;
+	re->tch = MET2FEET(sin(DEG2RAD(gpa)) * displ);
+out:
+	free_strlist(comps, ncomps);
+}
+
+/*
+ * Parses an apt.dat runway line. Standard apt.dat runway lines simply
+ * denote the runway's surface type, width (in meters) the position of
+ * each threshold (lateral only, no elevation) and displacement parameters.
+ * Our data cache features three additional special fields: GPA, TCH and
+ * elevation (in meters) of each end. When parsing a stock apt.dat, these
+ * extra parameters are inferred from other sources in the data cache
+ * creation process.
+ */
 static void
 parse_apt_dat_100_line(airport_t *arpt, const char *filename,
     const int line_num, const char *line)
@@ -526,6 +809,7 @@ parse_apt_dat_100_line(airport_t *arpt, const char *filename,
 	avl_index_t where;
 
 	comps = strsplit(line, " ", B_TRUE, &ncomps);
+	ASSERT(strcmp(comps[0], "100") == 0);
 	if (ncomps < 8 + 9 + 5) {
 		dbg_log(tile, 0, "%s:%d: malformed runway entry, skipping. "
 		    "Offending line:\n%s", filename, line_num, line);
@@ -558,6 +842,11 @@ parse_apt_dat_100_line(airport_t *arpt, const char *filename,
 	snprintf(rwy->joint_id, sizeof (rwy->joint_id), "%s%s",
 	    rwy->ends[0].id, rwy->ends[1].id);
 
+	/*
+	 * This is a sanity test, we do not permit airports beyond 80
+	 * degrees north/south latitude due to our tile processing method
+	 * and how the tiles would get too small that far north/south.
+	 */
 	if (fabs(rwy->ends[0].thr.lat) >= ARPT_LAT_LIMIT ||
 	    fabs(rwy->ends[1].thr.lat) >= ARPT_LAT_LIMIT) {
 		dbg_log(tile, 1, "Ignoring runway at %s, lat %f/%f too far "
@@ -566,7 +855,7 @@ parse_apt_dat_100_line(airport_t *arpt, const char *filename,
 		free(rwy);
 		goto out;
 	}
-
+	/* Our extended data cache format */
 	if (ncomps >= 28 && strstr(comps[22], "GPA1:") == comps[22] &&
 	    strstr(comps[23], "GPA2:") == comps[23] &&
 	    strstr(comps[24], "TCH1:") == comps[24] &&
@@ -631,32 +920,66 @@ read_apt_dat(airportdb_t *db, const char *apt_dat_fname, bool_t fail_ok)
 		 * airport line.
 		 */
 		if (strlen(line) == 0 || strstr(line, "1 ") == line) {
-			read_apt_dat_insert(db, arpt);
+			if (arpt != NULL)
+				read_apt_dat_insert(db, arpt);
 			arpt = NULL;
 		}
 
 		if (strstr(line, "1 ") == line) {
 			arpt = parse_apt_dat_1_line(db, apt_dat_fname,
 			    line_num, line);
-		} else if (strstr(line, "100 ") == line && arpt != NULL) {
+		}
+		if (arpt == NULL)
+			continue;
+
+		if (strstr(line, "100 ") == line) {
 			parse_apt_dat_100_line(arpt, apt_dat_fname, line_num,
 			    line);
-		} else if (strstr(line, "1302 ") == line && arpt != NULL) {
+		} else if (strstr(line, "21 ") == line) {
+			parse_apt_dat_21_line(arpt, apt_dat_fname, line_num,
+			    line);
+		} else if (strstr(line, "1302 ") == line) {
 			comps = strsplit(line, " ", B_TRUE, &ncomps);
-			/* This line can contain varying numbers of comps */
+			/*
+			 * '1302' lines are meta-info lines introduced since
+			 * X-Plane 11. This line can contain varying numbers
+			 * of components, but we only care when it's 3.
+			 */
 			if (ncomps != 3) {
 				free_strlist(comps, ncomps);
 				continue;
 			}
-			if (strcmp(comps[1], "transition_alt") == 0)
+			/* Necessary check prior to modifying the refpt. */
+			ASSERT(!arpt->geo_linked);
+			/*
+			 * X-Plane 11 introduced these to remove the need
+			 * for an Airports.txt.
+			 */
+			if (strcmp(comps[1], "transition_alt") == 0) {
 				arpt->TA = atoi(comps[2]);
-			else if (strcmp(comps[1], "transition_level") == 0)
+			} else if (strcmp(comps[1], "transition_level") == 0) {
 				arpt->TL = atoi(comps[2]);
+			} else if (strcmp(comps[1], "datum_lat") == 0) {
+				double newlat = atof(comps[2]);
+				if (fabs(newlat) < ARPT_LAT_LIMIT) {
+					arpt->refpt.lat = newlat;
+				} else {
+					dbg_log(tile, 1, "Removing airport "
+					    "%s: lat %f too far north/south",
+					    arpt->icao, newlat);
+					free_airport(arpt);
+					arpt = NULL;
+				}
+			} else if (strcmp(comps[1], "datum_lon") == 0) {
+				arpt->refpt.lon = atof(comps[2]);
+			}
+
 			free_strlist(comps, ncomps);
 		}
 	}
 
-	read_apt_dat_insert(db, arpt);
+	if (arpt != NULL)
+		read_apt_dat_insert(db, arpt);
 
 	free(line);
 	fclose(apt_dat_f);
@@ -798,7 +1121,7 @@ parse_airports_txt_A_line(airportdb_t *db, const char *filename,
 	geo_link_airport(db, arpt);
 	arpt->TA = atof(comps[6]);
 	arpt->TL = atof(comps[7]);
-	arpt->in_arpts_txt = B_TRUE;
+	arpt->in_navdb = B_TRUE;
 out:
 	free_strlist(comps, ncomps);
 	return (arpt);
@@ -904,6 +1227,300 @@ load_airports_txt(airportdb_t *db)
 }
 
 static bool_t
+load_arinc42418_arpt_data(const char *filename, airport_t *arpt)
+{
+	char *line = NULL;
+	size_t linecap = 0;
+	FILE *fp = fopen(filename, "r");
+
+	if (fp == NULL) {
+		logMsg("Can't open %s: %s", filename, strerror(errno));
+		return (B_FALSE);
+	}
+
+	arpt->in_navdb = B_TRUE;
+
+	while (!feof(fp)) {
+		if (getline(&line, &linecap, fp) <= 0)
+			continue;
+		if (strstr(line, "RWY:") == line) {
+			char **comps;
+			const char *rwy_id;
+			size_t ncomps;
+			runway_t *rwy;
+
+			comps = strsplit(line + 4, ",", B_FALSE, &ncomps);
+			if (ncomps != 8)
+				goto out_rwy;
+			for (size_t i = 0; i < ncomps; i++)
+				strip_space(comps[i]);
+			if (strstr(comps[0], "RW") != comps[0])
+				goto out_rwy;
+			rwy_id = comps[0] + 2;
+			for (rwy = avl_first(&arpt->rwys); rwy != NULL;
+			    rwy = AVL_NEXT(&arpt->rwys, rwy)) {
+				runway_end_t *re;
+				int telev;
+
+				if (strcmp(rwy->ends[0].id, rwy_id) == 0)
+					re = &rwy->ends[0];
+				else if (strcmp(rwy->ends[1].id, rwy_id) == 0)
+					re = &rwy->ends[1];
+				else
+					continue;
+				if (sscanf(comps[3], "%d", &telev) == 1)
+					re->thr.elev = FEET2MET(telev);
+				break;
+			}
+out_rwy:
+			free_strlist(comps, ncomps);
+		}
+	}
+
+	fclose(fp);
+
+	free(line);
+	return (B_TRUE);
+}
+
+static bool_t
+load_CIFP_file(airportdb_t *db, const char *dirpath, const char *filename)
+{
+	airport_t *arpt;
+	char *filepath;
+	char icao[5];
+	bool_t res;
+
+	if (strlen(filename) != 8 || strcmp(&filename[4], ".dat"))
+		/* the filename must be "XXXX.dat" */
+		return (B_FALSE);
+	my_strlcpy(icao, filename, sizeof (icao));
+	if (!is_valid_icao_code(icao))
+		return (B_FALSE);
+	arpt = apt_dat_lookup(db, icao);
+	if (arpt == NULL)
+		return (B_FALSE);
+	filepath = mkpathname(dirpath, filename, NULL);
+	res = load_arinc42418_arpt_data(filepath, arpt);
+	free(filepath);
+
+	return (res);
+}
+
+/*
+ * Loads all ARINC424.18-formatted procedures files from a CIFP directory
+ * in the new X-Plane 11 navdata. This has to be OS-specific, because
+ * directory enumeration isn't portable.
+ */
+#if	IBM
+
+static bool_t
+load_CIFP_dir(airportdb_t *db, const char *dirpath)
+{
+	TCHAR dirnameT[strlen(dirpath) + 1];
+	WIN32_FIND_DATA find_data;
+	HANDLE h_find;
+	int dirname_len = strlen(dirpath);
+	TCHAR srchnameT[dirname_len + 4];
+
+	MultiByteToWideChar(CP_UTF8, 0, dirpath, -1, dirnameT,
+	    sizeof (dirnameT));
+	StringCchPrintf(srchnameT, dirname_len, TEXT("%s\\*"), dirnameT);
+	h_find = FindFirstFile(srchnameT, &find_data);
+	if (h_find == INVALID_HANDLE_VALUE)
+		return (B_FALSE);
+
+	do {
+		char filename[MAX_PATH];
+		WideCharToMultiByte(CP_UTF8, 0, find_data.cFileName, -1,
+		    filename, sizeof (filename), NULL, NULL);
+		(void) load_CIFP_file(db, dirpath, filename);
+	} while (FindNextFile(h_find, &find_data));
+
+	FindClose(h_find);
+	return (B_TRUE);
+}
+
+#else	/* !IBM */
+
+static bool_t
+load_CIFP_dir(airportdb_t *db, const char *dirpath)
+{
+	DIR *dp = opendir(dirpath);
+	struct dirent *de;
+
+	if (dp == NULL)
+		return (B_FALSE);
+
+	while ((de = readdir(dp)) != NULL) {
+		(void) load_CIFP_file(db, dirpath, de->d_name);
+	}
+
+	return (B_TRUE);
+}
+
+#endif	/* !IBM */
+
+/*
+ * Parses a '6' line from an earth_nav.dat file (ILS GS definition) and
+ * uses that info to compute the GPA and TCH of the associated runway. If
+ * the runway already has a GPA/TCH computed, this does nothing. This is
+ * called after the VGSI matching from apt.dat has been performed, because
+ * the VGSIs are usually more accurate in the terminal phase of approach
+ * (in our scenery, not in real life).
+ */
+static void
+parse_earth_nav_6_line(airportdb_t *db, const char *line)
+{
+	airport_t *arpt;
+	char **comps;
+	size_t ncomps;
+	vect2_t pos_v;
+	const char *rwy_id;
+	double elev, true_hdg, gpa;
+	char gpa_buf[4];
+
+	comps = strsplit(line, " ", B_TRUE, &ncomps);
+	if (ncomps < 12 || !is_valid_icao_code(comps[8]))
+		goto out;
+	arpt = apt_dat_lookup(db, comps[8]);
+	if (arpt == NULL)
+		goto out;
+	load_airport(arpt);
+
+	pos_v = geo2fpp(GEO_POS2(atof(comps[1]), atof(comps[2])), &arpt->fpp);
+	elev = FEET2MET(atof(comps[3]));
+	/* The format of this field is XXXYYY.ZZZ */
+	if (strlen(comps[6]) < 10)
+		goto out;
+	true_hdg = atof(&comps[6][3]);
+	my_strlcpy(gpa_buf, comps[6], sizeof (gpa_buf));
+	gpa = atof(gpa_buf) / 100.0;
+	rwy_id = comps[10];
+	for (runway_t *rwy = avl_first(&arpt->rwys); rwy != NULL;
+	    rwy = AVL_NEXT(&arpt->rwys, rwy)) {
+		runway_end_t *re, *ore;
+		vect2_t thr2thr_uv, thr2gs_v;
+		double displ;
+
+		if (strcmp(rwy->ends[0].id, rwy_id) == 0) {
+			re = &rwy->ends[0];
+			ore = &rwy->ends[1];
+		} else if (strcmp(rwy->ends[1].id, rwy_id) == 0) {
+			re = &rwy->ends[1];
+			ore = &rwy->ends[0];
+		} else {
+			continue;
+		}
+		/*
+		 * Check if we're aligned with the runway properly to be an
+		 * ILS GS component. We want to avoid LDA approaches,
+		 * because their offsets can result in unreliable slopes.
+		 */
+		if (fabs(rel_hdg(true_hdg, re->hdg)) > ILS_HDG_MATCH_THRESH ||
+		    re->gpa != 0)
+			continue;
+		/*
+		 * The GS appears to match us, now compute the longitudinal
+		 * displacement of the GS emitter from the runway threshold.
+		 */
+		thr2thr_uv = vect2_unit(vect2_sub(ore->thr_v, re->thr_v),
+		    NULL);
+		thr2gs_v = vect2_sub(pos_v, re->thr_v);
+		displ = vect2_dotprod(thr2gs_v, thr2thr_uv);
+		re->gpa = gpa;
+		re->tch = MET2FEET(sin(DEG2RAD(gpa)) * displ) +
+		    (elev - re->thr.elev) + ILS_GS_GND_OFFSET;
+		dbg_log(tile, 3, "GS->GPA/TCH(%s) %.02f/%.02f/%.0f %s/%s",
+		    comps[7], displ, re->gpa, re->tch, arpt->icao, re->id);
+		break;
+	}
+out:
+	free_strlist(comps, ncomps);
+}
+
+/*
+ * Parses an earth_nav.dat file and extracts ILS GS information from it.
+ * See also parse_earth_nav_6_line above.
+ */
+static bool_t
+parse_earth_nav_dat(airportdb_t *db, const char *filename)
+{
+	FILE *fp = fopen(filename, "r");
+	char *line = NULL;
+	size_t linecap = 0;
+
+	if (fp == NULL)
+		return (B_FALSE);
+
+	while (!feof(fp)) {
+		if (getline(&line, &linecap, fp) <= 0)
+			continue;
+		if (strstr(line, " 6 ") == line)
+			parse_earth_nav_6_line(db, line);
+	}
+
+	fclose(fp);
+
+	return (B_TRUE);
+}
+
+/*
+ * Loads navdata information to auto-compute GPA/TCH for runways based on
+ * ILS GS locations. This uses the new X-Plane 11 method from earth_nav.dat.
+ */
+static bool_t
+load_earth_nav_dats(airportdb_t *db)
+{
+	char *filename;
+
+	filename = mkpathname(db->xpdir, "Custom Data", "earth_nav.dat", NULL);
+	(void) parse_earth_nav_dat(db, filename);
+	free(filename);
+
+	filename = mkpathname(db->xpdir, "Resources", "default data",
+	    "earth_nav.dat", NULL);
+	if (!parse_earth_nav_dat(db, filename)) {
+		free(filename);
+		return (B_FALSE);
+	}
+	free(filename);
+
+	return (B_TRUE);
+}
+
+/*
+ * Initiates the supplemental information loading from X-Plane 11 navdata.
+ * Here we try to determine, for runways which lacked that info in apt.dat,
+ * the runway's threshold elevation and the GPA/TCH (based on a nearby
+ * ILS GS antenna).
+ */
+static bool_t
+load_xp11_navdata(airportdb_t *db)
+{
+	char *dirpath;
+
+	dirpath = mkpathname(db->xpdir, "Resources", "default data", "CIFP",
+	    NULL);
+	if (!load_CIFP_dir(db, dirpath)) {
+		logMsg("error parsing default data CIFP: %s", dirpath);
+		free(dirpath);
+		return (B_FALSE);
+	}
+	free(dirpath);
+
+	dirpath = mkpathname(db->xpdir, "Resources", "Custom Data", "CIFP",
+	    NULL);
+	(void) load_CIFP_dir(db, dirpath);
+	free(dirpath);
+
+	return (B_TRUE);
+}
+
+/*
+ * Checks to make sure our data cache is up to the newest version.
+ */
+static bool_t
 check_cache_version(const airportdb_t *db)
 {
 	char *version_str;
@@ -920,6 +1537,51 @@ check_cache_version(const airportdb_t *db)
 	return (version == XRAAS_CACHE_VERSION);
 }
 
+/*
+ * Attempts to determine the AIRAC cycle currently in use in the navdata
+ * on X-Plane 11. Sadly, there doesn't seem to be a nice data field for this,
+ * so we need to do some fulltext searching. Returns true if the determination
+ * succeeded (`cycle' is filled with the cycle number), or false if it failed.
+ */
+static bool_t
+get_xp11_airac_cycle(const char *xpdir, int *cycle)
+{
+	char *line = NULL;
+	size_t linecap = 0;
+	char *filename;
+	FILE *fp;
+
+	/* First try 'Custom Data', then 'default data' */
+	filename = mkpathname(xpdir, "Custom Data", "earth_nav.dat", NULL);
+	fp = fopen(filename, "r");
+	free(filename);
+	if (fp == NULL) {
+		filename = mkpathname(xpdir, "Resources", "default data",
+		    "earth_nav.dat", NULL);
+		fp = fopen(filename, "r");
+		free(filename);
+		if (fp == NULL)
+			return (B_FALSE);
+	}
+
+	while (!feof(fp)) {
+		const char *word_start;
+		if (getline(&line, &linecap, fp) <= 0 ||
+		    strstr(line, "1100 ") != line ||
+		    (word_start = strstr(line, " data cycle ")) == NULL)
+			continue;
+		/* constant is length of " data cycle " string */
+		return (sscanf(word_start + 12, "%d", cycle) == 1);
+	}
+
+	return (B_FALSE);
+}
+
+/*
+ * Grabs the AIRAC cycle from the X-Plane navdata and compares it to the
+ * info we have in our cache. Returns true if the cycles match or false
+ * otherwise (update to cache needed).
+ */
 static bool_t
 check_airac_cycle(airportdb_t *db)
 {
@@ -931,18 +1593,20 @@ check_airac_cycle(airportdb_t *db)
 		db_cycle = atoi(cycle_str);
 		free(cycle_str);
 	}
-	if ((cycle_str = file2str(db->xpdir, "Custom Data", "GNS430",
-	    "navdata", "cycle_info.txt", NULL)) == NULL)
-		cycle_str = file2str(db->xpdir, "Resources", "GNS430",
-		    "navdata", "cycle_info.txt", NULL);
-	if (cycle_str != NULL) {
-		char *sep = strstr(cycle_str, "AIRAC cycle");
-		if (sep != NULL)
-			sep = strstr(&sep[11], ": ");
-		if (sep != NULL) {
-			xp_cycle = atoi(&sep[2]);
+	if (!get_xp11_airac_cycle(db->xpdir, &xp_cycle)) {
+		if ((cycle_str = file2str(db->xpdir, "Custom Data", "GNS430",
+			    "navdata", "cycle_info.txt", NULL)) == NULL)
+			cycle_str = file2str(db->xpdir, "Resources", "GNS430",
+				    "navdata", "cycle_info.txt", NULL);
+		if (cycle_str != NULL) {
+			char *sep = strstr(cycle_str, "AIRAC cycle");
+			if (sep != NULL)
+				sep = strstr(&sep[11], ": ");
+			if (sep != NULL) {
+				xp_cycle = atoi(&sep[2]);
+			}
+			free(cycle_str);
 		}
-		free(cycle_str);
 	}
 
 	db->xp_airac_cycle = xp_cycle;
@@ -1108,6 +1772,8 @@ recreate_apt_dat_cache(airportdb_t *db)
 {
 	list_t apt_dat_files;
 	bool_t success = B_TRUE;
+	FILE *fp;
+	char *filename;
 
 	list_create(&apt_dat_files, sizeof (apt_dats_entry_t),
 	    offsetof(apt_dats_entry_t, node));
@@ -1123,7 +1789,22 @@ recreate_apt_dat_cache(airportdb_t *db)
 	    e = list_next(&apt_dat_files, e))
 		read_apt_dat(db, e->fname, B_TRUE);
 
-	if (!load_airports_txt(db)) {
+	/*
+	 * X-Plane 11 auto-detection. XP11 removed Airports.txt and switched
+	 * to a complete different navdata layout, so we need to use a
+	 * different approach to grabbing the data we need (GPA, TCH, TELEV).
+	 */
+	filename = mkpathname(db->xpdir, "Resources", "default data",
+	    "earth_nav.dat", NULL);
+	fp = fopen(filename, "r");
+	free(filename);
+	if (fp != NULL) {
+		fclose(fp);
+		if (!load_earth_nav_dats(db) || !load_xp11_navdata(db)) {
+			success = B_FALSE;
+			goto out;
+		}
+	} else if (!load_airports_txt(db)) {
 		success = B_FALSE;
 		goto out;
 	}
@@ -1136,7 +1817,7 @@ recreate_apt_dat_cache(airportdb_t *db)
 		 * If the airport isn't in Airports.txt, we want to dump the
 		 * airport, because we don't have TA/TL info on them.
 		 */
-		if (!arpt->in_arpts_txt) {
+		if (!arpt->in_navdb) {
 			geo_unlink_airport(db, arpt);
 			avl_remove(&db->apt_dat, arpt);
 			free_airport(arpt);
@@ -1427,7 +2108,8 @@ free_airport(airport_t *arpt)
 	void *cookie = NULL;
 	runway_t *rwy;
 
-	ASSERT(!arpt->load_complete);
+	if (arpt->load_complete)
+		unload_airport(arpt);
 
 	while ((rwy = avl_destroy_nodes(&arpt->rwys, &cookie)) != NULL)
 		free(rwy);
