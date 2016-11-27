@@ -2180,10 +2180,10 @@ xraas_init(void)
 
 	raas_dr_reset();
 
-	airportdb_create(&state.airportdb, xpdir, prefsdir);
+	airportdb_create(&state.airportdb, xpdir);
 	airportdb_created = B_TRUE;
 
-	if (!recreate_apt_dat_cache(&state.airportdb))
+	if (!recreate_cache(&state.airportdb))
 		goto errout;
 
 	if (chk_acf_is_helo() && !state.allow_helos) {

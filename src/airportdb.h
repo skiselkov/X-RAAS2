@@ -29,7 +29,7 @@ extern "C" {
 
 typedef struct airportdb {
 	char		*xpdir;
-	char		*xpprefsdir;
+	char		*cachedir;
 	int		xp_airac_cycle;
 
 	avl_tree_t	apt_dat;
@@ -90,11 +90,10 @@ struct airport {
 	avl_node_t	tile_node;	/* tiles in the airport_geo_tree */
 };
 
-void airportdb_create(airportdb_t *db, const char *xpdir,
-    const char *xpprefsdir);
+void airportdb_create(airportdb_t *db, const char *xpdir);
 void airportdb_destroy(airportdb_t *db);
 
-bool_t recreate_apt_dat_cache(airportdb_t *db);
+bool_t recreate_cache(airportdb_t *db);
 
 list_t *find_nearest_airports(airportdb_t *db, geo_pos2_t my_pos);
 void free_nearest_airport_list(list_t *l);
