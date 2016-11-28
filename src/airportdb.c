@@ -371,10 +371,11 @@ rwy_is_hard(int t)
 static airport_t *
 apt_dat_lookup(airportdb_t *db, const char *icao)
 {
-	airport_t srch;
-	ASSERT(is_valid_icao_code(icao));
-	my_strlcpy(srch.icao, icao, sizeof (srch.icao));
-	return (avl_find(&db->apt_dat, &srch, NULL));
+	airport_t search, *result;
+	my_strlcpy(search.icao, icao, sizeof (search.icao));
+	result = avl_find(&db->apt_dat, &search, NULL);
+	ASSERT(result == NULL || is_valid_icao_code(result->icao));
+	return (result);
 }
 
 static void
@@ -1112,8 +1113,6 @@ parse_airports_txt_A_line(airportdb_t *db, const char *filename,
 		goto out;
 	}
 	icao = comps[1];
-	if (!is_valid_icao_code(icao))
-		goto out;
 	arpt = apt_dat_lookup(db, icao);
 	if (arpt == NULL)
 		goto out;
@@ -1307,8 +1306,6 @@ load_CIFP_file(airportdb_t *db, const char *dirpath, const char *filename)
 	if (strlen(filename) != 8 || strcmp(&filename[4], ".dat"))
 		return (B_FALSE);
 	my_strlcpy(icao, filename, sizeof (icao));
-	if (!is_valid_icao_code(icao))
-		return (B_FALSE);
 	arpt = apt_dat_lookup(db, icao);
 	if (arpt == NULL)
 		return (B_FALSE);
@@ -1398,10 +1395,7 @@ parse_earth_nav_6_line(airportdb_t *db, const char *line)
 	char gpa_buf[4];
 
 	comps = strsplit(line, " ", B_TRUE, &ncomps);
-	if (ncomps < 12 || !is_valid_icao_code(comps[8]))
-		goto out;
-	arpt = apt_dat_lookup(db, comps[8]);
-	if (arpt == NULL)
+	if (ncomps < 12 || (arpt = apt_dat_lookup(db, comps[8])) == NULL)
 		goto out;
 	VERIFY(load_airport(arpt));
 
