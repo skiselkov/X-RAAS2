@@ -1,0 +1,164 @@
+# INTERFACING WITH X-RAAS
+
+This document is meant to assist X-Plane aircraft developers in
+integrating their avionics with X-RAAS.
+
+X-RAAS can be installed either globally in Resources/plugins or can be
+embedded directly in the aircraft model in the plugins subdirectory of
+that model. See EMBEDDING.txt for more information on how properly embed
+X-RAAS. Regardless of the method of delivery, however, X-RAAS's interface
+doesn't change.
+
+## RECEIVING VISUAL ALERT MESSAGES
+
+In many situations, when the plugin generates an aural annunciation, it
+can also generate a visual advisory. This is normally meant to be displayed
+on the navigation display or a similar such display device in the cockpit.
+However, since X-RAAS can't directly paint onto the 3D cockpit, this needs
+to be provided by the aircraft's 3D cockpit logic itself, necessitating
+this integration. If such integration is not available (e.g. the aircraft
+model isn't aware of X-RAAS), X-RAAS implements a fallback mechanism where
+the visual alerts are displayed using an on-screen overlay.
+
+If you choose to provide integration of X-RAAS's visual alerts into your
+virtual cockpit logic, you will want to do two things:
+
+1) Disable the fallback overlay GUI.
+2) Receive the alert text to be rendered onto the ND.
+
+### DISABLING THE FALLBACK OVERLAY GUI
+
+For this purpose, all you need to do is write a '1' (or any non-zero
+value) to the "xraas/ND_alert_overlay_disabled" integer dataref. Doing so
+disables any new messages from being displayed. Please note that this
+dataref gets reset back to '0' after each aircraft unload (i.e. in
+response to XPLM_MSG_PLANE_UNLOADED when param == 0). This is to allow
+for switching between aircraft which do and do not want the overlay
+enabled. You should set it to '1' in your aircraft avionics loading
+completion handler. Afterwards, X-RAAS shouldn't touch it until your
+aircraft is unloaded again.
+
+### RECEIVING THE ALERT TEXT TO BE RENDERED
+
+X-RAAS encodes the string it wants to display into the "xraas/ND_alert"
+integer dataref using a somewhat non-trivial format (detailed at the end
+of this document). However, to facilitate ease of integration, X-RAAS
+includes sample code in the `api' directory that helps you with this
+task. The code is licensed under the MIT license, giving you maximum
+freedom in its use, so you needn't worry about tainting your project with
+copyleft-licensed code. The `api' directory contains implementations in
+three languages: C, Lua and Python. If necessary, implementations in
+other languages can be provided on request.
+
+The entire API simply consists of one function, XRAAS_ND_msg_decode. You
+pass it the value of the "xraas/ND_alert" and it returns a string-based
+representation of the encoded message, including the color code that is
+to be applied to the message. For an example of how to use this function,
+see the included "test_sample" programs in the respective language
+subdirectories. Alternatively, you can see how X-RAAS uses it to render
+its own fallback overlay in the render_alert_texture function in
+src/nd_alert.c in X-RAAS source code.
+
+### VISUAL ALERT DATA FORMAT
+
+#### FORMAT SPECIFICATION
+
+This section describes how X-RAAS encodes visual alert messages into the
+"xraas/ND_alert" integer dataref. It is mentioned here for completeness
+and unless you plan on implementing your own decoder, shouldn't be
+required to interface with X-RAAS.
+
+The encoded value is treated as a bitfield (in native byte order):
+
+	Bits	Description
+	===============================================================
+	0-5	MESSAGE TYPE.
+		Field values:
+		    0: no message present
+		    1: 'FLAPS' message
+		    2: 'TOO HIGH' message
+		    3: 'TOO FAST' message
+		    4: 'UNSTABLE' message
+		    5: 'TAXIWAY' message
+		    6: 'SHORT RUNWAY' message
+		    7: 'ALTM SETTING' message
+		    8: 'APP' message
+		    9: 'ON' message
+		    10: 'LONG LANDING' message
+		    11: 'DEEP LANDING' message
+		    12-31: reserved
+		Message types 8 and 9 ('APP' and 'ON' messages) also fill
+		the RUNWAY ID, RUNWAY ID SUFFIX and DISTANCE AVAILABLE fields.
+	--------------------------------------------------------------
+	6-7	COLOR
+		Field values:
+		    0: message should display in a green color (normal message).
+		    1: message should display in an amber color (non-routine or
+		       caution message).
+		    2-3: reserved
+	--------------------------------------------------------------
+	8-13	RUNWAY ID
+		Used only by message types '8' and '9'. Field values:
+		    0: 'TAXIWAY'. This is used to signal "ON TAXIWAY", by
+		       passing message type 9 and a runway ID of 0.
+		    1-36: The runway ID for runway '01' through '36'.
+		    37: 'RWYS' value. Used when multiple runways are being
+		        approached, e.g. 'APP RWYS' (message type 8,
+		        runway ID 37).
+		    38-63: reserved
+	--------------------------------------------------------------
+	14-15	RUNWAY ID SUFFIX
+		Used only by message types '8' and '9'. Field values:
+		    0: no suffix. Should simply show the runway ID, e.g. '36'.
+		    1: 'RIGHT'. Should show runway ID with abbreviated suffix,
+		       e.g. "36R".
+		    2: 'LEFT'. Same display rules as above, e.g. '36L'.
+		    3: 'CENTER'. Same display rules as above, e.g. '36C'.
+	--------------------------------------------------------------
+	16-23	RUNWAY LENGTH AVAILABLE
+		Used by message types '8' and '9'. Runway length rounded
+		down to the nearest 100 feet or meters. A value of '0' in
+		this field means 'no display'. Should display the value
+		(if non-zero) as a fixed two-digit number (printf-like
+		format string "%02d"). No unit conversion is required.
+	--------------------------------------------------------------
+
+#### ENCODING AND DECODING EXAMPLES
+
+	Dataref value	Description				Display text
+	=============	======================================	============
+	0x00000041	AMBER, 'FLAPS' message			FLAPS
+	0x00000042	AMBER, 'TOO HIGH' message		TOO HIGH
+	0x00000043	AMBER, 'TOO FAST' message		TOO FAST
+	0x00000044	AMBER, 'UNSTABLE' message		UNSTABLE
+	0x00000045	AMBER, 'TAXIWAY' message		TAXIWAY
+	0x00000046	AMBER, 'SHORT RUNWAY' message		SHORT RUNWAY
+	0x00000047	AMBER, 'ALTM SETTING' message		ALTM SETTING
+	0x00002308	GREEN, 'APP' message, runway ID 0x23	APP 35
+			(35), no runway suffix
+	0x00006308	GREEN, 'APP' message, runway ID 0x23	APP 35R
+			(35), runway suffix 1 ('R')
+	0x00002508	GREEN, 'APP' message, runway ID 0x25	APP RWYS
+			(37, 'RWYS')
+	0x00142348	AMBER, 'APP' message, runway ID 0x23	APP 35 20
+			(35), no runway suffix, distance
+			available 0x14 (2000 feet/meters)
+	0x00086348	AMBER, 'APP' message, runway ID 0x23	APP 35R 08
+			(35), runway suffix 1 ('R'), distance
+			available 0x08 (800 feet/meters)
+	0x00000049	AMBER, 'ON' message, runway ID 0x00	ON TAXIWAY
+			('TAXIWAY')
+	0x00002309	GREEN, 'ON' message, runway ID 0x23	ON 35
+			(35), no runway suffix
+	0x00006309	GREEN, 'ON' message, runway ID 0x23	ON 35R
+			(35), runway suffix 1 ('R')
+	0x00002509	GREEN, 'ON' message, runway ID 0x25	ON RWYS
+			(37, 'RWYS')
+	0x0014E349	AMBER, 'ON' message, runway ID 0x23	ON 35C 20
+			(35), runway suffix 3 ('C'), distance
+			available 0x14 (2000 feet/meters)
+	0x0008A349	AMBER, 'ON' message, runway ID 0x23	ON 35L 08
+			(35), runway suffix 2 ('L'), distance
+			available 0x08 (800 feet/meters)
+	0x0000004A	AMBER, 'LONG LANDING' message		LONG LANDING
+	0x0000004B	AMBER, 'DEEP LANDING' message		DEEP LANDING

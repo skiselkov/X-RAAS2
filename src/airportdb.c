@@ -166,7 +166,6 @@
 #define	ILS_GS_GND_OFFSET		5	/* meters */
 
 #define	XRAAS_CACHE_DIR			"X-RAAS.cache"
-#define	XRAAS_CACHE_PATH		"..", "caches", XRAAS_CACHE_DIR
 #define	TILE_NAME_FMT			"%+03.0f%+04.0f"
 
 /*
@@ -1720,6 +1719,8 @@ recreate_cache_skeleton(airportdb_t *db, list_t *apt_dat_files)
 	FILE *fp;
 	bool_t exists, isdir;
 
+#ifndef	XRAAS_IS_EMBEDDED
+	/* Make sure these exist, because on X-Plane 11 they might not */
 	filename = mkpathname(db->xpdir, "Output", NULL);
 	if (!file_exists(filename, NULL) && !create_directory(filename)) {
 		free(filename);
@@ -1732,6 +1733,7 @@ recreate_cache_skeleton(airportdb_t *db, list_t *apt_dat_files)
 		return (B_FALSE);
 	}
 	free(filename);
+#endif	/* !XRAAS_IS_EMBEDDED */
 
 	exists = file_exists(db->cachedir, &isdir);
 	if ((exists && ((isdir && !remove_directory(db->cachedir)) ||
@@ -2289,8 +2291,13 @@ void
 airportdb_create(airportdb_t *db, const char *xpdir)
 {
 	db->xpdir = strdup(xpdir);
+#ifdef	XRAAS_IS_EMBEDDED
+	UNUSED(xpdir);
+	db->cachedir = mkpathname(xraas_plugindir, XRAAS_CACHE_DIR, NULL);
+#else	/* !XRAAS_IS_EMBEDDED */
 	db->cachedir = mkpathname(xpdir, "Output", "caches", XRAAS_CACHE_DIR,
 	    NULL);
+#endif	/* !XRAAS_IS_EMBEDDED */
 
 	avl_create(&db->apt_dat, airport_compar, sizeof (airport_t),
 	    offsetof(airport_t, apt_dat_node));

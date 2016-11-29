@@ -146,6 +146,32 @@ function install_xtra_files() {
 	done
 }
 
+embed=''
+
+while getopts "eh" opt; do
+	case "$opt" in
+	e)
+		embed="-e"
+		;;
+	h)
+		cat << EOF
+Usage: $0 [-eh]
+Options:
+  -e : Build an embeddable version of X-RAAS. Embeddable versions auto-inhibit
+       when a globally installed version of X-RAAS is detected to prevent
+       duplicated annunciations. Embeddable versions also relocate their config
+       files and data cache so that they don't interfere with a global version.
+  -h : Show this help screen.
+EOF
+		exit
+		;;
+	*)
+		echo "Unknown option $opt. Try -h for help." >&2
+		exit 1
+		;;
+	esac
+done
+
 if ! ./build_freetype_deps; then
 	echo "FreeType build failed" >&2
 	exit 1
@@ -155,13 +181,13 @@ rm -rf X-RAAS2
 
 case `uname` in
 Linux)
-	( cd qmake && ./build-win-lin ) && mkdir -p X-RAAS2/64 && \
+	( cd qmake && ./build-win-lin $embed ) && mkdir -p X-RAAS2/64 && \
 	    cp qmake/output/{win,lin}.xpl X-RAAS2 && \
 	    cp qmake/output/64/{win,lin}.xpl X-RAAS2/64 && \
 	    install_xtra_files
 	;;
 Darwin)
-	( cd qmake && ./build-mac ) && mkdir -p X-RAAS2/64 && \
+	( cd qmake && ./build-mac $embed ) && mkdir -p X-RAAS2/64 && \
 	    cp qmake/output/mac.xpl X-RAAS2 && \
 	    cp qmake/output/64/mac.xpl X-RAAS2/64 && \
 	    install_xtra_files

@@ -20,6 +20,19 @@
 # first.
 # On Linux also do "apt install libopenal-dev:x86_64 libopenal-dev:i386".
 
+embed=no
+while getopts "e" opt; do
+	case "$opt" in
+	e)
+		embed=yes
+		;;
+	*)
+		echo "Bad option $opt. Use ./build_release to build X-RAAS2" >&2
+		exit 1
+		;;
+	esac
+done
+
 # We'll try to build on N+1 CPUs we have available. The extra +1 is to allow
 # for one make instance to be blocking on disk.
 NCPUS=$(( $(grep 'processor[[:space:]]\+:' /proc/cpuinfo  | wc -l) + 1 ))
@@ -28,7 +41,9 @@ rm -rf release output
 mkdir -p output/64
 
 make distclean > /dev/null
-qmake -set CROSS_COMPILE x86_64-w64-mingw32- ; qmake -spec win32-g++ && \
+qmake -set CROSS_COMPILE x86_64-w64-mingw32- && \
+    qmake -set XRAAS_EMBED $embed && \
+    qmake -spec win32-g++ && \
     make -j $NCPUS && \
     mv release/win.xpl1.dll output/64/win.xpl
 if [ $? != 0 ] ; then
@@ -36,7 +51,9 @@ if [ $? != 0 ] ; then
 fi
 
 make distclean > /dev/null
-qmake -set CROSS_COMPILE i686-w64-mingw32- && qmake -spec win32-g++ && \
+qmake -set CROSS_COMPILE i686-w64-mingw32- && \
+    qmake -set XRAAS_EMBED $embed && \
+    qmake -spec win32-g++ && \
     make -j $NCPUS && \
     mv release/win.xpl1.dll output/win.xpl
 if [ $? != 0 ] ; then
@@ -44,14 +61,19 @@ if [ $? != 0 ] ; then
 fi
 
 make distclean > /dev/null
-qmake -spec linux-g++-64 && make -j $NCPUS && \
+
+qmake -set XRAAS_EMBED $embed && \
+    qmake -spec linux-g++-64 && \
+    make -j $NCPUS && \
     mv liblin.xpl.so output/64/lin.xpl
 if [ $? != 0 ] ; then
   exit
 fi
 
 make distclean > /dev/null
-qmake -spec linux-g++-32 && make -j $NCPUS && \
+qmake -set XRAAS_EMBED $embed && \
+    qmake -spec linux-g++-32 && \
+    make -j $NCPUS && \
     mv liblin.xpl.so output/lin.xpl
 if [ $? != 0 ] ; then
   exit

@@ -270,8 +270,10 @@ load_configs(xraas_state_t *state)
 {
 	reset_state(state);
 	/* order is important here, first load the global one */
+#ifndef	XRAAS_IS_EMBEDDED
 	if (!load_config(state, xraas_prefsdir))
 		return (B_FALSE);
+#endif	/* !XRAAS_IS_EMBEDDED */
 	if (!load_config(state, xraas_acf_dirpath))
 		return (B_FALSE);
 	return (B_TRUE);

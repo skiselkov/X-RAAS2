@@ -133,10 +133,11 @@ static struct {
 	XPWidgetID	openal_shared;
 
 	XPWidgetID	save_acf_conf;
-	XPWidgetID	save_glob_conf;
-
 	XPWidgetID	reset_acf_conf;
+#ifndef	XRAAS_IS_EMBEDDED
+	XPWidgetID	save_glob_conf;
 	XPWidgetID	reset_glob_conf;
+#endif	/* !XRAAS_IS_EMBEDDED */
 } buttons;
 
 static struct {
@@ -691,12 +692,14 @@ main_window_cb(XPWidgetMessage msg, XPWidgetID widget, intptr_t param1,
 
 		if (btn == buttons.save_acf_conf)
 			save_config(B_TRUE);
-		else if (btn == buttons.save_glob_conf)
-			save_config(B_FALSE);
 		else if (btn == buttons.reset_acf_conf)
 			reset_config(B_TRUE);
+#ifndef	XRAAS_IS_EMBEDDED
+		else if (btn == buttons.save_glob_conf)
+			save_config(B_FALSE);
 		else if (btn == buttons.reset_glob_conf)
 			reset_config(B_FALSE);
+#endif	/* !XRAAS_IS_EMBEDDED */
 		else
 			assert(0);
 	}
@@ -976,6 +979,14 @@ create_main_window(void)
 		tooltip_new(tts, x, y, w, h, tooltip); \
 	} while (0)
 
+#ifdef	XRAAS_IS_EMBEDDED
+	LAYOUT_PUSH_BUTTON(save_acf_conf, WINDOW_MARGIN, MAIN_WINDOW_HEIGHT -
+	    70, BUTTON_WIDTH, 18, "SAVE configuration",
+	    save_acf_tooltip);
+	LAYOUT_PUSH_BUTTON(reset_acf_conf, MAIN_WINDOW_WIDTH - BUTTON_WIDTH -
+	    WINDOW_MARGIN, MAIN_WINDOW_HEIGHT - 70, BUTTON_WIDTH, 18,
+	    "RESET configuration", reset_acf_tooltip);
+#else	/* !XRAAS_IS_EMBEDDED */
 	LAYOUT_PUSH_BUTTON(save_acf_conf, WINDOW_MARGIN, MAIN_WINDOW_HEIGHT -
 	    70, BUTTON_WIDTH, 18, "SAVE aircraft configuration",
 	    save_acf_tooltip);
@@ -989,6 +1000,7 @@ create_main_window(void)
 	LAYOUT_PUSH_BUTTON(reset_glob_conf, MAIN_WINDOW_WIDTH - BUTTON_WIDTH -
 	    WINDOW_MARGIN, MAIN_WINDOW_HEIGHT - 50, BUTTON_WIDTH, 18,
 	    "RESET global configuration", reset_glob_tooltip);
+#endif	/* !XRAAS_IS_EMBEDDED */
 
 #undef	LAYOUT_PUSH_BUTTON
 

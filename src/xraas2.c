@@ -52,10 +52,20 @@
 #include "xraas_cfg.h"
 
 #define	XRAAS2_VERSION			"2.0"
+#define	XRAAS2_STANDALONE_PLUGIN_SIG	"skiselkov.xraas2"
+
+#ifdef	XRAAS_IS_EMBEDDED
+#define	XRAAS2_PLUGIN_NAME		"X-RAAS " XRAAS2_VERSION " (embed)"
+#define	XRAAS2_PLUGIN_DESC		"A simulation of the Runway " \
+					"Awareness and Advisory System " \
+					"(embedded version)"
+#define	XRAAS2_PLUGIN_SIG		XRAAS2_STANDALONE_PLUGIN_SIG "_embedded"
+#else	/* !XRAAS_IS_EMBEDDED */
 #define	XRAAS2_PLUGIN_NAME		"X-RAAS " XRAAS2_VERSION
-#define	XRAAS2_PLUGIN_SIG		"skiselkov.xraas2"
 #define	XRAAS2_PLUGIN_DESC		"A simulation of the Runway " \
 					"Awareness and Advisory System"
+#define	XRAAS2_PLUGIN_SIG		XRAAS2_STANDALONE_PLUGIN_SIG
+#endif	/* !XRAAS_IS_EMBEDDED */
 
 #define	EXEC_INTVAL			0.5		/* seconds */
 #define	HDG_ALIGN_THRESH		20		/* degrees */
@@ -146,6 +156,8 @@ static accel_stop_dist_t accel_stop_distances[] = {
     { .max = 46, .min = 31, .ann = B_FALSE },     /* 150-100 ft, 60 KT */
     { .max = NAN, .min = NAN, .ann = -1 }         /* list terminator */
 };
+
+static bool_t plugin_conflict = B_FALSE;
 
 bool_t xraas_inited = B_FALSE;
 static xraas_state_t state;
@@ -2300,12 +2312,38 @@ XPluginStart(char *outName, char *outSig, char *outDesc)
 {
 	char *p;
 
+	/* Inhibit startup if another X-RAAS instance was found. */
+	if (XPLMFindPluginBySignature(XRAAS2_STANDALONE_PLUGIN_SIG) !=
+	    XPLM_NO_PLUGIN_ID) {
+		plugin_conflict = B_TRUE;
+#ifndef	XRAAS_IS_EMBEDDED
+		/*
+		 * This is a rather unexpected situation if we are stand-alone
+		 * and indicates an installation problem. Warn the user.
+		 */
+		logMsg("CAUTION: it seems your simulator is loading X-RAAS "
+		    "twice. Please check your installation to make sure "
+		    "there aren't any duplicate copies of the plugin!");
+		return (0);
+#endif	/* !XRAAS_IS_EMBEDDED */
+	}
+
 	/* Always use Unix-native paths on the Mac! */
 	XPLMEnableFeature("XPLM_USE_NATIVE_PATHS", 1);
 
 	strcpy(outName, XRAAS2_PLUGIN_NAME);
 	strcpy(outSig, XRAAS2_PLUGIN_SIG);
 	strcpy(outDesc, XRAAS2_PLUGIN_DESC);
+
+	if (plugin_conflict) {
+		/*
+		 * We can't simply return 0 here, as that emits a rather
+		 * nasty-looking error message into the X-Plane Log.txt.
+		 * Instead, we simply report success and internally inhibit
+		 * all operations.
+		 */
+		return (1);
+	}
 
 	XPLMGetSystemPath(xpdir);
 	XPLMGetPrefsPath(prefsdir);
@@ -2360,12 +2398,18 @@ XPluginStart(char *outName, char *outSig, char *outDesc)
 PLUGIN_API void
 XPluginStop(void)
 {
+	if (plugin_conflict)
+		return;
+
 	init_msg_sys_fini();
 }
 
 PLUGIN_API int
 XPluginEnable(void)
 {
+	if (plugin_conflict)
+		return (1);
+
 	xraas_init();
 	gui_init();
 	return (1);
@@ -2374,6 +2418,9 @@ XPluginEnable(void)
 PLUGIN_API void
 XPluginDisable(void)
 {
+	if (plugin_conflict)
+		return;
+
 	gui_fini();
 	xraas_fini();
 }
@@ -2381,17 +2428,28 @@ XPluginDisable(void)
 PLUGIN_API void
 XPluginReceiveMessage(XPLMPluginID src, int msg, void *param)
 {
+	if (plugin_conflict)
+		return;
+
 	UNUSED(src);
 	UNUSED(param);
 
 	switch(msg) {
 	case XPLM_MSG_AIRPORT_LOADED:
-		/* only respond to user aircraft reloads */
-		if (param != 0)
-			break;
 		xraas_fini();
 		xraas_init();
 		gui_update();
+		break;
+	case XPLM_MSG_PLANE_UNLOADED:
+		/* only respond to user aircraft unloads */
+		if (param != 0)
+			break;
+		/*
+		 * Reenable the ND alert overlay in case a previously loaded
+		 * aircraft asked us to disable it, but the new aircraft
+		 * doesn't want to disable it (or isn't even aware of us).
+		 */
+		ND_alert_overlay_enable();
 		break;
 	}
 }

@@ -77,6 +77,7 @@ bool_t ND_alerts_init(void);
 void ND_alerts_fini(void);
 void ND_alert(nd_alert_msg_type_t msg, nd_alert_level_t level,
     const char *rwy_id, int dist);
+void ND_alert_overlay_enable(void);
 
 #ifdef	__cplusplus
 }

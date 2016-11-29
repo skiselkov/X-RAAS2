@@ -20,15 +20,6 @@
 -- SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
--- AIRCRAFT DEVELOPER NOTICE:
--- DO NOT remove this file from your X-RAAS installation. It is used by
--- X-RAAS to implement the fallback ND overlay.
--- Also, please contact X-RAAS's author, so your aircraft can be added to
--- the built-in exclusion list for which X-RAAS will automatically avoid
--- displaying the fallback ND alert overlay. Alternatively, you can ship
--- a custom X-RAAS.cfg with RAAS_ND_alert_overlay_enabled=false.
-
-
 -- LUA COMPATIBILITY NOTICE:
 -- If your FMS plugin runs on the FlyWithLua engine, then all you need is
 -- this file. However, if you're using any other Lua interpreter, please
@@ -37,8 +28,10 @@
 -- whatever you have available.
 
 
--- This is the ND message decode function. The dr_value argument is the int
--- value of the sim/multiplayer/position/plane19_taxi_light_on dataref.
+-- This is the ND message decode function. Arguments:
+--
+--  dr_value: integer value of the "xraas/ND_alert" dataref.
+--
 -- The function returns two values:
 --   * a string containing the decoded message to be displayed on the ND
 --   * an integer color code (0 for green, 1 for amber)

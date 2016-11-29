@@ -39,7 +39,8 @@
 
 #include "nd_alert.h"
 
-#define	DR_NAME			"skiselkov/xraas/ND_alert"
+#define	DR_NAME			"xraas/ND_alert"
+#define	OVERLAY_DIS_DR		"xraas/ND_alert_overlay_disabled"
 #define	AMBER_FLAG		0x40
 #define	ND_SCHED_INTVAL		1.0
 
@@ -48,9 +49,11 @@ const char *ND_alert_overlay_default_font = "ShareTechMono" DIRSEP_S
 const int ND_alert_overlay_default_font_size = 28;
 
 static bool_t			inited = B_FALSE;
-static XPLMDataRef		dr = NULL;
+static XPLMDataRef		dr = NULL, dr_overlay = NULL;
 static int			alert_status = 0;
 static long long		alert_start_time = 0;
+
+static int			alert_overlay_dis = 0;
 
 static XPLMDataRef		dr_local_x, dr_local_y, dr_local_z;
 static XPLMDataRef		dr_pitch, dr_roll, dr_hdg;
@@ -65,10 +68,17 @@ static struct {
 } overlay = { NULL, NULL, 0, 0, 0, NULL };
 
 static int
-read_ND_alert(void *refcon)
+read_int(void *refcon)
 {
-	UNUSED(refcon);
-	return (alert_status);
+	int *ptr = refcon;
+	return (*(ptr));
+}
+
+static void
+write_int(void *refcon, int value)
+{
+	int *ptr = refcon;
+	*ptr = value;
 }
 
 static int
@@ -156,9 +166,12 @@ ND_alerts_init(void)
 	}
 	free(filename);
 
-	dr = XPLMRegisterDataAccessor(DR_NAME, xplmType_Int, 0, read_ND_alert,
+	dr = XPLMRegisterDataAccessor(DR_NAME, xplmType_Int, 0, read_int,
 	    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-	    NULL, NULL);
+	    &alert_status, NULL);
+	dr_overlay = XPLMRegisterDataAccessor(OVERLAY_DIS_DR, xplmType_Int, 1,
+	    read_int, write_int, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+	    NULL, NULL, NULL, &alert_overlay_dis, &alert_overlay_dis);
 	VERIFY(dr != NULL);
 	XPLMRegisterFlightLoopCallback(alert_sched_cb, ND_SCHED_INTVAL, NULL);
 	XPLMRegisterDrawCallback(nd_alert_draw_cb, xplm_Phase_Window, 0,
@@ -196,6 +209,13 @@ render_alert_texture(void)
 	if (!get_text_block_size(msg, overlay.face, font_size, &text_w,
 	    &text_h))
 		return;
+
+	/* If the old alert is still being displayed, avoid leaking it. */
+	if (overlay.buf != NULL) {
+		glDeleteTextures(1, &overlay.texture);
+		free(overlay.buf);
+		overlay.buf = NULL;
+	}
 
 	overlay.width = text_w + 2 * MARGIN_SIZE;
 	overlay.height = text_h + 2 * MARGIN_SIZE;
@@ -251,6 +271,7 @@ ND_alerts_fini()
 	memset(&overlay, 0, sizeof (overlay));
 
 	XPLMUnregisterDataAccessor(dr);
+	XPLMUnregisterDataAccessor(dr_overlay);
 	dr = NULL;
 	XPLMUnregisterFlightLoopCallback(alert_sched_cb, NULL);
 	XPLMUnregisterDrawCallback(nd_alert_draw_cb, xplm_Phase_Window, 0,
@@ -313,6 +334,12 @@ ND_alert(nd_alert_msg_type_t msg, nd_alert_level_t level, const char *rwy_id,
 	alert_status = msg;
 	alert_start_time = microclock();
 
-	if (xraas_state->nd_alert_overlay_enabled)
+	if (xraas_state->nd_alert_overlay_enabled && alert_overlay_dis == 0)
 		render_alert_texture();
+}
+
+void
+ND_alert_overlay_enable(void)
+{
+	alert_overlay_dis = 0;
 }

@@ -19,6 +19,19 @@
 # Make sure also to install macports's qt5-qtcreator package and
 # have `qmake' available in your $PATH.
 
+embed=no
+while getopts "e" opt; do
+	case "$opt" in
+	e)
+		embed=yes
+		;;
+	*)
+		echo "Bad option $opt. Use ./build_release to build X-RAAS2" >&2
+		exit 1
+		;;
+	esac
+done
+
 # We'll try to build on N+1 CPUs we have available. The extra +1 is to allow
 # for one make instance to be blocking on disk.
 NCPUS=$(( $(sysctl -n hw.ncpu) + 1 ))
@@ -27,14 +40,18 @@ rm -rf output
 mkdir -p output/64
 
 make distclean > /dev/null
-qmake -spec macx-clang && make -j $NCPUS && \
+qmake -set XRAAS_EMBED $embed && \
+    qmake -spec macx-clang && \
+    make -j $NCPUS && \
     mv libmac.xpl.dylib output/64/mac.xpl
 if [ $? != 0 ] ; then
   exit
 fi
 
 make distclean > /dev/null
-qmake -spec macx-clang-32 && make -j $NCPUS && \
+qmake -set XRAAS_EMBED $embed && \
+    qmake -spec macx-clang-32 && \
+    make -j $NCPUS && \
     mv libmac.xpl.dylib output/mac.xpl
 if [ $? != 0 ] ; then
   exit

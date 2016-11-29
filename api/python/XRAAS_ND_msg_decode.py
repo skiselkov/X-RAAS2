@@ -20,15 +20,10 @@
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-# AIRCRAFT DEVELOPER NOTICE:
-# Please contact X-RAAS's author, so your aircraft can be added to the
-# built-in exclusion list for which X-RAAS will automatically avoid
-# displaying the fallback ND alert overlay. Alternatively, you can ship
-# a custom X-RAAS.cfg with RAAS_ND_alert_overlay_enabled=false.
-
-
-# This is the ND message decode function. The dr_value arguments is the int
-# value of the sim/multiplayer/position/plane19_taxi_light_on dataref.
+# This is the ND message decode function. Arguments:
+#
+#  dr_value: integer value of the "xraas/ND_alert" dataref.
+#
 # The function returns a tuple of two values:
 #   * a string containing the decoded message to be displayed on the ND
 #   * an integer color code (0 for green, 1 for amber)
