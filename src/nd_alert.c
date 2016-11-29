@@ -31,6 +31,7 @@
 #include <XPLMProcessing.h>
 
 #include "assert.h"
+#include "dr_intf.h"
 #include "helpers.h"
 #include "init_msg.h"
 #include "perf.h"
@@ -66,20 +67,6 @@ static struct {
 	int			height;
 	uint8_t			*buf;
 } overlay = { NULL, NULL, 0, 0, 0, NULL };
-
-static int
-read_int(void *refcon)
-{
-	int *ptr = refcon;
-	return (*(ptr));
-}
-
-static void
-write_int(void *refcon, int value)
-{
-	int *ptr = refcon;
-	*ptr = value;
-}
 
 static int
 nd_alert_draw_cb(XPLMDrawingPhase phase, int before, void *refcon)
@@ -166,13 +153,10 @@ ND_alerts_init(void)
 	}
 	free(filename);
 
-	dr = XPLMRegisterDataAccessor(DR_NAME, xplmType_Int, 0, read_int,
-	    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-	    &alert_status, NULL);
-	dr_overlay = XPLMRegisterDataAccessor(OVERLAY_DIS_DR, xplmType_Int, 1,
-	    read_int, write_int, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-	    NULL, NULL, NULL, &alert_overlay_dis, &alert_overlay_dis);
+	dr = dr_intf_add_i(DR_NAME, &alert_status, B_FALSE);
 	VERIFY(dr != NULL);
+	dr_overlay = dr_intf_add_i(OVERLAY_DIS_DR, &alert_overlay_dis, B_TRUE);
+	VERIFY(dr_overlay != NULL);
 	XPLMRegisterFlightLoopCallback(alert_sched_cb, ND_SCHED_INTVAL, NULL);
 	XPLMRegisterDrawCallback(nd_alert_draw_cb, xplm_Phase_Window, 0,
 	    NULL);
@@ -270,8 +254,8 @@ ND_alerts_fini()
 
 	memset(&overlay, 0, sizeof (overlay));
 
-	XPLMUnregisterDataAccessor(dr);
-	XPLMUnregisterDataAccessor(dr_overlay);
+	dr_intf_remove(dr);
+	dr_intf_remove(dr_overlay);
 	dr = NULL;
 	XPLMUnregisterFlightLoopCallback(alert_sched_cb, NULL);
 	XPLMUnregisterDrawCallback(nd_alert_draw_cb, xplm_Phase_Window, 0,

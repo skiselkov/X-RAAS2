@@ -35,6 +35,7 @@
 #include "avl.h"
 #include "conf.h"
 #include "dbg_gui.h"
+#include "dr_intf.h"
 #include "geom.h"
 #include "gui.h"
 #include "helpers.h"
@@ -157,6 +158,47 @@ static accel_stop_dist_t accel_stop_distances[] = {
     { .max = NAN, .min = NAN, .ann = -1 }         /* list terminator */
 };
 
+enum {
+	OVRD_GPWS_PRIO,
+	OVRD_GPWS_PRIO_ACT,
+	OVRD_GPWS_INOP,
+	OVRD_GPWS_INOP_ACT,
+	OVRD_GPWS_FLAPS_OVRD,
+	OVRD_GPWS_FLAPS_OVRD_ACT,
+	OVRD_GPWS_TERR_OVRD,
+	OVRD_GPWS_TERR_OVRD_ACT,
+	OVRD_VAPP,
+	OVRD_VAPP_ACT,
+	OVRD_VREF,
+	OVRD_VREF_ACT,
+	NUM_OVERRIDES
+};
+
+static const char *override_dr_names[NUM_OVERRIDES] = {
+	"xraas/override/GPWS_prio",
+	"xraas/override/GPWS_prio_act",
+	"xraas/override/GPWS_inop",
+	"xraas/override/GPWS_inop_act",
+	"xraas/override/GPWS_flaps_ovrd",
+	"xraas/override/GPWS_flaps_ovrd_act",
+	"xraas/override/GPWS_terr_ovrd",
+	"xraas/override/GPWS_terr_ovrd_act",
+	"xraas/override/Vapp",
+	"xraas/override/Vapp_act",
+	"xraas/override/Vref",
+	"xraas/override/Vref_act"
+};
+
+/*
+ * These allow aircraft avionics to directly override our behavior
+ * without having to modify us to look into aircraft model-specific
+ * datarefs. They are exposed via datarefs under "xraas/override".
+ */
+static struct {
+	int		value;
+	XPLMDataRef	dr;
+} overrides[NUM_OVERRIDES];
+
 static bool_t plugin_conflict = B_FALSE;
 
 bool_t xraas_inited = B_FALSE;
@@ -208,6 +250,25 @@ static struct {
 	XPLMDataRef replay_mode;
 	XPLMDataRef plug_bus_load;
 } drs;
+
+static void
+overrides_init(void)
+{
+	for (int i = 0; i < NUM_OVERRIDES; i++) {
+		overrides[i].value = 0;
+		overrides[i].dr = dr_intf_add_i(override_dr_names[i],
+		    &overrides[i].value, B_TRUE);
+		VERIFY(overrides[i].dr != NULL);
+	}
+}
+
+static void
+overrides_fini(void)
+{
+	for (int i = 0; i < NUM_OVERRIDES; i++)
+		dr_intf_remove(overrides[i].dr);
+	memset(overrides, 0, sizeof (overrides));
+}
 
 /*
  * Returns true if `x' is within the numerical ranges in `rngs'.
@@ -337,9 +398,27 @@ view_is_external(void)
 	return (XPLMGetDatai(drs.view_is_ext) != 0);
 }
 
+/*
+ * Returns true if the GPWS computer is inoperative.
+ */
+bool_t
+GPWS_is_inop(void)
+{
+	if (overrides[OVRD_GPWS_INOP].value != 0)
+		return (overrides[OVRD_GPWS_INOP_ACT].value != 0);
+	else
+		return (XPLMGetDatai(drs.gpws_inop) != 0);
+}
+
+/*
+ * Returns true if the GPWS has requested priority for its annunciations.
+ * Our output is supressed.
+ */
 bool_t
 GPWS_has_priority(void)
 {
+	if (overrides[OVRD_GPWS_PRIO].value != 0)
+		return (overrides[OVRD_GPWS_PRIO_ACT].value != 0);
 	return (drs.gpws_prio ? XPLMGetDatai(drs.gpws_prio) != 0 : B_FALSE);
 }
 
@@ -366,7 +445,9 @@ chk_acf_dr(const char **icaos, const char *drname)
 static bool_t
 gpws_terr_ovrd(void)
 {
-	if (chk_acf_dr(FF757, "anim/75/button")) {
+	if (overrides[OVRD_GPWS_TERR_OVRD].value != 0) {
+		return (overrides[OVRD_GPWS_TERR_OVRD_ACT].value != 0);
+	} else if (chk_acf_dr(FF757, "anim/75/button")) {
 		return (XPLMGetDatai(XPLMFindDataRef("anim/75/button")) == 1);
 	} else if (chk_acf_dr(FF777, "anim/51/button")) {
 		return (XPLMGetDatai(XPLMFindDataRef("anim/51/button")) == 1);
@@ -392,7 +473,9 @@ gpws_terr_ovrd(void)
 static bool_t
 gpws_flaps_ovrd(void)
 {
-	if (chk_acf_dr(FF757, "anim/72/button")) {
+	if (overrides[OVRD_GPWS_FLAPS_OVRD].value != 0) {
+		return (overrides[OVRD_GPWS_FLAPS_OVRD_ACT].value != 0);
+	} else if (chk_acf_dr(FF757, "anim/72/button")) {
 		return (XPLMGetDatai(XPLMFindDataRef("anim/72/button")) == 1);
 	} else if (chk_acf_dr(FF777, "anim/79/button")) {
 		return (XPLMGetDatai(XPLMFindDataRef("anim/79/button")) == 1);
@@ -1389,14 +1472,30 @@ static double
 get_land_spd(bool_t *vref)
 {
 	double val;
+	enum { MIN_APPCH_SPD = 60 };
 
 	ASSERT(vref != NULL);
 	*vref = B_FALSE;
 
+	/* first try the overrides */
+	if (overrides[OVRD_VAPP].value != 0) {
+		if (overrides[OVRD_VAPP_ACT].value != 0)
+			return (overrides[OVRD_VAPP_ACT].value);
+		else
+			return (NAN);
+	}
+	if (overrides[OVRD_VREF].value != 0) {
+		*vref = B_TRUE;
+		if (overrides[OVRD_VREF_ACT].value != 0)
+			return (overrides[OVRD_VREF_ACT].value);
+		else
+			return (NAN);
+	}
+
 	/* FlightFactor 777 */
 	if (chk_acf_dr(FF777, "T7Avionics/fms/vref")) {
 		val = XPLMGetDatai(XPLMFindDataRef("T7Avionics/fms/vref"));
-		if (val < 100)
+		if (val < MIN_APPCH_SPD)
 			return (NAN);
 		*vref = B_FALSE;
 		return (val);
@@ -1405,14 +1504,14 @@ get_land_spd(bool_t *vref)
 		/* First try the Vapp, otherwise fall back to Vref */
 		val = XPLMGetDatai(XPLMFindDataRef(
 		    "sim/custom/xap/pfd/vappr_knots"));
-		if (val < 100) {
+		if (val < MIN_APPCH_SPD) {
 			*vref = B_FALSE;
 			val = XPLMGetDatai(XPLMFindDataRef(
 			    "sim/custom/xap/pfd/vref_knots"));
 		} else {
 			*vref = B_TRUE;
 		}
-		if (val < 100)
+		if (val < MIN_APPCH_SPD)
 			return (NAN);
 		return (val);
 	}
@@ -2025,7 +2124,7 @@ xraas_is_on(void)
 	turned_on = ((bus_volts[0] > MIN_BUS_VOLT ||
 	    bus_volts[1] > MIN_BUS_VOLT) &&
 	    XPLMGetDatai(drs.avionics_on) == 1 &&
-	    XPLMGetDatai(drs.gpws_inop) != 1);
+	    !GPWS_is_inop());
 
 	if (turned_on) {
 		float bus_volt;
@@ -2189,7 +2288,6 @@ xraas_init(void)
 
 	if (state.debug_graphical)
 		dbg_gui_init();
-
 	raas_dr_reset();
 
 	airportdb_create(&state.airportdb, xpdir);
@@ -2237,8 +2335,9 @@ xraas_init(void)
 
 	XPLMRegisterFlightLoopCallback(raas_exec_cb, EXEC_INTVAL, NULL);
 
-	xraas_inited = B_TRUE;
+	overrides_init();
 
+	xraas_inited = B_TRUE;
 	startup_complete();
 
 	return;
@@ -2303,6 +2402,8 @@ xraas_fini(void)
 
 	if (state.debug_graphical)
 		dbg_gui_fini();
+
+	overrides_fini();
 
 	xraas_inited = B_FALSE;
 }
