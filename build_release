@@ -56,8 +56,8 @@ DIST_FILES=(
     api/c/XRAAS_ND_msg_decode.h
     api/c/XRAAS_ND_msg_decode.c
     api/c/test_sample.c
-    docs/Avionics\ Integration\ Guide.pdf
-    docs/manual.pdf
+    Documentation/Avionics\ Integration\ Guide.pdf
+    Documentation/User\ Manual.pdf
     data/fonts/Aileron/Aileron-Regular.otf
     data/fonts/ShareTechMono/OFL.txt
     data/fonts/ShareTechMono/ShareTechMono-Regular.ttf
