@@ -327,17 +327,18 @@ static const char *save_acf_tooltip[] = {
     MAN_REF("5"),
     NULL
 };
-static const char *save_glob_tooltip[] = {
-    "Save the current configuration as the global configuration. The",
-    "configuration will be applied to any aircraft which doesn't have",
-    "its own aircraft-specific configuration.",
-    MAN_REF("5"),
-    NULL
-};
 static const char *reset_acf_tooltip[] = {
     "Reset the aircraft-specific configuration to its default values.",
     "If there is a global configuration, it will be applied. Otherwise,",
     "the default configuration will be applied.",
+    MAN_REF("5"),
+    NULL
+};
+#ifndef	XRAAS_IS_EMBEDDED
+static const char *save_glob_tooltip[] = {
+    "Save the current configuration as the global configuration. The",
+    "configuration will be applied to any aircraft which doesn't have",
+    "its own aircraft-specific configuration.",
     MAN_REF("5"),
     NULL
 };
@@ -348,6 +349,7 @@ static const char *reset_glob_tooltip[] = {
     MAN_REF("5"),
     NULL
 };
+#endif	/* XRAAS_IS_EMBEDDED */
 static const char *min_takeoff_dist_tooltip[] = {
     "The minimum runway length remaining that is considered to be safe for",
     "conducting a takeoff. If the runway length remaining is less than this",

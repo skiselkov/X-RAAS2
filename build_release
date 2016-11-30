@@ -164,11 +164,16 @@ EOF
 		exit
 		;;
 	*)
-		echo "Unknown option $opt. Try -h for help." >&2
+		echo "Try \"$0 -h\" for help." >&2
 		exit 1
 		;;
 	esac
 done
+
+if [[ "$#" -ge $OPTIND ]]; then
+	echo "Too many arguments. Try \"$0 -h\" for help" >&2
+	exit 1
+fi
 
 if ! ( cd FreeType && ./build_freetype_deps ); then
 	echo "FreeType build failed" >&2
