@@ -5,8 +5,9 @@ release, see:
 
 * https://github.com/skiselkov/X-RAAS2/releases
 
-The installation zip package includes a full user manual with installation
-instructions in `docs/manual.pdf`. Refer to `COPYING` for the license.
+The installation zip package includes a full user manual with
+installation instructions in Documentation/User Manual.pdf. Refer to
+COPYING for the license.
 
 ### BUILDING
 
@@ -29,8 +30,8 @@ into an aircraft model, instead run:
 
 $ ./build_release -e
 
-See docs/EMBEDDING.txt for more information on how to properly interface
-with an embedded version of X-RAAS.
+See Documentation/Avionics Integration Guide.pdf for more information on
+how to properly interface with an embedded version of X-RAAS.
 
 ### DISCLAIMER
 

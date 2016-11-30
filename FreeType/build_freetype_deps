@@ -15,7 +15,7 @@
 
 # Copyright 2016 Saso Kiselkov. All rights reserved.
 
-FREETYPE="FreeType/freetype-2.7.tar.gz"
+FREETYPE="freetype-2.7.tar.gz"
 FREETYPE_BUILDDIR="${FREETYPE/%.tar.gz/}"
 
 function build_freetype() {
@@ -27,6 +27,10 @@ function build_freetype() {
 	if ! [ -d "$FREETYPE_BUILDDIR" ]; then
 		tar -C "$(dirname "$FREETYPE_BUILDDIR")" -xzf "$FREETYPE" || \
 		    exit 1
+	fi
+	if [ -f "freetype-$PLATFORM/lib/libfreetype.a" ] && \
+	    [ "freetype-$PLATFORM/lib/libfreetype.a" -nt "$FREETYPE" ]; then
+		return
 	fi
 	(
 		cd "$FREETYPE_BUILDDIR"

@@ -45,105 +45,102 @@
 ######################################
 
 DIST_FILES=(
-    COPYING
-    README.md
-    api/COPYING
-    api/python/XRAAS_ND_msg_decode.py
-    api/python/test_sample.py
-    api/python/.gitignore
-    api/lua/test_sample.lua
-    api/lua/XRAAS_ND_msg_decode.lua
-    api/c/XRAAS_ND_msg_decode.h
-    api/c/XRAAS_ND_msg_decode.c
-    api/c/test_sample.c
-    Documentation/Avionics\ Integration\ Guide.pdf
-    Documentation/User\ Manual.pdf
-    data/fonts/Aileron/Aileron-Regular.otf
-    data/fonts/ShareTechMono/OFL.txt
-    data/fonts/ShareTechMono/ShareTechMono-Regular.ttf
-    data/msgs/female/0.wav
-    data/msgs/female/1.wav
-    data/msgs/female/2.wav
-    data/msgs/female/3.wav
-    data/msgs/female/30.wav
-    data/msgs/female/4.wav
-    data/msgs/female/5.wav
-    data/msgs/female/6.wav
-    data/msgs/female/7.wav
-    data/msgs/female/8.wav
-    data/msgs/female/9.wav
-    data/msgs/female/alt_set.wav
-    data/msgs/female/apch.wav
-    data/msgs/female/avail.wav
-    data/msgs/female/caution.wav
-    data/msgs/female/center.wav
-    data/msgs/female/deep_land.wav
-    data/msgs/female/feet.wav
-    data/msgs/female/flaps.wav
-    data/msgs/female/hundred.wav
-    data/msgs/female/left.wav
-    data/msgs/female/long_land.wav
-    data/msgs/female/meters.wav
-    data/msgs/female/on_rwy.wav
-    data/msgs/female/on_twy.wav
-    data/msgs/female/pause.wav
-    data/msgs/female/right.wav
-    data/msgs/female/rmng.wav
-    data/msgs/female/rwys.wav
-    data/msgs/female/short_rwy.wav
-    data/msgs/female/thousand.wav
-    data/msgs/female/too_fast.wav
-    data/msgs/female/too_high.wav
-    data/msgs/female/twy.wav
-    data/msgs/female/unstable.wav
-    data/msgs/male/0.wav
-    data/msgs/male/1.wav
-    data/msgs/male/2.wav
-    data/msgs/male/3.wav
-    data/msgs/male/30.wav
-    data/msgs/male/4.wav
-    data/msgs/male/5.wav
-    data/msgs/male/6.wav
-    data/msgs/male/7.wav
-    data/msgs/male/8.wav
-    data/msgs/male/9.wav
-    data/msgs/male/alt_set.wav
-    data/msgs/male/apch.wav
-    data/msgs/male/avail.wav
-    data/msgs/male/caution.wav
-    data/msgs/male/center.wav
-    data/msgs/male/deep_land.wav
-    data/msgs/male/feet.wav
-    data/msgs/male/flaps.wav
-    data/msgs/male/hundred.wav
-    data/msgs/male/left.wav
-    data/msgs/male/long_land.wav
-    data/msgs/male/meters.wav
-    data/msgs/male/on_rwy.wav
-    data/msgs/male/on_twy.wav
-    data/msgs/male/pause.wav
-    data/msgs/male/right.wav
-    data/msgs/male/rmng.wav
-    data/msgs/male/rwys.wav
-    data/msgs/male/short_rwy.wav
-    data/msgs/male/thousand.wav
-    data/msgs/male/too_fast.wav
-    data/msgs/male/too_high.wav
-    data/msgs/male/twy.wav
-    data/msgs/male/unstable.wav
+    COPYING				Documentation
+    api/COPYING				'Documentation/api'
+    api/python/XRAAS_ND_msg_decode.py	'Documentation/api/python'
+    api/python/test_sample.py		'Documentation/api/python'
+    api/python/.gitignore		'Documentation/api/python'
+    api/lua/test_sample.lua		'Documentation/api/lua'
+    api/lua/XRAAS_ND_msg_decode.lua	'Documentation/api/lua'
+    api/c/XRAAS_ND_msg_decode.h		'Documentation/api/c'
+    api/c/XRAAS_ND_msg_decode.c		'Documentation/api/c'
+    api/c/test_sample.c			'Documentation/api/c'
+    Documentation/Avionics\ Integration\ Guide.pdf	''
+    Documentation/User\ Manual.pdf			''
+    data/fonts/Aileron/Aileron-Regular.otf		''
+    data/fonts/ShareTechMono/OFL.txt			''
+    data/fonts/ShareTechMono/ShareTechMono-Regular.ttf	''
+    data/msgs/female/0.wav				''
+    data/msgs/female/1.wav				''
+    data/msgs/female/2.wav				''
+    data/msgs/female/3.wav				''
+    data/msgs/female/30.wav				''
+    data/msgs/female/4.wav				''
+    data/msgs/female/5.wav				''
+    data/msgs/female/6.wav				''
+    data/msgs/female/7.wav				''
+    data/msgs/female/8.wav				''
+    data/msgs/female/9.wav				''
+    data/msgs/female/alt_set.wav			''
+    data/msgs/female/apch.wav				''
+    data/msgs/female/avail.wav				''
+    data/msgs/female/caution.wav			''
+    data/msgs/female/center.wav				''
+    data/msgs/female/deep_land.wav			''
+    data/msgs/female/feet.wav				''
+    data/msgs/female/flaps.wav				''
+    data/msgs/female/hundred.wav			''
+    data/msgs/female/left.wav				''
+    data/msgs/female/long_land.wav			''
+    data/msgs/female/meters.wav				''
+    data/msgs/female/on_rwy.wav				''
+    data/msgs/female/on_twy.wav				''
+    data/msgs/female/pause.wav				''
+    data/msgs/female/right.wav				''
+    data/msgs/female/rmng.wav				''
+    data/msgs/female/rwys.wav				''
+    data/msgs/female/short_rwy.wav			''
+    data/msgs/female/thousand.wav			''
+    data/msgs/female/too_fast.wav			''
+    data/msgs/female/too_high.wav			''
+    data/msgs/female/twy.wav				''
+    data/msgs/female/unstable.wav			''
+    data/msgs/male/0.wav				''
+    data/msgs/male/1.wav				''
+    data/msgs/male/2.wav				''
+    data/msgs/male/3.wav				''
+    data/msgs/male/30.wav				''
+    data/msgs/male/4.wav				''
+    data/msgs/male/5.wav				''
+    data/msgs/male/6.wav				''
+    data/msgs/male/7.wav				''
+    data/msgs/male/8.wav				''
+    data/msgs/male/9.wav				''
+    data/msgs/male/alt_set.wav				''
+    data/msgs/male/apch.wav				''
+    data/msgs/male/avail.wav				''
+    data/msgs/male/caution.wav				''
+    data/msgs/male/center.wav				''
+    data/msgs/male/deep_land.wav			''
+    data/msgs/male/feet.wav				''
+    data/msgs/male/flaps.wav				''
+    data/msgs/male/hundred.wav				''
+    data/msgs/male/left.wav				''
+    data/msgs/male/long_land.wav			''
+    data/msgs/male/meters.wav				''
+    data/msgs/male/on_rwy.wav				''
+    data/msgs/male/on_twy.wav				''
+    data/msgs/male/pause.wav				''
+    data/msgs/male/right.wav				''
+    data/msgs/male/rmng.wav				''
+    data/msgs/male/rwys.wav				''
+    data/msgs/male/short_rwy.wav			''
+    data/msgs/male/thousand.wav				''
+    data/msgs/male/too_fast.wav				''
+    data/msgs/male/too_high.wav				''
+    data/msgs/male/twy.wav				''
+    data/msgs/male/unstable.wav				''
 )
 
-function install_file() {
-	FILE="$1"
-	DST="$2/$(dirname "$FILE")"
-
-	mkdir -p "$DST"
-	cp "$FILE" "$DST"
-}
-
 function install_xtra_files() {
-	for (( I=0; $I < ${#DIST_FILES[@]}; I=$I + 1 )); do
-		install_file "${DIST_FILES[$I]}" "X-RAAS2"
+	for (( I=0; $I < ${#DIST_FILES[@]}; I=$I + 2 )); do
+		FILE="${DIST_FILES[$I]}"
+		DSTDIR="${DIST_FILES[$I+1]}"
+		if [[ "$DSTDIR" = "" ]]; then
+			DSTDIR="$(dirname "$FILE")"
+		fi
+		mkdir -p "X-RAAS2/$DSTDIR"
+		cp "$FILE" "X-RAAS2/$DSTDIR"
 	done
 }
 
@@ -173,7 +170,7 @@ EOF
 	esac
 done
 
-if ! ./build_freetype_deps; then
+if ! ( cd FreeType && ./build_freetype_deps ); then
 	echo "FreeType build failed" >&2
 	exit 1
 fi
@@ -182,14 +179,16 @@ rm -rf X-RAAS2
 
 case `uname` in
 Linux)
-	( cd qmake && ./build-win-lin $embed ) && mkdir -p X-RAAS2/64 && \
-	    cp qmake/output/{win,lin}.xpl X-RAAS2 && \
+	( cd qmake && ./build-win-lin $embed ) && \
+	    mkdir -p X-RAAS2/{32,64} && \
+	    cp qmake/output/32/{win,lin}.xpl X-RAAS2/32 && \
 	    cp qmake/output/64/{win,lin}.xpl X-RAAS2/64 && \
 	    install_xtra_files
 	;;
 Darwin)
-	( cd qmake && ./build-mac $embed ) && mkdir -p X-RAAS2/64 && \
-	    cp qmake/output/mac.xpl X-RAAS2 && \
+	( cd qmake && ./build-mac $embed ) && \
+	    mkdir -p X-RAAS2/{32,64} && \
+	    cp qmake/output/32/mac.xpl X-RAAS2/32 && \
 	    cp qmake/output/64/mac.xpl X-RAAS2/64 && \
 	    install_xtra_files
 	;;
