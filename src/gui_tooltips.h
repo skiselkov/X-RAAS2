@@ -184,11 +184,11 @@ static const char *monitor_tooltips[][NUM_MONITORS] = {
 	NULL
     },
     {	/* APCH_FLAPS_UPPER_MON */
-	"ON: the 'TOO FAST' approach monitor upper gate (950-600 ft AFE) is "
-	"enabled.",
-	"OFF: the 'TOO FAST' approach monitor upper gate (950-600 ft AFE) is "
-	"disabled.",
-	MAN_REF("4.13"),
+	"ON: the late flap selection approach monitor upper gate "
+	"(950-600 ft AFE) is enabled.",
+	"OFF: the late flap selection approach monitor upper gate "
+	"(950-600 ft AFE) is disabled.",
+	MAN_REF("4.11"),
 	NULL
     },
     {	/* APCH_FLAPS_LOWER_MON */
@@ -196,7 +196,7 @@ static const char *monitor_tooltips[][NUM_MONITORS] = {
 	"(600-450 ft AFE) is enabled.",
 	"OFF: the late flap selection approach monitor lower gate "
 	"(600-450 ft AFE) is disabled.",
-	MAN_REF("4.13"),
+	MAN_REF("4.11"),
 	NULL
     },
     {	/* APCH_UNSTABLE_MON */
@@ -204,7 +204,7 @@ static const char *monitor_tooltips[][NUM_MONITORS] = {
 	"checked depend",
 	"    on the lower gate setting of the respective approach monitor.",
 	"OFF: the unstable approach monitor is disabled.",
-	MAN_REF("4.13"),
+	MAN_REF("4.11"),
 	NULL
     },
     {	/* ALTM_QNE_MON */
@@ -357,7 +357,7 @@ static const char *min_takeoff_dist_tooltip[] = {
 };
 static const char *min_landing_dist_tooltip[] = {
     "The minimum runway length remaining that is considered to be safe for",
-    "conduting a landing. If the runway length remaining is less than this",
+    "conducting a landing. If the runway length remaining is less than this",
     "value, caution annunciations will be issued.",
     MAN_REF("4.10"),
     NULL
