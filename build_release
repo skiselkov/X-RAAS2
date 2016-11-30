@@ -49,7 +49,6 @@ DIST_FILES=(
     api/COPYING				'Documentation/api'
     api/python/XRAAS_ND_msg_decode.py	'Documentation/api/python'
     api/python/test_sample.py		'Documentation/api/python'
-    api/python/.gitignore		'Documentation/api/python'
     api/lua/test_sample.lua		'Documentation/api/lua'
     api/lua/XRAAS_ND_msg_decode.lua	'Documentation/api/lua'
     api/c/XRAAS_ND_msg_decode.h		'Documentation/api/c'
