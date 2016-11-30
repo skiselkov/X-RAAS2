@@ -171,22 +171,11 @@ enum {
 	OVRD_VAPP_ACT,
 	OVRD_VREF,
 	OVRD_VREF_ACT,
+	TAKEOFF_FLAPS,
+	TAKEOFF_FLAPS_ACT,
+	LANDING_FLAPS,
+	LANDING_FLAPS_ACT,
 	NUM_OVERRIDES
-};
-
-static const char *override_dr_names[NUM_OVERRIDES] = {
-	"xraas/override/GPWS_prio",
-	"xraas/override/GPWS_prio_act",
-	"xraas/override/GPWS_inop",
-	"xraas/override/GPWS_inop_act",
-	"xraas/override/GPWS_flaps_ovrd",
-	"xraas/override/GPWS_flaps_ovrd_act",
-	"xraas/override/GPWS_terr_ovrd",
-	"xraas/override/GPWS_terr_ovrd_act",
-	"xraas/override/Vapp",
-	"xraas/override/Vapp_act",
-	"xraas/override/Vref",
-	"xraas/override/Vref_act"
 };
 
 /*
@@ -195,9 +184,31 @@ static const char *override_dr_names[NUM_OVERRIDES] = {
  * datarefs. They are exposed via datarefs under "xraas/override".
  */
 static struct {
-	int		value;
-	XPLMDataRef	dr;
-} overrides[NUM_OVERRIDES];
+	union {
+		int		value_i;
+		float		value_f;
+	};
+	XPLMDataRef		dr;
+	const XPLMDataTypeID	type;
+	const char		*name;
+} overrides[NUM_OVERRIDES] = {
+    { .type = xplmType_Int,	.name =  "xraas/override/GPWS_prio" },
+    { .type = xplmType_Int,	.name =  "xraas/override/GPWS_prio_act" },
+    { .type = xplmType_Int,	.name =  "xraas/override/GPWS_inop" },
+    { .type = xplmType_Int,	.name =  "xraas/override/GPWS_inop_act" },
+    { .type = xplmType_Int,	.name =  "xraas/override/GPWS_flaps_ovrd" },
+    { .type = xplmType_Int,	.name =  "xraas/override/GPWS_flaps_ovrd_act" },
+    { .type = xplmType_Int,	.name =  "xraas/override/GPWS_terr_ovrd" },
+    { .type = xplmType_Int,	.name =  "xraas/override/GPWS_terr_ovrd_act" },
+    { .type = xplmType_Int,	.name =  "xraas/override/Vapp" },
+    { .type = xplmType_Int,	.name =  "xraas/override/Vapp_act" },
+    { .type = xplmType_Int,	.name =  "xraas/override/Vref" },
+    { .type = xplmType_Int,	.name =  "xraas/override/Vref_act" },
+    { .type = xplmType_Int,	.name =  "xraas/override/takeoff_flaps" },
+    { .type = xplmType_Float,	.name =  "xraas/override/takeoff_flaps_act" },
+    { .type = xplmType_Int,	.name =  "xraas/override/landing_flaps" },
+    { .type = xplmType_Float,	.name =  "xraas/override/landing_flaps_act" }
+};
 
 static bool_t plugin_conflict = B_FALSE;
 
@@ -255,9 +266,15 @@ static void
 overrides_init(void)
 {
 	for (int i = 0; i < NUM_OVERRIDES; i++) {
-		overrides[i].value = 0;
-		overrides[i].dr = dr_intf_add_i(override_dr_names[i],
-		    &overrides[i].value, B_TRUE);
+		overrides[i].value_i = 0;
+		if (overrides[i].type == xplmType_Int) {
+			overrides[i].dr = dr_intf_add_i(overrides[i].name,
+			    &overrides[i].value_i, B_TRUE);
+		} else {
+			ASSERT(overrides[i].type == xplmType_Float);
+			overrides[i].dr = dr_intf_add_f(overrides[i].name,
+			    &overrides[i].value_f, B_TRUE);
+		}
 		VERIFY(overrides[i].dr != NULL);
 	}
 }
@@ -265,9 +282,11 @@ overrides_init(void)
 static void
 overrides_fini(void)
 {
-	for (int i = 0; i < NUM_OVERRIDES; i++)
+	for (int i = 0; i < NUM_OVERRIDES; i++) {
 		dr_intf_remove(overrides[i].dr);
-	memset(overrides, 0, sizeof (overrides));
+		overrides[i].dr = NULL;
+		overrides[i].value_i = 0;
+	}
 }
 
 /*
@@ -404,8 +423,8 @@ view_is_external(void)
 bool_t
 GPWS_is_inop(void)
 {
-	if (overrides[OVRD_GPWS_INOP].value != 0)
-		return (overrides[OVRD_GPWS_INOP_ACT].value != 0);
+	if (overrides[OVRD_GPWS_INOP].value_i != 0)
+		return (overrides[OVRD_GPWS_INOP_ACT].value_i != 0);
 	else
 		return (XPLMGetDatai(drs.gpws_inop) != 0);
 }
@@ -417,8 +436,8 @@ GPWS_is_inop(void)
 bool_t
 GPWS_has_priority(void)
 {
-	if (overrides[OVRD_GPWS_PRIO].value != 0)
-		return (overrides[OVRD_GPWS_PRIO_ACT].value != 0);
+	if (overrides[OVRD_GPWS_PRIO].value_i != 0)
+		return (overrides[OVRD_GPWS_PRIO_ACT].value_i != 0);
 	return (drs.gpws_prio ? XPLMGetDatai(drs.gpws_prio) != 0 : B_FALSE);
 }
 
@@ -445,8 +464,8 @@ chk_acf_dr(const char **icaos, const char *drname)
 static bool_t
 gpws_terr_ovrd(void)
 {
-	if (overrides[OVRD_GPWS_TERR_OVRD].value != 0) {
-		return (overrides[OVRD_GPWS_TERR_OVRD_ACT].value != 0);
+	if (overrides[OVRD_GPWS_TERR_OVRD].value_i != 0) {
+		return (overrides[OVRD_GPWS_TERR_OVRD_ACT].value_i != 0);
 	} else if (chk_acf_dr(FF757, "anim/75/button")) {
 		return (XPLMGetDatai(XPLMFindDataRef("anim/75/button")) == 1);
 	} else if (chk_acf_dr(FF777, "anim/51/button")) {
@@ -473,8 +492,8 @@ gpws_terr_ovrd(void)
 static bool_t
 gpws_flaps_ovrd(void)
 {
-	if (overrides[OVRD_GPWS_FLAPS_OVRD].value != 0) {
-		return (overrides[OVRD_GPWS_FLAPS_OVRD_ACT].value != 0);
+	if (overrides[OVRD_GPWS_FLAPS_OVRD].value_i != 0) {
+		return (overrides[OVRD_GPWS_FLAPS_OVRD_ACT].value_i != 0);
 	} else if (chk_acf_dr(FF757, "anim/72/button")) {
 		return (XPLMGetDatai(XPLMFindDataRef("anim/72/button")) == 1);
 	} else if (chk_acf_dr(FF777, "anim/79/button")) {
@@ -951,6 +970,39 @@ ground_runway_approach(void)
 		state.apch_rwys_ann = B_FALSE;
 }
 
+/*
+ * Returns true if the current flaps setting is valid for takeoff.
+ * If the FMS provides an override, we check the flaps setting exactly.
+ * Otherwise we use the {min,max}_takeoff_flap limits.
+ */
+static bool_t
+flaps_set4takeoff(void)
+{
+	double flaprqst = XPLMGetDataf(drs.flaprqst);
+
+	if (overrides[TAKEOFF_FLAPS].value_i != 0)
+		return (fabs(flaprqst - overrides[TAKEOFF_FLAPS_ACT].value_f) <
+		    0.01);
+	return (flaprqst >= state.min_takeoff_flap &&
+	    flaprqst <= state.max_takeoff_flap);
+}
+
+/*
+ * Returns true if the current flaps setting is valid for landing.
+ * If the FMS provides an override, we check the flaps setting exactly.
+ * Otherwise we use the min_landing_flap limit.
+ */
+static bool_t
+flaps_set4landing(void)
+{
+	double flaprqst = XPLMGetDataf(drs.flaprqst);
+
+	if (overrides[LANDING_FLAPS].value_i != 0)
+		return (fabs(flaprqst - overrides[LANDING_FLAPS_ACT].value_f) <
+		    0.01);
+	return (XPLMGetDataf(drs.flaprqst) >= state.min_landing_flap);
+}
+
 static void
 perform_on_rwy_ann(const char *rwy_id, vect2_t pos_v, vect2_t thr_v,
     vect2_t opp_thr_v, bool_t length_check, bool_t flap_check,
@@ -960,7 +1012,6 @@ perform_on_rwy_ann(const char *rwy_id, vect2_t pos_v, vect2_t thr_v,
 	size_t msg_len = 0;
 	double dist = 10000000;
 	int dist_ND = -1;
-	double flaprqst = XPLMGetDataf(drs.flaprqst);
 	bool_t allow_on_rwy_ND_alert = B_TRUE;
 	bool_t monitor_override = B_FALSE;
 	nd_alert_level_t level = (non_routine ? ND_ALERT_NONROUTINE :
@@ -991,8 +1042,7 @@ perform_on_rwy_ann(const char *rwy_id, vect2_t pos_v, vect2_t thr_v,
 		monitor_override = B_TRUE;
 	}
 
-	if ((flaprqst < state.min_takeoff_flap ||
-	    flaprqst > state.max_takeoff_flap) && !state.landing &&
+	if (!flaps_set4takeoff() && !state.landing &&
 	    !gpws_flaps_ovrd() && flap_check) {
 		append_msglist(&msg, &msg_len, FLAPS_MSG);
 		append_msglist(&msg, &msg_len, FLAPS_MSG);
@@ -1478,16 +1528,16 @@ get_land_spd(bool_t *vref)
 	*vref = B_FALSE;
 
 	/* first try the overrides */
-	if (overrides[OVRD_VAPP].value != 0) {
-		if (overrides[OVRD_VAPP_ACT].value != 0)
-			return (overrides[OVRD_VAPP_ACT].value);
+	if (overrides[OVRD_VAPP].value_i != 0) {
+		if (overrides[OVRD_VAPP_ACT].value_i != 0)
+			return (overrides[OVRD_VAPP_ACT].value_i);
 		else
 			return (NAN);
 	}
-	if (overrides[OVRD_VREF].value != 0) {
+	if (overrides[OVRD_VREF].value_i != 0) {
 		*vref = B_TRUE;
-		if (overrides[OVRD_VREF_ACT].value != 0)
-			return (overrides[OVRD_VREF_ACT].value);
+		if (overrides[OVRD_VREF_ACT].value_i != 0)
+			return (overrides[OVRD_VREF_ACT].value_i);
 		else
 			return (NAN);
 	}
@@ -1662,11 +1712,13 @@ apch_cfg_chk(const char *arpt_id, const char *rwy_id, double height_abv_thr,
 		dbg_log(apch_cfg_chk, 2, "gpa_act = %.02f rwy_gpa = %.02f",
 		    gpa_act, rwy_gpa);
 		if (rwy_key_tbl_get(flap_ann_table, arpt_id, rwy_id) == 0 &&
-		    XPLMGetDataf(drs.flaprqst) < state.min_landing_flap &&
-		    !gpws_flaps_ovrd() && state.monitors[flaps_mon]) {
-			dbg_log(apch_cfg_chk, 1, "FLAPS: flaprqst = %f "
-			    "min_flap = %f", XPLMGetDataf(drs.flaprqst),
-			    state.min_landing_flap);
+		    !flaps_set4landing() && !gpws_flaps_ovrd() &&
+		    state.monitors[flaps_mon]) {
+			dbg_log(apch_cfg_chk, 1, "FLAPS: flaprqst = %g "
+			    "min_flap = %g (ovrd: %g)",
+			    XPLMGetDataf(drs.flaprqst),
+			    state.min_landing_flap,
+			    overrides[LANDING_FLAPS_ACT].value_f);
 			if (!critical)
 				ann_apch_cfg(msg, msg_len, add_pause,
 				    FLAPS_MSG, ND_ALERT_FLAPS);
@@ -1858,7 +1910,7 @@ air_runway_approach(void)
 	 * likely trying to land onto something that's not a runway.
 	 */
 	if (in_apch_bbox == 0 && clb_rate < 0 && !gear_is_up() &&
-	    XPLMGetDataf(drs.flaprqst) >= state.min_landing_flap) {
+	    flaps_set4landing()) {
 		if (XPLMGetDataf(drs.rad_alt) <= OFF_RWY_HEIGHT_MAX) {
 			/* only annunciate if we're above the minimum height */
 			if (XPLMGetDataf(drs.rad_alt) >= OFF_RWY_HEIGHT_MIN &&

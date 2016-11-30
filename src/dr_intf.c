@@ -41,15 +41,49 @@ write_int_cb(void *refcon, int value)
 	*ptr = value;
 }
 
+static float
+read_float_cb(void *refcon)
+{
+	float *ptr = refcon;
+	return (*(ptr));
+}
+
+static void
+write_float_cb(void *refcon, float value)
+{
+	float *ptr = refcon;
+	*ptr = value;
+}
+
+/*
+ * Sets up an integer dataref that will read and optionally write to
+ * an int*.
+ */
 XPLMDataRef
 dr_intf_add_i(const char *dr_name, int *value, bool_t writable)
 {
 	return (XPLMRegisterDataAccessor(dr_name, xplmType_Int, writable,
-	    read_int_cb, writable ? write_int_cb : NULL, NULL, NULL, NULL,
-	    NULL, NULL, NULL, NULL, NULL, NULL, NULL, value,
+	    read_int_cb, writable ? write_int_cb : NULL, NULL, NULL,
+	    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, value,
 	    writable ? value : NULL));
 }
 
+/*
+ * Sets up a float dataref that will read and optionally write to
+ * an float*.
+ */
+XPLMDataRef
+dr_intf_add_f(const char *dr_name, float *value, bool_t writable)
+{
+	return (XPLMRegisterDataAccessor(dr_name, xplmType_Float, writable,
+	    NULL, NULL, read_float_cb, writable ? write_float_cb : NULL,
+	    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, value,
+	    writable ? value : NULL));
+}
+
+/*
+ * Destroys a dataref previously set up using dr_intf_add_{i,f}.
+ */
 void
 dr_intf_remove(XPLMDataRef dr)
 {

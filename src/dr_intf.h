@@ -34,6 +34,7 @@ extern "C" {
 #endif
 
 XPLMDataRef dr_intf_add_i(const char *dr_name, int *value, bool_t writable);
+XPLMDataRef dr_intf_add_f(const char *dr_name, float *value, bool_t writable);
 void dr_intf_remove(XPLMDataRef dr);
 
 #ifdef	__cplusplus
