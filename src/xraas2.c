@@ -132,8 +132,8 @@ typedef struct {
 /* Suppress 'approaching' annunciations in these altitude windows */
 #define	NUM_RWY_APCH_SUPP_WINDOWS 2
 static range_t RWY_APCH_SUPP_WINDOWS[NUM_RWY_APCH_SUPP_WINDOWS] = {
-    { .max = 530, .min = 480},
-    { .max = 430, .min = 380},
+	{ .max = 530, .min = 480},
+	{ .max = 430, .min = 380},
 };
 
 /*
@@ -232,7 +232,7 @@ static const char *IXEG737[] = { "B733", NULL };
 static const char *FF757[] = { "B752", "B753", NULL };
 static const char *FF777[] = { "B772", "B773", "B77L", "B77W", NULL };
 static const char *JAR[] = {
-    "A318", "A319", "A320", "A321", "A322", "A333", "A338", "A339", NULL
+	"A318", "A319", "A320", "A321", "A322", "A333", "A338", "A339", NULL
 };
 
 static struct {
@@ -1373,10 +1373,10 @@ ground_on_runway_aligned_arpt(const airport_t *arpt)
 	    rwy = AVL_NEXT(&arpt->rwys, rwy)) {
 		ASSERT(rwy->tora_bbox != NULL);
 		if (!airborne && vect2_in_poly(pos_v, rwy->tora_bbox)) {
-		        /*
-		         * In order to produce on-runway annunciations we need
-		         * to be both NOT airborne AND in the TORA bbox.
-		         */
+			/*
+			 * In order to produce on-runway annunciations we need
+			 * to be both NOT airborne AND in the TORA bbox.
+			 */
 			on_rwy = B_TRUE;
 			on_rwy_check(arpt_id, rwy->ends[0].id, hdg,
 			    rwy->ends[0].hdg, pos_v, rwy->ends[0].dthr_v,
@@ -1385,13 +1385,13 @@ ground_on_runway_aligned_arpt(const airport_t *arpt)
 			    rwy->ends[1].hdg, pos_v, rwy->ends[1].dthr_v,
 			    rwy->ends[0].thr_v);
 		} else if (!vect2_in_poly(pos_v, rwy->prox_bbox)) {
-		        /*
-		         * To reset the 'on-runway' annunciation state, we must
-		         * have left the wider approach bbox. This is to give
-		         * us some hysteresis in case we come onto the runway
-		         * at a very shallow angle and whether we're on the
-		         * runway or not could fluctuate.
-		         */
+			/*
+			 * To reset the 'on-runway' annunciation state, we must
+			 * have left the wider approach bbox. This is to give
+			 * us some hysteresis in case we come onto the runway
+			 * at a very shallow angle and whether we're on the
+			 * runway or not could fluctuate.
+			 */
 			rwy_key_tbl_remove(&state.on_rwy_ann, arpt_id,
 			    rwy->ends[0].id);
 			rwy_key_tbl_remove(&state.on_rwy_ann, arpt_id,
@@ -1773,7 +1773,7 @@ air_runway_approach_arpt_rwy(const airport_t *arpt, const runway_t *rwy,
 
 	const runway_end_t *rwy_end = &rwy->ends[endpt];
 	const char *rwy_id = rwy_end->id;
-	const char * arpt_id = arpt->icao;
+	const char *arpt_id = arpt->icao;
 	double elev = arpt->refpt.elev;
 	double rwy_hdg = rwy_end->hdg;
 	bool_t in_prox_bbox = vect2_in_poly(pos_v, rwy_end->apch_bbox);
@@ -2400,8 +2400,6 @@ errout:
 	if (airportdb_created)
 		airportdb_destroy(&state.airportdb);
 	ND_alerts_fini();
-
-	return;
 }
 
 void
@@ -2587,7 +2585,7 @@ XPluginReceiveMessage(XPLMPluginID src, int msg, void *param)
 	UNUSED(src);
 	UNUSED(param);
 
-	switch(msg) {
+	switch (msg) {
 	case XPLM_MSG_AIRPORT_LOADED:
 		xraas_fini();
 		xraas_init();

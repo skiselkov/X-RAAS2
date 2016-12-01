@@ -32,11 +32,11 @@
 #include <XPLMProcessing.h>
 
 #if	IBM
-# include <gl.h>
+#include <gl.h>
 #elif	APL
-# include <OpenGL/gl.h>
+#include <OpenGL/gl.h>
 #else	/* LIN */
-# include <GL/gl.h>
+#include <GL/gl.h>
 #endif	/* LIN */
 
 #include "assert.h"
@@ -191,7 +191,7 @@ log_init_msg(bool_t display, int timeout, const char *man_sect,
 		tex_bytes = calloc(tex_w * tex_h * 4, 1);
 
 		/* fill with a black, semi-transparent background */
-		for (int i = 0 ; i < tex_w * tex_h; i++)
+		for (int i = 0; i < tex_w * tex_h; i++)
 			tex_bytes[i * 4 + 3] = (uint8_t)(255 * 0.67);
 
 		if (!render_text_block(msg, face, INIT_MSG_FONT_SIZE,

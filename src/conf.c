@@ -11,7 +11,7 @@
  * http://www.illumos.org/license/CDDL.
  *
  * CDDL HEADER END
-*/
+ */
 /*
  * Copyright 2016 Saso Kiselkov. All rights reserved.
  */

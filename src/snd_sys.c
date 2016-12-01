@@ -163,7 +163,8 @@ top:
 	list_insert_tail(&playback_queue, ann);
 }
 
-bool_t modify_cur_msg(msg_type_t *msg, size_t msg_len, msg_prio_t prio)
+bool_t
+modify_cur_msg(msg_type_t *msg, size_t msg_len, msg_prio_t prio)
 {
 	ann_t *ann;
 

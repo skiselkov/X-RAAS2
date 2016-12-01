@@ -300,11 +300,11 @@ append_format(char **str, size_t *sz, const char *format, ...)
 void
 my_strlcpy(char *restrict dest, const char *restrict src, size_t cap)
 {
-        dest[cap - 1] = '\0';
-        strncpy(dest, src, cap - 1);
+	dest[cap - 1] = '\0';
+	strncpy(dest, src, cap - 1);
 }
 
-#if     IBM
+#if	IBM
 
 /*
  * C getline is a POSIX function, so on Windows, we need to roll our own.
@@ -343,7 +343,7 @@ getline(char **line_p, size_t *cap_p, FILE *fp)
 	return (n);
 }
 
-#endif  /* IBM */
+#endif	/* IBM */
 
 /*
  * Creates a file path string from individual path components. The

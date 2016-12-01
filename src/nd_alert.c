@@ -18,11 +18,11 @@
 #include <string.h>
 
 #if	IBM
-# include <gl.h>
+#include <gl.h>
 #elif	APL
-# include <OpenGL/gl.h>
+#include <OpenGL/gl.h>
 #else	/* LIN */
-# include <GL/gl.h>
+#include <GL/gl.h>
 #endif	/* LIN */
 
 #include <XPLMDataAccess.h>
@@ -46,7 +46,7 @@
 #define	ND_SCHED_INTVAL		1.0
 
 const char *ND_alert_overlay_default_font = "ShareTechMono" DIRSEP_S
-    "ShareTechMono-Regular.ttf";
+	"ShareTechMono-Regular.ttf";
 const int ND_alert_overlay_default_font_size = 28;
 
 static bool_t			inited = B_FALSE;
@@ -206,7 +206,7 @@ render_alert_texture(void)
 	overlay.buf = calloc(overlay.width * overlay.height * 4, 1);
 
 	/* fill with a black, semi-transparent background */
-	for (int i = 0 ; i < overlay.width * overlay.height; i++)
+	for (int i = 0; i < overlay.width * overlay.height; i++)
 		overlay.buf[i * 4 + 3] = (uint8_t)(255 * 0.67);
 
 	if (color == XRAAS_ND_ALERT_GREEN) {

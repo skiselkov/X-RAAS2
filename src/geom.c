@@ -484,7 +484,7 @@ ecef2geo(vect3_t pos, const ellip_t *ellip)
 
 	/*
 	 * 3.0 find solution to:
-	 *       t^4 + 2*E*t^3 + 2*F*t - 1 = 0
+	 *	t^4 + 2*E*t^3 + 2*F*t - 1 = 0
 	 */
 	p = (4.0 / 3.0) * (e * f + 1.0);
 	q = 2.0 * (POW2(e) - POW2(f));
@@ -499,7 +499,7 @@ ecef2geo(vect3_t pos, const ellip_t *ellip)
 
 	/*
 	 * 4.0 improve v
-	 *       NOTE: not really necessary unless point is near pole
+	 *	NOTE: not really necessary unless point is near pole
 	 */
 	if (POW2(v) < fabs(p))
 		v = -(POW3(v) + 2.0 * q) / (3.0 * p);
@@ -511,7 +511,8 @@ ecef2geo(vect3_t pos, const ellip_t *ellip)
 	/*
 	 * 5.0 compute height above ellipsoid
 	 */
-	res.elev= (r - ellip->a * t) * cos(res.lat) + (pos.z - B) * sin(res.lat);
+	res.elev = (r - ellip->a * t) * cos(res.lat) +
+	    (pos.z - B) * sin(res.lat);
 
 	/*
 	 *   6.0 compute longitude east of Greenwich
@@ -807,7 +808,7 @@ is_valid_poly(const vect2_t *poly)
 static unsigned
 get_poly_num_pts(const vect2_t *poly)
 {
-	for (unsigned i = 0;; i++) {
+	for (unsigned i = 0; ; i++) {
 		if (IS_NULL_VECT(poly[i]))
 			return (i);
 	}
@@ -897,9 +898,8 @@ dir2hdg(vect2_t dir)
 }
 
 /*
- * Displaces a given geodetic position 
+ * Displaces a given geodetic position.
  */
-
 geo_pos2_t
 geo_displace(const ellip_t *ellip, geo_pos2_t pos, double truehdg, double dist)
 {
@@ -1478,7 +1478,7 @@ quad_bezier_func(double x, const bezier_t *func)
 			 * b = t(p2 - p1) + p1
 			 * x = t(b - a) + a
 			 * x = t(t(p2 - p1) + p1 - t(p1 - p0) + p0) +
-			 *     + t(p1 - p0) + p0
+			 *	+ t(p1 - p0) + p0
 			 *
 			 * Rearranging, we obtain this quadratic equation:
 			 *

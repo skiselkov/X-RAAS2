@@ -192,31 +192,31 @@ static int last_mouse_x, last_mouse_y;
 static uint64_t mouse_moved_time;
 
 static const char *monitor_names[NUM_MONITORS] = {
-    "Approaching runway on ground",	/* APCH_RWY_ON_GND_MON */
-    "Approaching runway in air",	/* APCH_RWY_IN_AIR_MON */
-    "Approaching short runway in air",	/* APCH_RWY_IN_AIR_SHORT_MON */
-    "On runway lined up",		/* ON_RWY_LINEUP_MON */
-    "On short runway lined up",		/* ON_RWY_LINEUP_SHORT_MON */
-    "On runway lined up flaps",		/* ON_RWY_FLAP_MON */
-    "Short runway takeoff",		/* ON_RWY_TKOFF_SHORT_MON */
-    "On runway extended holding",	/* ON_RWY_HOLDING_MON */
-    "Taxiway takeoff",			/* TWY_TKOFF_MON */
-    "Distance remaining on landing",	/* DIST_RMNG_LAND_MON */
-    "Distance remaining on RTO",	/* DIST_RMNG_RTO_MON */
-    "Taxiway landing",			/* TWY_LAND_MON */
-    "Approaching runway end",		/* RWY_END_MON */
-    "Too high approach (upper gate)",	/* APCH_TOO_HIGH_UPPER_MON */
-    "Too high approach (lower gate)",	/* APCH_TOO_HIGH_LOWER_MON */
-    "Too fast approach (upper gate)",	/* APCH_TOO_FAST_UPPER_MON */
-    "Too fast approach (lower gate)",	/* APCH_TOO_FAST_LOWER_MON */
-    "Landing flaps (upper gate)",	/* APCH_FLAPS_UPPER_MON */
-    "Landing flaps (lower gate)",	/* APCH_FLAPS_LOWER_MON */
-    "Unstable approach",		/* APCH_UNSTABLE_MON */
-    "QNE altimeter setting",		/* ALTM_QNE_MON */
-    "QNH altimeter setting",		/* ALTM_QNH_MON */
-    "QFE altimeter setting",		/* ALTM_QFE_MON */
-    "Long landing",			/* LONG_LAND_MON */
-    "Late rotation"			/* LATE_ROTATION_MON */
+	"Approaching runway on ground",		/* APCH_RWY_ON_GND_MON */
+	"Approaching runway in air",		/* APCH_RWY_IN_AIR_MON */
+	"Approaching short runway in air",	/* APCH_RWY_IN_AIR_SHORT_MON */
+	"On runway lined up",			/* ON_RWY_LINEUP_MON */
+	"On short runway lined up",		/* ON_RWY_LINEUP_SHORT_MON */
+	"On runway lined up flaps",		/* ON_RWY_FLAP_MON */
+	"Short runway takeoff",			/* ON_RWY_TKOFF_SHORT_MON */
+	"On runway extended holding",		/* ON_RWY_HOLDING_MON */
+	"Taxiway takeoff",			/* TWY_TKOFF_MON */
+	"Distance remaining on landing",	/* DIST_RMNG_LAND_MON */
+	"Distance remaining on RTO",		/* DIST_RMNG_RTO_MON */
+	"Taxiway landing",			/* TWY_LAND_MON */
+	"Approaching runway end",		/* RWY_END_MON */
+	"Too high approach (upper gate)",	/* APCH_TOO_HIGH_UPPER_MON */
+	"Too high approach (lower gate)",	/* APCH_TOO_HIGH_LOWER_MON */
+	"Too fast approach (upper gate)",	/* APCH_TOO_FAST_UPPER_MON */
+	"Too fast approach (lower gate)",	/* APCH_TOO_FAST_LOWER_MON */
+	"Landing flaps (upper gate)",		/* APCH_FLAPS_UPPER_MON */
+	"Landing flaps (lower gate)",		/* APCH_FLAPS_LOWER_MON */
+	"Unstable approach",			/* APCH_UNSTABLE_MON */
+	"QNE altimeter setting",		/* ALTM_QNE_MON */
+	"QNH altimeter setting",		/* ALTM_QNH_MON */
+	"QFE altimeter setting",		/* ALTM_QFE_MON */
+	"Long landing",				/* LONG_LAND_MON */
+	"Late rotation"				/* LATE_ROTATION_MON */
 };
 
 static void
@@ -284,8 +284,8 @@ gen_config(void)
 		XPGetWidgetDescriptor(text_fields.text_field, buf, \
 		    sizeof (buf) - 1); \
 		if (strlen(buf) != 0 && strcmp(buf, "default") != 0) \
-			append_format(&conf_text, &conf_sz, "%s = %s" NEWLINE, \
-			    #text_field, buf);\
+			append_format(&conf_text, &conf_sz, "%s = %s" \
+			    NEWLINE, #text_field, buf);\
 	} while (0)
 
 	GEN_TEXT_CONF(min_engines);
@@ -315,8 +315,8 @@ gen_config(void)
 	do { \
 		double value = XPGetWidgetProperty(scrollbars.scrollbar, \
 		    xpProperty_ScrollBarSliderPosition, NULL) * multiplier; \
-		append_format(&conf_text, &conf_sz, "%s = %g" NEWLINE, \
-		    #scrollbar, value); \
+		append_format(&conf_text, &conf_sz, "%s = %g" \
+		    NEWLINE, #scrollbar, value); \
 	} while (0)
 
 	GEN_FRACT_CONF(long_land_lim_fract, 0.01);
@@ -675,7 +675,7 @@ main_window_cb(XPWidgetMessage msg, XPWidgetID widget, intptr_t param1,
 				    xpProperty_ScrollBarSliderPosition, NULL),
 				    buf);
 			} else {
-				double val= XPGetWidgetProperty(scrollbar,
+				double val = XPGetWidgetProperty(scrollbar,
 				    xpProperty_ScrollBarSliderPosition, NULL) *
 				    scb->display_multiplier;
 				if (scb->suffix != NULL)

@@ -1085,7 +1085,7 @@ rwy_fuzzy_match(const runway_t *rwy, int endpt, const char *orwy_id,
 		    dthr1_v = geo2fpp(GEO3_TO_GEO2(rwy->ends[endpt].thr), &fpp),
 		    thr2_v = geo2fpp(GEO3_TO_GEO2(rwy->ends[!endpt].thr), &fpp),
 		    thr1_v = vect2_add(vect2_set_abs(vect2_sub(thr2_v, dthr1_v),
-			rwy_end->displ), dthr1_v),
+		    rwy_end->displ), dthr1_v),
 		    othr_v = geo2fpp(orwy_thr, &fpp),
 		    thr1_to_othr_v = vect2_sub(othr_v, thr1_v);
 		double displ = vect2_abs(thr1_to_othr_v);
@@ -1603,9 +1603,9 @@ check_airac_cycle(airportdb_t *db)
 	}
 	if (!get_xp11_airac_cycle(db->xpdir, &xp_cycle)) {
 		if ((cycle_str = file2str(db->xpdir, "Custom Data", "GNS430",
-			    "navdata", "cycle_info.txt", NULL)) == NULL)
+		    "navdata", "cycle_info.txt", NULL)) == NULL)
 			cycle_str = file2str(db->xpdir, "Resources", "GNS430",
-				    "navdata", "cycle_info.txt", NULL);
+			    "navdata", "cycle_info.txt", NULL);
 		if (cycle_str != NULL) {
 			char *sep = strstr(cycle_str, "AIRAC cycle");
 			if (sep != NULL)

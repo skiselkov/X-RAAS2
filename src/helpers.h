@@ -46,7 +46,7 @@ extern "C" {
 #endif	/* !IBM */
 
 #if	defined(__GNUC__) || defined(__clang__)
-#define	PRINTF_ATTR(x)	__attribute__ ((format (printf, x, x + 1)))
+#define	PRINTF_ATTR(x)	__attribute__((format(printf, x, x + 1)))
 #ifndef	BSWAP32
 #define	BSWAP16(x)	__builtin_bswap16((x))
 #define	BSWAP32(x)	__builtin_bswap32((x))
@@ -172,8 +172,8 @@ bool_t is_valid_rwy_ID(const char *rwy_ID);
 char **strsplit(const char *input, char *sep, bool_t skip_empty, size_t *num);
 void free_strlist(char **comps, size_t len);
 void strip_space(char *line);
-void append_format(char **str, size_t *sz, const char *format, ...)
-    PRINTF_ATTR(3);
+void append_format(char **str, size_t *sz, const char *format,
+	...) PRINTF_ATTR(3);
 
 char *mkpathname(const char *comp, ...);
 char *mkpathname_v(const char *comp, va_list ap);
@@ -183,9 +183,9 @@ char *file2str(const char *comp, ...);
 ssize_t filesz(const char *filename);
 
 void my_strlcpy(char *restrict dest, const char *restrict src, size_t cap);
-#if     IBM
+#if	IBM
 ssize_t getline(char **lineptr, size_t *n, FILE *stream);
-#endif  /* IBM */
+#endif	/* IBM */
 
 #if	defined(__GNUC__) || defined(__clang__)
 #define	highbit64(x)	(64 - __builtin_clzll(x) - 1)

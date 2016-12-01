@@ -11,7 +11,7 @@
  * http://www.illumos.org/license/CDDL.
  *
  * CDDL HEADER END
-*/
+ */
 /*
  * Copyright 2016 Saso Kiselkov. All rights reserved.
  */
@@ -130,7 +130,7 @@ log_backtrace(void)
 	backtrace_buf[0] = '\0';
 	my_strlcpy(backtrace_buf, BACKTRACE_STR, sizeof (backtrace_buf));
 
-	for(unsigned i = 0; i < frames; i++) {
+	for (unsigned i = 0; i < frames; i++) {
 		/*
 		 * This is needed because some dunce at Microsoft thought
 		 * it'd be a swell idea to design the SymFromAddr function to

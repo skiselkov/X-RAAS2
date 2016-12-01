@@ -16,11 +16,11 @@
  */
 
 #if	IBM
-# include <gl.h>
+#include <gl.h>
 #elif	APL
-# include <OpenGL/gl.h>
+#include <OpenGL/gl.h>
 #else	/* LIN */
-# include <GL/gl.h>
+#include <GL/gl.h>
 #endif	/* LIN */
 
 #include <XPLMDataAccess.h>

@@ -124,7 +124,7 @@ rwy_key_tbl_set(rwy_key_tbl_t *tbl, const char *arpt_id, const char *rwy_id,
 		dbg_log(rwy_key, 1, "%s[%s/%s] = %d", tbl->name, arpt_id,
 		    rwy_id, value);
 		key->value = value;
-        }
+	}
 }
 
 /*

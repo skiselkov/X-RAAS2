@@ -29,31 +29,31 @@
 debug_config_t xraas_debug_config;
 
 const char *const monitor_conf_keys[NUM_MONITORS] = {
-    "apch_rwy_on_gnd_mon",		/* APCH_RWY_ON_GND_MON */
-    "apch_rwy_in_air_mon",		/* APCH_RWY_IN_AIR_MON */
-    "apch_rwy_in_air_short_mon",	/* APCH_RWY_IN_AIR_SHORT_MON */
-    "on_rwy_lineup_mon",		/* ON_RWY_LINEUP_MON */
-    "on_rwy_lineup_short_mon",		/* ON_RWY_LINEUP_SHORT_MON */
-    "on_rwy_lineup_flaps_mon",		/* ON_RWY_FLAP_MON */
-    "on_rwy_tkoff_short_mon",		/* ON_RWY_TKOFF_SHORT_MON */
-    "on_rwy_hold_mon",			/* ON_RWY_HOLDING_MON */
-    "twy_tkoff_mon",			/* TWY_TKOFF_MON */
-    "dist_rmng_land_mon",		/* DIST_RMNG_LAND_MON */
-    "dist_rmng_rto_mon",		/* DIST_RMNG_RTO_MON */
-    "twy_land_mon",			/* TWY_LAND_MON */
-    "rwy_end_mon",			/* RWY_END_MON */
-    "apch_too_high_upper_mon",		/* APCH_TOO_HIGH_UPPER_MON */
-    "apch_too_high_lower_mon",		/* APCH_TOO_HIGH_LOWER_MON */
-    "apch_too_fast_upper_mon",		/* APCH_TOO_FAST_UPPER_MON */
-    "apch_too_fast_lower_mon",		/* APCH_TOO_FAST_LOWER_MON */
-    "apch_flaps_upper_mon",		/* APCH_FLAPS_UPPER_MON */
-    "apch_flaps_lower_mon",		/* APCH_FLAPS_LOWER_MON */
-    "apch_unstable_mon",		/* APCH_UNSTABLE_MON */
-    "altm_qne_mon",			/* ALTM_QNE_MON */
-    "altm_qnh_mon",			/* ALTM_QNH_MON */
-    "altm_qfe_mon",			/* ALTM_QFE_MON */
-    "long_land_mon",			/* LONG_LAND_MON */
-    "late_rotation_mon"			/* LATE_ROTATION_MON */
+	"apch_rwy_on_gnd_mon",		/* APCH_RWY_ON_GND_MON */
+	"apch_rwy_in_air_mon",		/* APCH_RWY_IN_AIR_MON */
+	"apch_rwy_in_air_short_mon",	/* APCH_RWY_IN_AIR_SHORT_MON */
+	"on_rwy_lineup_mon",		/* ON_RWY_LINEUP_MON */
+	"on_rwy_lineup_short_mon",	/* ON_RWY_LINEUP_SHORT_MON */
+	"on_rwy_lineup_flaps_mon",	/* ON_RWY_FLAP_MON */
+	"on_rwy_tkoff_short_mon",	/* ON_RWY_TKOFF_SHORT_MON */
+	"on_rwy_hold_mon",		/* ON_RWY_HOLDING_MON */
+	"twy_tkoff_mon",		/* TWY_TKOFF_MON */
+	"dist_rmng_land_mon",		/* DIST_RMNG_LAND_MON */
+	"dist_rmng_rto_mon",		/* DIST_RMNG_RTO_MON */
+	"twy_land_mon",			/* TWY_LAND_MON */
+	"rwy_end_mon",			/* RWY_END_MON */
+	"apch_too_high_upper_mon",	/* APCH_TOO_HIGH_UPPER_MON */
+	"apch_too_high_lower_mon",	/* APCH_TOO_HIGH_LOWER_MON */
+	"apch_too_fast_upper_mon",	/* APCH_TOO_FAST_UPPER_MON */
+	"apch_too_fast_lower_mon",	/* APCH_TOO_FAST_LOWER_MON */
+	"apch_flaps_upper_mon",		/* APCH_FLAPS_UPPER_MON */
+	"apch_flaps_lower_mon",		/* APCH_FLAPS_LOWER_MON */
+	"apch_unstable_mon",		/* APCH_UNSTABLE_MON */
+	"altm_qne_mon",			/* ALTM_QNE_MON */
+	"altm_qnh_mon",			/* ALTM_QNH_MON */
+	"altm_qfe_mon",			/* ALTM_QFE_MON */
+	"long_land_mon",		/* LONG_LAND_MON */
+	"late_rotation_mon"		/* LATE_ROTATION_MON */
 };
 
 static void
