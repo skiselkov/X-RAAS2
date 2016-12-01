@@ -33,17 +33,16 @@
  * to string translation. It defines a static ft_errors table that we can
  * traverse to translate an error code into a string.
  */
-#undef FTERRORS_H_
-#define FT_ERRORDEF( e, v, s )  { e, s },
-#define FT_ERROR_START_LIST     {
-#define FT_ERROR_END_LIST       { 0, NULL } };
+#undef	FTERRORS_H_
+#define	FT_ERRORDEF( e, v, s )	{ e, s },
+#define	FT_ERROR_START_LIST	{
+#define	FT_ERROR_END_LIST	{ 0, NULL } };
 
 static const struct {
 	int		err_code;
 	const char	*err_msg;
 } ft_errors[] =
 #include FT_ERRORS_H
-
 
 #define	LINE_MARGIN_MULTIPLIER	1.2
 
@@ -106,7 +105,7 @@ blit_glyph(const FT_Bitmap *bitmap, uint8_t *rgba_texture,
 		BLEND_LIN(rgba_texture[tex_coord + 1], g, bitmap->buffer[i]);
 		BLEND_LIN(rgba_texture[tex_coord + 2], b, bitmap->buffer[i]);
 		BLEND_LIN(rgba_texture[tex_coord + 3], 255, bitmap->buffer[i]);
-#undef	BLEND
+#undef	BLEND_LIN
 	}
 }
 
