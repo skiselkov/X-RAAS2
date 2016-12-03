@@ -768,7 +768,7 @@ parse_apt_dat_21_line(airport_t *arpt, const char *filename, int line_num,
 	 * perform these checks.
 	 */
 	if (displ < 0 || displ > rwy->length ||
-	    fabs(rel_hdg(true_hdg, re->hdg) > VGSI_HDG_MATCH_THRESH)) {
+	    fabs(rel_hdg(true_hdg, re->hdg)) > VGSI_HDG_MATCH_THRESH) {
 		dbg_log(tile, 1, "%s:%d: misaligned or misplaced PAPI/VASI "
 		    "(%.1f/%.1f, %.0f/%.0f, %s/%s)! Attempting to try and "
 		    "find out where it belongs.", filename, line_num, displ,
