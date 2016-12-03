@@ -48,6 +48,7 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_GNU_SOURCE -D_FILE_OFFSET_BITS=64")
 #libraries
 if(APPLE)
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -arch x86_64 -Wno-deprecated")
+	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mmacosx-version-min=10.7")
 endif()
 include_directories(plugin PUBLIC "../SDK/CHeaders/XPLM/"
     "../SDK/CHeaders/Widgets" "../OpenAL/include")
@@ -95,7 +96,8 @@ if(APPLE)
 	set(PLUGIN_OUTPUT_FILENAME "mac.xpl")
 	SET_TARGET_PROPERTIES(plugin PROPERTIES LINK_FLAGS
 	    "${CMAKE_SHARED_LINKER_FLAGS} -fPIC -fvisibility=hidden -bundle \
-	    -L../FreeType/freetype-mac-64/lib -lfreetype")
+	    -L../FreeType/freetype-mac-64/lib -lfreetype \
+	    -mmacosx-version-min=10.7")
 elseif(UNIX)
 	set(PLUGIN_OUTPUT_FILENAME "lin.xpl")
 	SET_TARGET_PROPERTIES(plugin PROPERTIES LINK_FLAGS

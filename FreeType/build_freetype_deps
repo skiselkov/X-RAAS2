@@ -64,8 +64,10 @@ case `uname` in
 		;;
 	Darwin)
 		NCPUS=$(( $(sysctl -n hw.ncpu) + 1 ))
-		build_freetype "mac-64"
-		build_freetype "mac-32" "" "-m32" "-m32"
+		build_freetype "mac-64" "" "-mmacosx-version-min=10.6" \
+		    "-mmacosx-version-min=10.6"
+		build_freetype "mac-32" "" "-mmacosx-version-min=10.6 -m32" \
+		    "-mmacosx-version-min=10.6 -m32"
 		;;
 	*)
 		echo "Unsupported build platform" >&2
