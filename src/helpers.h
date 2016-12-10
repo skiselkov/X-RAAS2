@@ -29,6 +29,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <sys/types.h>
+#include <math.h>
 
 #include "types.h"
 
@@ -112,13 +113,14 @@ extern "C" {
 static inline bool_t
 is_valid_lat(double lat)
 {
-	return (lat <= 90.0 && lat >= -90.0);
+	enum { ARPT_LAT_LIMIT = 80 };
+	return (!isnan(lat) && fabs(lat) < ARPT_LAT_LIMIT);
 }
 
 static inline bool_t
 is_valid_lon(double lon)
 {
-	return (lon <= 180.0 && lon >= -180.0);
+	return (!isnan(lon) && fabs(lon) <= 180.0);
 }
 
 static inline bool_t
@@ -167,6 +169,7 @@ bool_t is_valid_loc_freq(double freq_mhz);
 bool_t is_valid_ndb_freq(double freq_khz);
 bool_t is_valid_tacan_freq(double freq_mhz);
 bool_t is_valid_rwy_ID(const char *rwy_ID);
+void xlate_US_rwy_ID(char *rwy_ID);
 
 /* string processing helpers */
 char **strsplit(const char *input, char *sep, bool_t skip_empty, size_t *num);

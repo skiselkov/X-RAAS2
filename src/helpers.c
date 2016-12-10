@@ -182,6 +182,32 @@ is_valid_rwy_ID(const char *rwy_ID)
 	return (B_TRUE);
 }
 
+void
+xlate_US_rwy_ID(char *rwy_ID)
+{
+	int len = strlen(rwy_ID);
+	char dig = 0, suffix = 0;
+
+	if (len < 1 || len > 2)
+		return;
+	dig = rwy_ID[0];
+	if (dig < '1' || dig > '9')
+		return;
+	if (len == 2) {
+		suffix = rwy_ID[1];
+		if (suffix != 'L' && suffix != 'C' && suffix != 'R')
+			return;
+	}
+	rwy_ID[0] = '0';
+	rwy_ID[1] = dig;
+	if (len == 2) {
+		rwy_ID[2] = suffix;
+		rwy_ID[3] = '\0';
+	} else {
+		rwy_ID[2] = '\0';
+	}
+}
+
 /*
  * Splits up an input string by separator into individual components.
  * The input string is `input' and the separator string is `sep'. The

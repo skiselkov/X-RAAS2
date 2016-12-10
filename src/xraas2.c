@@ -654,14 +654,9 @@ rwy_id_to_msg(const char *rwy_id, msg_type_t **msg, size_t *len)
 	ASSERT(rwy_id != NULL);
 	ASSERT(msg != NULL);
 	ASSERT(len != NULL);
-	ASSERT(strlen(rwy_id) >= 2);
+	ASSERT(is_valid_rwy_ID(rwy_id));
 
 	char first_digit = rwy_id[0];
-
-	if (!is_valid_rwy_ID(rwy_id)) {
-		logMsg("Warning: invalid runway ID encountered (%s)", rwy_id);
-		return;
-	}
 
 	if (first_digit != '0' || !state.us_runway_numbers)
 		append_msglist(msg, len, first_digit - '0');
