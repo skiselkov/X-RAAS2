@@ -870,15 +870,13 @@ parse_apt_dat_100_line(airport_t *arpt, const char *filename,
 	rwy->arpt = arpt;
 	rwy->width = atof(comps[1]);
 
-	my_strlcpy(rwy->ends[0].id, comps[8 + 0], sizeof (rwy->ends[0].id));
-	xlate_US_rwy_ID(rwy->ends[0].id);
+	copy_rwy_ID(comps[8 + 0], rwy->ends[0].id);
 	rwy->ends[0].thr = GEO_POS3(atof(comps[8 + 1]), atof(comps[8 + 2]),
 	    arpt->refpt.elev);
 	rwy->ends[0].displ = atof(comps[8 + 3]);
 	rwy->ends[0].blast = atof(comps[8 + 4]);
 
-	my_strlcpy(rwy->ends[1].id, comps[8 + 9 + 0], sizeof (rwy->ends[1].id));
-	xlate_US_rwy_ID(rwy->ends[1].id);
+	copy_rwy_ID(comps[8 + 9 + 0], rwy->ends[1].id);
 	rwy->ends[1].thr = GEO_POS3(atof(comps[8 + 9 + 1]),
 	    atof(comps[8 + 9 + 2]), arpt->refpt.elev);
 	rwy->ends[1].displ = atof(comps[8 + 9 + 3]);
@@ -1478,8 +1476,7 @@ parse_earth_nav_6_line(airportdb_t *db, const char *filename, int line_num,
 	true_hdg = atof(&comps[6][3]);
 	my_strlcpy(gpa_buf, comps[6], sizeof (gpa_buf));
 	gpa = atof(gpa_buf) / 100.0;
-	my_strlcpy(rwy_id, comps[10], sizeof (rwy_id));
-	xlate_US_rwy_ID(rwy_id);
+	copy_rwy_ID(comps[10], rwy_id);
 	if (!is_valid_rwy_ID(rwy_id) || gpa < 0.0 || gpa > RWY_GPA_LIMIT ||
 	    !is_valid_hdg(true_hdg)) {
 		dbg_log(tile, 1, "%s:%d: malformed runway line, skipping. "

@@ -169,7 +169,7 @@ bool_t is_valid_loc_freq(double freq_mhz);
 bool_t is_valid_ndb_freq(double freq_khz);
 bool_t is_valid_tacan_freq(double freq_mhz);
 bool_t is_valid_rwy_ID(const char *rwy_ID);
-void xlate_US_rwy_ID(char *rwy_ID);
+void copy_rwy_ID(const char *src, char dst[4]);
 
 /* string processing helpers */
 char **strsplit(const char *input, char *sep, bool_t skip_empty, size_t *num);

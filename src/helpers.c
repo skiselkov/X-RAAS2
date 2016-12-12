@@ -158,7 +158,7 @@ extract_icao_country_code(const char *icao)
 
 /*
  * Checks a runway ID for correct formatting. Runway IDs are
- * 2-, 3- or 4-character strings conforming to the following format:
+ * 2- or 3-character strings conforming to the following format:
  *	*) Two-digit runway heading between 01 and 36. Headings less
  *	   than 10 are always prefixed by a '0'. "00" is NOT valid.
  *	*) An optional parallel runway discriminator, one of 'L', 'R' or 'C'.
@@ -182,29 +182,41 @@ is_valid_rwy_ID(const char *rwy_ID)
 	return (B_TRUE);
 }
 
+/*
+ * Copies a runway identifier from an unknown source to a 4-character runway
+ * identifier buffer. This also performs the following transformations on the
+ * runway identifier:
+ * 1) if the runway identifier had a trailing 'T', it is stripped
+ * 2) if the runway was a US single-digit runway number, a '0' is prepended
+ * The function performs no validity checking other than making sure that the
+ * output buffer is not overflown. The caller is responsible for validating
+ * the result after copy_rwy_ID() returns using is_valid_rwy_ID().
+ */
 void
-xlate_US_rwy_ID(char *rwy_ID)
+copy_rwy_ID(const char *src, char dst[4])
 {
-	int len = strlen(rwy_ID);
-	char dig = 0, suffix = 0;
+	int len;
 
-	if (len < 1 || len > 2)
-		return;
-	dig = rwy_ID[0];
-	if (dig < '1' || dig > '9')
-		return;
-	if (len == 2) {
-		suffix = rwy_ID[1];
-		if (suffix != 'L' && suffix != 'C' && suffix != 'R')
-			return;
+	/* make sure dst is populated with *something* */
+	memset(dst, 0, 4);
+	my_strlcpy(dst, src, 4);
+
+	/*
+	 * Strip an optional trailing true hdg indicator. If the runway had
+	 * a suffix (e.g. '08LT'), the previous copy step will have already
+	 * stripped it.
+	 */
+	len = strlen(dst);
+	if (len > 0 && dst[len - 1] == 'T') {
+		dst[len - 1] = '\0';
+		len--;
 	}
-	rwy_ID[0] = '0';
-	rwy_ID[1] = dig;
-	if (len == 2) {
-		rwy_ID[2] = suffix;
-		rwy_ID[3] = '\0';
-	} else {
-		rwy_ID[2] = '\0';
+
+	/* check if the identifier is a US runway number and translate it */
+	if (dst[0] >= '1' && dst[0] <= '9' &&
+	    (len == 1 || (len == 2 && !isdigit(dst[1])))) {
+		memmove(dst + 1, dst, len + 1);
+		dst[0] = '0';
 	}
 }
 
