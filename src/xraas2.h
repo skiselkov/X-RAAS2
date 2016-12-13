@@ -182,6 +182,7 @@ typedef struct xraas_state {
 
 extern bool_t xraas_inited;
 extern const xraas_state_t *xraas_state;
+extern const char *xraas_xpdir;
 extern const char *xraas_prefsdir;
 extern const char *xraas_acf_dirpath;
 extern const char *xraas_plugindir;

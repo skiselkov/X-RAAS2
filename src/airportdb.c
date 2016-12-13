@@ -152,7 +152,7 @@
 /* precomputed, since it doesn't change */
 #define	RWY_APCH_PROXIMITY_LAT_DISPL	(RWY_APCH_PROXIMITY_LON_DISPL * \
 	__builtin_tan(DEG2RAD(RWY_APCH_PROXIMITY_LAT_ANGLE)))
-#define	XRAAS_CACHE_VERSION		4
+#define	XRAAS_CACHE_VERSION		5
 #define	ARPT_LOAD_LIMIT			NM2MET(8)	/* meters, 8nm */
 
 #define	VGSI_LAT_DISPL_FACT		2	/* rwy width multiplier */
@@ -730,6 +730,12 @@ parse_apt_dat_21_line(airport_t *arpt, const char *filename, int line_num,
 		goto out;
 	}
 	gpa = atof(comps[5]);
+	if (isnan(gpa) || gpa <= 0.0 || gpa > RWY_GPA_LIMIT) {
+		dbg_log(tile, 1, "%s:%d: malformed lighting entry, "
+		    "invalid light angle (%g), skipping. Offending line:\n%s",
+		    filename, line_num, gpa, line);
+		goto out;
+	}
 	rwy_id = comps[6];
 
 	/*
@@ -790,6 +796,7 @@ parse_apt_dat_21_line(airport_t *arpt, const char *filename, int line_num,
 	/* Finally, given the displacement and GPA, compute the TCH. */
 	re->gpa = gpa;
 	re->tch = MET2FEET(sin(DEG2RAD(gpa)) * displ);
+	ASSERT(re->tch >= 0.0);
 out:
 	free_strlist(comps, ncomps);
 }
@@ -1450,7 +1457,7 @@ parse_earth_nav_6_line(airportdb_t *db, const char *filename, int line_num,
 	geo_pos2_t pos;
 	vect2_t pos_v;
 	char rwy_id[8];
-	double elev, true_hdg, gpa;
+	double true_hdg, gpa;
 	char gpa_buf[4];
 
 	comps = strsplit(line, " ", B_TRUE, &ncomps);
@@ -1459,9 +1466,7 @@ parse_earth_nav_6_line(airportdb_t *db, const char *filename, int line_num,
 	VERIFY(load_airport(arpt));
 
 	pos = GEO_POS2(atof(comps[1]), atof(comps[2]));
-	elev = FEET2MET(atof(comps[3]));
-	if (!is_valid_lat(pos.lat) || !is_valid_lon(pos.lon) ||
-	    !is_valid_elev(elev)) {
+	if (!is_valid_lat(pos.lat) || !is_valid_lon(pos.lon)) {
 		dbg_log(tile, 1, "%s:%d: malformed runway line, skipping. "
 		    "Offending line:\n%s", filename, line_num, line);
 		goto out;
@@ -1477,8 +1482,8 @@ parse_earth_nav_6_line(airportdb_t *db, const char *filename, int line_num,
 	my_strlcpy(gpa_buf, comps[6], sizeof (gpa_buf));
 	gpa = atof(gpa_buf) / 100.0;
 	copy_rwy_ID(comps[10], rwy_id);
-	if (!is_valid_rwy_ID(rwy_id) || gpa < 0.0 || gpa > RWY_GPA_LIMIT ||
-	    !is_valid_hdg(true_hdg)) {
+	if (!is_valid_rwy_ID(rwy_id) || isnan(gpa) || gpa <= 0.0 ||
+	    gpa > RWY_GPA_LIMIT || !is_valid_hdg(true_hdg)) {
 		dbg_log(tile, 1, "%s:%d: malformed runway line, skipping. "
 		    "Offending line:\n%s", filename, line_num, line);
 		goto out;
@@ -1515,9 +1520,12 @@ parse_earth_nav_6_line(airportdb_t *db, const char *filename, int line_num,
 		    NULL);
 		thr2gs_v = vect2_sub(pos_v, re->thr_v);
 		displ = vect2_dotprod(thr2gs_v, thr2thr_uv);
+		if (displ < 0)
+			break;
 		re->gpa = gpa;
 		re->tch = MET2FEET(sin(DEG2RAD(gpa)) * displ) +
-		    (elev - re->thr.elev) + ILS_GS_GND_OFFSET;
+		    ILS_GS_GND_OFFSET;
+		ASSERT(re->tch >= 0.0);
 		dbg_log(tile, 3, "GS->GPA/TCH(%s) %.02f/%.02f/%.0f %s/%s",
 		    comps[7], displ, re->gpa, re->tch, arpt->icao, re->id);
 		break;

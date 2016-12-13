@@ -606,9 +606,12 @@ menu_cb(void *menu, void *item)
 		    dbg_gui_inited ? xplm_Menu_Checked : xplm_Menu_Unchecked);
 		break;
 	case RECREATE_CACHE_CMD: {
-		char *cachedir = mkpathname(xraas_prefsdir, "X-RAAS.cache",
-		    NULL);
-		if (!remove_directory(cachedir)) {
+		bool_t exists, isdir;
+		char *cachedir = mkpathname(xraas_xpdir, "Output", "caches",
+		    "X-RAAS.cache", NULL);
+		exists = file_exists(cachedir, &isdir);
+		if (exists && ((isdir && !remove_directory(cachedir)) ||
+		    (!isdir && !remove_file(cachedir, B_FALSE)))) {
 			log_init_msg(B_TRUE, INIT_ERR_MSG_TIMEOUT, NULL, NULL,
 			    "Cannot remove existing data cache. See Log.txt "
 			    "for more information.");
