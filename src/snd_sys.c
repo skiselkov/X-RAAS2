@@ -122,8 +122,6 @@ play_msg(msg_type_t *msg, size_t msg_len, msg_prio_t prio)
 {
 	ann_t *ann;
 
-	ASSERT(inited);
-
 	if (xraas_state->use_tts) {
 		char *buf;
 		size_t buflen = 0;
@@ -138,6 +136,8 @@ play_msg(msg_type_t *msg, size_t msg_len, msg_prio_t prio)
 		free(msg);
 		return;
 	}
+
+	ASSERT(inited);
 
 top:
 	if ((ann = list_head(&playback_queue)) != NULL) {
@@ -168,10 +168,10 @@ modify_cur_msg(msg_type_t *msg, size_t msg_len, msg_prio_t prio)
 {
 	ann_t *ann;
 
-	ASSERT(inited);
-
 	if (xraas_state->use_tts)
 		return (B_FALSE);
+
+	ASSERT(inited);
 
 top:
 	if ((ann = list_head(&playback_queue)) != NULL) {
@@ -293,10 +293,10 @@ snd_sys_init(const char *plugindir)
 
 	dbg_log(snd, 1, "snd_sys_init");
 
-	ASSERT(!inited);
-
 	if (xraas_state->use_tts)
 		return (B_TRUE);
+
+	ASSERT(!inited);
 
 	/* no WAV/OpenAL calls before this */
 	if (!openal_init())
@@ -351,9 +351,7 @@ snd_sys_fini(void)
 
 	if (!inited)
 		return;
-
-	if (xraas_state->use_tts)
-		return;
+	ASSERT(!xraas_state->use_tts);
 
 	for (ann_t *ann = list_head(&playback_queue); ann != NULL;
 	    ann = list_head(&playback_queue)) {
