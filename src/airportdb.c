@@ -170,7 +170,8 @@
 #define	ILS_GS_GND_OFFSET		5	/* meters */
 
 #define	RWY_GPA_LIMIT			10	/* degrees */
-#define	RWY_TCH_LIMIT			400	/* feet */
+#define	RWY_TCH_LIMIT			200	/* feet */
+#define	TCH_IS_VALID(tch)		(tch > 0 && tch < RWY_TCH_LIMIT)
 
 #define	XRAAS_CACHE_DIR			"X-RAAS.cache"
 #define	TILE_NAME_FMT			"%+03.0f%+04.0f"
@@ -708,7 +709,7 @@ parse_apt_dat_21_line(airport_t *arpt, const char *filename, int line_num,
 	size_t ncomps;
 	vgsi_t type;
 	geo_pos2_t pos;
-	double gpa, displ, true_hdg;
+	double gpa, tch, displ, true_hdg;
 	const char *rwy_id;
 	runway_t *rwy = NULL;
 	runway_end_t *re = NULL, *ore = NULL;
@@ -799,9 +800,12 @@ parse_apt_dat_21_line(airport_t *arpt, const char *filename, int line_num,
 		    NULL));
 	}
 	/* Finally, given the displacement and GPA, compute the TCH. */
-	re->gpa = gpa;
-	re->tch = MET2FEET(sin(DEG2RAD(gpa)) * displ);
-	ASSERT(re->tch >= 0.0);
+	tch = MET2FEET(sin(DEG2RAD(gpa)) * displ);
+	ASSERT(tch >= 0.0);
+	if (TCH_IS_VALID(tch)) {
+		re->gpa = gpa;
+		re->tch = tch;
+	}
 out:
 	free_strlist(comps, ncomps);
 }
@@ -893,6 +897,19 @@ parse_apt_dat_100_line(airport_t *arpt, const char *filename,
 	    atof(comps[8 + 9 + 2]), arpt->refpt.elev);
 	rwy->ends[1].displ = atof(comps[8 + 9 + 3]);
 	rwy->ends[1].blast = atof(comps[8 + 9 + 4]);
+
+	/*
+	 * ARINC 424 says in field reference 5.67 that if no explicit TCH is
+	 * specified, 50 feet shall be assumed. The GPA cannot be assumed
+	 * this easily and unfortunately field 5.226 from ARINC 424 isn't in
+	 * X-Plane 11's navdata, so we instead parse it in a later step from
+	 * instrument approach procedures (X-Plane 11) or from an Airports.txt
+	 * (X-Plane 10), falling back to VGSI triangulation in the scenery if
+	 * those methods fail. We won't provide vertical approach monitoring
+	 * unless both GPA & TCH are non-zero.
+	 */
+	rwy->ends[0].tch = 50;
+	rwy->ends[1].tch = 50;
 
 	snprintf(rwy->joint_id, sizeof (rwy->joint_id), "%s%s",
 	    rwy->ends[0].id, rwy->ends[1].id);
@@ -1333,14 +1350,12 @@ load_arinc42418_arpt_data(const char *filename, airport_t *arpt)
 			char rwy_id[4];
 			size_t ncomps;
 			runway_t *rwy;
-			float gpa, tch;
+			float gpa;
 			bool_t rwy_found = B_FALSE;
 
 			comps = strsplit(line + 6, ",", B_FALSE, &ncomps);
 			if (strstr(comps[4], "RW") != comps[4] ||
-			    sscanf(comps[23], "%f", &tch) != 1 ||
 			    sscanf(comps[28], "%f", &gpa) != 1 ||
-			    tch <= 0 || tch > RWY_TCH_LIMIT ||
 			    gpa >= 0 || gpa < RWY_GPA_LIMIT * -100)
 				goto out_appch;
 			copy_rwy_ID(comps[4] + 2, rwy_id);
@@ -1364,7 +1379,6 @@ load_arinc42418_arpt_data(const char *filename, airport_t *arpt)
 				 * come from VGSI auto-computation. This data
 				 * should be more reliable & accurate.
 				 */
-				re->tch = tch;
 				re->gpa = gpa;
 				rwy_found = B_TRUE;
 				break;
@@ -1398,7 +1412,7 @@ out_appch:
 			for (rwy = avl_first(&arpt->rwys); rwy != NULL;
 			    rwy = AVL_NEXT(&arpt->rwys, rwy)) {
 				runway_end_t *re;
-				int telev;
+				int telev, tch;
 
 				if (strcmp(rwy->ends[0].id, rwy_id) == 0)
 					re = &rwy->ends[0];
@@ -1409,6 +1423,9 @@ out_appch:
 				if (sscanf(comps[3], "%d", &telev) == 1 &&
 				    is_valid_elev(telev))
 					re->thr.elev = telev;
+				if (sscanf(comps[7], "%d", &tch) == 1 &&
+				    tch > 0 && tch < RWY_TCH_LIMIT)
+					re->tch = tch;
 				break;
 			}
 out_rwy:
