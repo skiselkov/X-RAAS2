@@ -125,14 +125,19 @@
  *
  * So for X-Plane 11, we've implemented a new method of obtaining this
  * information. By default, if a runway has an instrument approach (and is
- * thus interesting to us), it will in almost every case have some kind of
- * visual glideslope indication system right next to it. We can extract
- * the location of those from the apt.dat file. These glideslope indicators
- * are located in the exact touchdown point and have a fixed GPA. So we
- * simply look for a visual glideslope indicator (a VASI or PAPI) close
- * to the runway's centerline and that is aligned with the runway, compute
- * the longitudinal displacement of this indicator from the runway
- * threshold and using the indicator's GPA compute the optimal TCH.
+ * thus interesting to us), it will have an entry in CIFP. Runway entries in
+ * APPCH-type procedures specify the TCH and GPA in columns 24 and 29 (ARINC
+ * 424 fields 4.1.9.1.85-89 and 4.1.9.1.103-106). We only use the first
+ * such occurence. If there are multiple approaches to the runway, they
+ * should all end up with the same TCH and GPA. This should cover pretty much
+ * every case. In the rare case where we *don't* get the TCH and GPA this way,
+ * we try a fallback mechanism. Almost every instrument approach runway has
+ * some kind of visual glideslope indication (VGSI) right next to it. We can
+ * extract the location of those from the apt.dat file. These VGSIs are
+ * located in the exact touchdown point and have a fixed GPA. So we simply
+ * look for a VGSI close to the runway's centerline and that is aligned with
+ * the runway, compute the longitudinal displacement of this indicator from
+ * the runway threshold and using the indicator's GPA compute the optimal TCH.
  *
  * Sometimes, broken scenery doesn't have the visual glideslope indicators
  * either properly placed or even present at all (e.g. RWY09 at KSAN in
@@ -152,7 +157,7 @@
 /* precomputed, since it doesn't change */
 #define	RWY_APCH_PROXIMITY_LAT_DISPL	(RWY_APCH_PROXIMITY_LON_DISPL * \
 	__builtin_tan(DEG2RAD(RWY_APCH_PROXIMITY_LAT_ANGLE)))
-#define	XRAAS_CACHE_VERSION		5
+#define	XRAAS_CACHE_VERSION		6
 #define	ARPT_LOAD_LIMIT			NM2MET(8)	/* meters, 8nm */
 
 #define	VGSI_LAT_DISPL_FACT		2	/* rwy width multiplier */
@@ -1306,6 +1311,7 @@ load_arinc42418_arpt_data(const char *filename, airport_t *arpt)
 	char *line = NULL;
 	size_t linecap = 0;
 	FILE *fp = fopen(filename, "r");
+	int line_num = 0;
 
 	if (fp == NULL) {
 		logMsg("Can't open %s: %s", filename, strerror(errno));
@@ -1315,11 +1321,69 @@ load_arinc42418_arpt_data(const char *filename, airport_t *arpt)
 	arpt->in_navdb = B_TRUE;
 
 	while (!feof(fp)) {
+		line_num++;
 		if (getline(&line, &linecap, fp) <= 0)
 			continue;
-		if (strstr(line, "RWY:") == line) {
+		if (strstr(line, "APPCH:") == line) {
+			/*
+			 * Extract the runway TCH and GPA from instrument
+			 * approach lines.
+			 */
 			char **comps;
-			const char *rwy_id;
+			char rwy_id[4];
+			size_t ncomps;
+			runway_t *rwy;
+			float gpa, tch;
+			bool_t rwy_found = B_FALSE;
+
+			comps = strsplit(line + 6, ",", B_FALSE, &ncomps);
+			if (strstr(comps[4], "RW") != comps[4] ||
+			    sscanf(comps[23], "%f", &tch) != 1 ||
+			    sscanf(comps[28], "%f", &gpa) != 1 ||
+			    tch <= 0 || tch > RWY_TCH_LIMIT ||
+			    gpa >= 0 || gpa < RWY_GPA_LIMIT * -100)
+				goto out_appch;
+			copy_rwy_ID(comps[4] + 2, rwy_id);
+			/*
+			 * The database has this in 0.01 deg steps, stored
+			 * negative (i.e. "3.5 degrees" is "-350" in the DB).
+			 */
+			gpa /= -100.0;
+			for (rwy = avl_first(&arpt->rwys); rwy != NULL;
+			    rwy = AVL_NEXT(&arpt->rwys, rwy)) {
+				runway_end_t *re;
+
+				if (strcmp(rwy->ends[0].id, rwy_id) == 0)
+					re = &rwy->ends[0];
+				else if (strcmp(rwy->ends[1].id, rwy_id) == 0)
+					re = &rwy->ends[1];
+				else
+					continue;
+				/*
+				 * Ovewrite pre-existing data, which may have
+				 * come from VGSI auto-computation. This data
+				 * should be more reliable & accurate.
+				 */
+				re->tch = tch;
+				re->gpa = gpa;
+				rwy_found = B_TRUE;
+				break;
+			}
+			if (!rwy_found) {
+				dbg_log(tile, 1, "%s:%d: error parsing "
+				    "procedure runway info, runway %s not "
+				    "found on airport (%s).", filename,
+				    line_num, rwy_id, arpt->icao);
+			}
+out_appch:
+			free_strlist(comps, ncomps);
+		} else if (strstr(line, "RWY:") == line) {
+			/*
+			 * Extract runway threshold elevation from runway
+			 * lines.
+			 */
+			char **comps;
+			char rwy_id[4];
 			size_t ncomps;
 			runway_t *rwy;
 
@@ -1330,7 +1394,7 @@ load_arinc42418_arpt_data(const char *filename, airport_t *arpt)
 				strip_space(comps[i]);
 			if (strstr(comps[0], "RW") != comps[0])
 				goto out_rwy;
-			rwy_id = comps[0] + 2;
+			copy_rwy_ID(comps[0] + 2, rwy_id);
 			for (rwy = avl_first(&arpt->rwys); rwy != NULL;
 			    rwy = AVL_NEXT(&arpt->rwys, rwy)) {
 				runway_end_t *re;
@@ -1440,153 +1504,6 @@ load_CIFP_dir(airportdb_t *db, const char *dirpath)
 #endif	/* !IBM */
 
 /*
- * Parses a '6' line from an earth_nav.dat file (ILS GS definition) and
- * uses that info to compute the GPA and TCH of the associated runway. If
- * the runway already has a GPA/TCH computed, this does nothing. This is
- * called after the VGSI matching from apt.dat has been performed, because
- * the VGSIs are usually more accurate in the terminal phase of approach
- * (in our scenery, not in real life).
- */
-static void
-parse_earth_nav_6_line(airportdb_t *db, const char *filename, int line_num,
-    const char *line)
-{
-	airport_t *arpt;
-	char **comps;
-	size_t ncomps;
-	geo_pos2_t pos;
-	vect2_t pos_v;
-	char rwy_id[8];
-	double true_hdg, gpa;
-	char gpa_buf[4];
-
-	comps = strsplit(line, " ", B_TRUE, &ncomps);
-	if (ncomps < 12 || (arpt = apt_dat_lookup(db, comps[8])) == NULL)
-		goto out;
-	VERIFY(load_airport(arpt));
-
-	pos = GEO_POS2(atof(comps[1]), atof(comps[2]));
-	if (!is_valid_lat(pos.lat) || !is_valid_lon(pos.lon)) {
-		dbg_log(tile, 1, "%s:%d: malformed runway line, skipping. "
-		    "Offending line:\n%s", filename, line_num, line);
-		goto out;
-	}
-	pos_v = geo2fpp(pos, &arpt->fpp);
-	/* The format of this field is XXXYYY.ZZZ */
-	if (strlen(comps[6]) < 10) {
-		dbg_log(tile, 1, "%s:%d: malformed runway line, skipping. "
-		    "Offending line:\n%s", filename, line_num, line);
-		goto out;
-	}
-	true_hdg = atof(&comps[6][3]);
-	my_strlcpy(gpa_buf, comps[6], sizeof (gpa_buf));
-	gpa = atof(gpa_buf) / 100.0;
-	copy_rwy_ID(comps[10], rwy_id);
-	if (!is_valid_rwy_ID(rwy_id) || isnan(gpa) || gpa <= 0.0 ||
-	    gpa > RWY_GPA_LIMIT || !is_valid_hdg(true_hdg)) {
-		dbg_log(tile, 1, "%s:%d: malformed runway line, skipping. "
-		    "Offending line:\n%s", filename, line_num, line);
-		goto out;
-	}
-
-	for (runway_t *rwy = avl_first(&arpt->rwys); rwy != NULL;
-	    rwy = AVL_NEXT(&arpt->rwys, rwy)) {
-		runway_end_t *re, *ore;
-		vect2_t thr2thr_uv, thr2gs_v;
-		double displ;
-
-		if (strcmp(rwy->ends[0].id, rwy_id) == 0) {
-			re = &rwy->ends[0];
-			ore = &rwy->ends[1];
-		} else if (strcmp(rwy->ends[1].id, rwy_id) == 0) {
-			re = &rwy->ends[1];
-			ore = &rwy->ends[0];
-		} else {
-			continue;
-		}
-		/*
-		 * Check if we're aligned with the runway properly to be an
-		 * ILS GS component. We want to avoid LDA approaches,
-		 * because their offsets can result in unreliable slopes.
-		 */
-		if (fabs(rel_hdg(true_hdg, re->hdg)) > ILS_HDG_MATCH_THRESH ||
-		    re->gpa != 0)
-			continue;
-		/*
-		 * The GS appears to match us, now compute the longitudinal
-		 * displacement of the GS emitter from the runway threshold.
-		 */
-		thr2thr_uv = vect2_unit(vect2_sub(ore->thr_v, re->thr_v),
-		    NULL);
-		thr2gs_v = vect2_sub(pos_v, re->thr_v);
-		displ = vect2_dotprod(thr2gs_v, thr2thr_uv);
-		if (displ < 0)
-			break;
-		re->gpa = gpa;
-		re->tch = MET2FEET(sin(DEG2RAD(gpa)) * displ) +
-		    ILS_GS_GND_OFFSET;
-		ASSERT(re->tch >= 0.0);
-		dbg_log(tile, 3, "GS->GPA/TCH(%s) %.02f/%.02f/%.0f %s/%s",
-		    comps[7], displ, re->gpa, re->tch, arpt->icao, re->id);
-		break;
-	}
-out:
-	free_strlist(comps, ncomps);
-}
-
-/*
- * Parses an earth_nav.dat file and extracts ILS GS information from it.
- * See also parse_earth_nav_6_line above.
- */
-static bool_t
-parse_earth_nav_dat(airportdb_t *db, const char *filename)
-{
-	FILE *fp = fopen(filename, "r");
-	char *line = NULL;
-	size_t linecap = 0;
-	int line_num = 0;
-
-	if (fp == NULL)
-		return (B_FALSE);
-
-	while (!feof(fp)) {
-		line_num++;
-		if (getline(&line, &linecap, fp) <= 0)
-			continue;
-		if (strstr(line, " 6 ") == line)
-			parse_earth_nav_6_line(db, filename, line_num, line);
-	}
-
-	fclose(fp);
-
-	return (B_TRUE);
-}
-
-/*
- * Loads navdata information to auto-compute GPA/TCH for runways based on
- * ILS GS locations. This uses the new X-Plane 11 method from earth_nav.dat.
- */
-static bool_t
-load_earth_nav_dats(airportdb_t *db)
-{
-	char *filename;
-
-	filename = mkpathname(db->xpdir, "Custom Data", "earth_nav.dat", NULL);
-	(void) parse_earth_nav_dat(db, filename);
-	free(filename);
-
-	filename = mkpathname(db->xpdir, "Resources", "default data",
-	    "earth_nav.dat", NULL);
-	if (!parse_earth_nav_dat(db, filename)) {
-		free(filename);
-		return (B_FALSE);
-	}
-	free(filename);
-
-	return (B_TRUE);
-}
-
-/*
  * Initiates the supplemental information loading from X-Plane 11 navdata.
  * Here we try to determine, for runways which lacked that info in apt.dat,
  * the runway's threshold elevation and the GPA/TCH (based on a nearby
@@ -1595,23 +1512,30 @@ load_earth_nav_dats(airportdb_t *db)
 static bool_t
 load_xp11_navdata(airportdb_t *db)
 {
-	char *dirpath;
+	bool_t isdir;
+	char *dirpath_custom;
+	bool_t success = B_FALSE;
 
-	dirpath = mkpathname(db->xpdir, "Resources", "default data", "CIFP",
-	    NULL);
-	if (!load_CIFP_dir(db, dirpath)) {
-		logMsg("error parsing default data CIFP: %s", dirpath);
-		free(dirpath);
-		return (B_FALSE);
+	dirpath_custom = mkpathname(db->xpdir,
+	    "Resources", "Custom Data", "CIFP", NULL);
+	if (file_exists(dirpath_custom, &isdir) && isdir) {
+		success = load_CIFP_dir(db, dirpath_custom);
+		if (!success)
+			logMsg("%s: error parsing navdata, falling "
+			    "back to default data.", dirpath_custom);
 	}
-	free(dirpath);
+	free(dirpath_custom);
+	if (!success) {
+		char *dirpath_default = mkpathname(db->xpdir,
+		    "Resources", "default data", "CIFP", NULL);
+		success = load_CIFP_dir(db, dirpath_default);
+		if (!success)
+			logMsg("%s: error parsing navdata, "
+			    "please check your install", dirpath_default);
+		free(dirpath_default);
+	}
 
-	dirpath = mkpathname(db->xpdir, "Resources", "Custom Data", "CIFP",
-	    NULL);
-	(void) load_CIFP_dir(db, dirpath);
-	free(dirpath);
-
-	return (B_TRUE);
+	return (success);
 }
 
 /*
@@ -1906,7 +1830,7 @@ recreate_cache(airportdb_t *db)
 	is_xp11 = file_exists(filename, NULL);
 	free(filename);
 	if (is_xp11) {
-		if (!load_earth_nav_dats(db) || !load_xp11_navdata(db)) {
+		if (!load_xp11_navdata(db)) {
 			success = B_FALSE;
 			goto out;
 		}
