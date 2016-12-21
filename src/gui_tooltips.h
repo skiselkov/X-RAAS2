@@ -479,6 +479,17 @@ static const char *say_deep_landing_tooltip[] = {
 	MAN_REF("4.15"),
 	NULL
 };
+static const char *auto_disable_notify_tooltip[] = {
+	"When the currently loaded aircraft doesn't meet the minimum",
+	"requirements for X-RAAS to activate, X-RAAS displays a short message",
+	"at the bottom of the screen to point out that it is auto-inhibited.",
+	"This option controls whether this auto-inhibition message is "
+	"displayed.",
+	"ON: the display of the auto-inhibition message is enabled.",
+	"OFF: the display of the auto-inhibition message is disabled.",
+	MAN_REF("5.1"),
+	NULL
+};
 
 #ifdef	__cplusplus
 }

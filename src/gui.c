@@ -117,6 +117,7 @@ static struct {
 	XPWidgetID	enabled;
 	XPWidgetID	allow_helos;
 	XPWidgetID	startup_notify;
+	XPWidgetID	auto_disable_notify;
 	XPWidgetID	use_imperial;
 	XPWidgetID	us_runway_numbers;
 	XPWidgetID	monitors[NUM_MONITORS];
@@ -244,8 +245,8 @@ gen_config(void)
 	char buf[512];
 
 	append_format(&conf_text, &conf_sz,
-	    "-- This configuration file was automatically generated using the\n"
-	    "-- X-RAAS configuration GUI." NEWLINE NEWLINE);
+	    "# This configuration file was automatically generated using the\n"
+	    "# X-RAAS configuration GUI." NEWLINE NEWLINE);
 
 #define	GEN_BOOL_CONF(widget) \
 	append_format(&conf_text, &conf_sz, "%s = %s" NEWLINE, #widget, \
@@ -255,6 +256,7 @@ gen_config(void)
 	GEN_BOOL_CONF(enabled);
 	GEN_BOOL_CONF(allow_helos);
 	GEN_BOOL_CONF(startup_notify);
+	GEN_BOOL_CONF(auto_disable_notify);
 	GEN_BOOL_CONF(use_imperial);
 	GEN_BOOL_CONF(us_runway_numbers);
 	for (int i = 0; i < NUM_MONITORS; i++)
@@ -856,6 +858,8 @@ create_main_window(void)
 	    PushButton, CheckBox, allow_helos_tooltip);
 	LAYOUT_BUTTON(startup_notify, "Show startup notification",
 	    PushButton, CheckBox, startup_notify_tooltip);
+	LAYOUT_BUTTON(auto_disable_notify, "Notify when X-RAAS auto-inhibits",
+	    PushButton, CheckBox, auto_disable_notify_tooltip);
 	LAYOUT_BUTTON(disable_ext_view, "Silence in external views",
 	    PushButton, CheckBox, disable_ext_view_tooltip);
 	LAYOUT_BUTTON(nd_alerts_enabled, "Visual alerts",
@@ -1049,6 +1053,7 @@ update_main_window(void)
 	UPDATE_BUTTON_STATE(enabled);
 	UPDATE_BUTTON_STATE(allow_helos);
 	UPDATE_BUTTON_STATE(startup_notify);
+	UPDATE_BUTTON_STATE(auto_disable_notify);
 	UPDATE_BUTTON_STATE(use_imperial);
 	UPDATE_BUTTON_STATE(us_runway_numbers);
 	for (int i = 0; i < NUM_MONITORS; i++)
