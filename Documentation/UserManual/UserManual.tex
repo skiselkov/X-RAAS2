@@ -99,26 +99,26 @@ look like this:
 \hspace*{4.5em}\fileicon{folder.png} \emph{X-RAAS2}
 }
 
-\noindent After installation, the first time you start up X-Plane, X-RAAS
-will scan all install scenery and extract runway information to build its
-own data cache. This can take up to 10 seconds or more (depending on how
-much scenery you have). Once the cache is built, X-RAAS will use the
-cache and startup will be much faster. The purpose of this scanning
-process is to make sure that X-RAAS's runway information matches your
-scenery as closely as possible and to avoid generating spurious
-annunciations. Once started up, X-RAAS should not impose any significant
-additional load on your simulator.
+\noindent On first startup of X-Plane, X-RAAS will scan all installed
+scenery and extract runway information to build its own data cache.
+Depending on the amount of scenery installed, this process can take up to
+10 seconds or more. Once the cache is built, X-RAAS will use the cache
+and startup will be much faster. The purpose of this cache is to make
+sure that X-RAAS's runway information matches your scenery as closely as
+possible to avoid generating spurious annunciations. Once started up,
+X-RAAS should not impose any significant additional load on your
+simulator.
 
-X-RAAS checks for updates to airport scenery or the AIRAC database in the
-simulator during startup. If scenery is added or removed, or the AIRAC
-cycle is changed, X-RAAS will automatically recreate its airport data
-cache.
+X-RAAS checks for updates to airport scenery or the navigational database
+in the simulator during startup. If scenery is added or removed, or the
+AIRAC cycle number is changed, X-RAAS will automatically recreate its
+airport data cache using the new data.
 
-\notebox{Updates to existing scenery might not be detected, as X-RAAS doesn't
-attempt to detect file modifications. If you have significantly updated
-existing scenery and would like to force X-RAAS to refresh its airport
-data cache, simply use the menu entry ``Plugins'' $\rightarrow$
-``X-RAAS'' $\rightarrow$ ``Recreate data cache''.}
+\notebox{Updates to \emph{existing scenery packages} might not be
+detected, as X-RAAS doesn't attempt to detect file modifications. If you
+have modified existing scenery packages and would like to force X-RAAS to
+refresh its airport data cache, use the menu entry ``Plugins''
+$\rightarrow$ ``X-RAAS'' $\rightarrow$ ``Recreate data cache''.}
 
 \section{Activating X-RAAS in the aircraft}
 \label{sec:ActivatingXRAAS}
@@ -131,8 +131,9 @@ applied to the aircraft's primary avionics systems. Normally, RAAS is
 only used by airliners with a sophisticated EGPWS. RAAS advisories and
 performance monitoring can be a poor fit for small general aviation
 aircraft or aircraft with performance significantly different from
-airliners. To avoid this, by default X-RAAS checks if the aircraft
-currently loaded in the simulator meets all of the following criteria:
+airliners. To avoid producing spurious annunciations in unsuitable
+aircraft, X-RAAS checks during startup if the aircraft currently loaded
+in the simulator meets all of the following criteria:
 
 \begin{itemize}
 
@@ -172,17 +173,16 @@ system. The following details of aural annunciations can be adjusted
 
 \item Voice gender.
 
-\item Style of runway number pronunciation (should single-digit runways
-have a `0' prepended or not).
+\item Style of runway number pronunciation.
 
-\item Units of measure (feet or meters).
+\item Units of measure.
 
-\item Whether to append units of measure to the initial callout.
+\item Whether to append units of measure to the distance initial callout.
 
 \end{itemize}
 
-\noindent If the current simulator view is external, annunciations are
-suppressed.
+\noindent If the current simulator view is external, aural annunciations
+are suppressed.
 
 \subsubsection{Visual annunciations}
 \label{subsec:VisualAnnunciations}
@@ -202,10 +202,10 @@ the screen.
 \end{itemize}
 
 \noindent Display of visual annunciations in the 3D cockpit model
-requires 3rd party aircraft integration. If an aircraft does not provide
-this integration, X-RAAS will by default fall back to display visual
-annunciations using the on-screen overlay. If the current simulator view
-is external, annunciations are suppressed.
+requires 3\textsuperscript{rd} party aircraft integration. If an
+aircraft does not provide this integration, X-RAAS will by default fall
+back to display visual annunciations using the on-screen overlay. If the
+current simulator view is external, visual annunciations are suppressed.
 
 Please note that not all real aircraft feature visual annunciations in
 their avionics. In these cases, X-RAAS will disable all visual
@@ -234,10 +234,11 @@ mechanism.
 
 \section{Advisories}
 
-This section lists all the various normal and caution advisories X-RAAS
-can issue for various potential hazards. It is organized by phase of
-flight, starting with initially approaching a runway on the ground for
-takeoff and progressing towards a landing and runway exit.
+This section lists all the various routine, non-routine and caution
+advisories X-RAAS can issue for various potential hazards. It is
+organized by phase of flight, starting with initially approaching a
+runway on the ground for takeoff and progressing towards a landing and
+runway exit.
 
 \subsection{Approaching a runway on the ground}
 \label{subsec:ApchGndMon}
@@ -247,10 +248,12 @@ laterally approximately 1.5x the runway width from the runway centerline
 and 2,000 feet longitudinally from each runway threshold\footnote{If the
 runway has a displaced threshold, the bounding box is extended to
 encompass it completely, but the 2,000 ft buffer is not extended from the
-displaced end. Stopways are not placed in the bounding box.}. X-RAAS will
-issue an advisory when the aircraft's nose is approximately 1 second from
-penetrating this bounding box (calculated based on ground speed). The
-advisory names the runway end closest to the aircraft.
+displaced end. Stopways are not placed in the bounding box.}. The purpose
+of this 2,000 ft extension is to warn when nearing a runway's approach
+sector. X-RAAS will issue an advisory when the aircraft's nose is
+approximately 1 second from penetrating this bounding box (calculated
+based on ground speed). The advisory names the runway end closest to the
+aircraft.
 
 \begin{figure}[H]
 \begin{center}
@@ -265,9 +268,10 @@ advisory on the ND:
 \visualadvisory{routine}{APP XX}
 
 \noindent Where `XX' is the runway identifier. The advisory is inhibited
-when ground speed exceeds 40 knots to prevent activation on takeoff
-through intersecting runways. Please also note that the annunciation does
-not guarantee the ability to stop before entering the runway.
+when ground speed exceeds 40 knots to prevent activation on takeoff and
+landing through intersecting runways. Please also note that the
+annunciation does not guarantee the ability to stop before entering the
+runway.
 
 \newpage
 
@@ -292,8 +296,8 @@ supplemented by an annunciation of ``FLAPS, FLAPS'' if the appropriate
 takeoff flap configuration has not yet been selected at the time of line
 up. The takeoff flaps advisory is inhibited if the GPWS flaps override
 mode is active. If the ``FLAPS, FLAPS'' annunciation is to be issued, an
-amber `FLAPS' visual caution advisory will be issued instead of the green
-`ON XX' advisory:
+amber non-routine `FLAPS' visual advisory will be issued instead of the
+green `ON XX' advisory:
 
 \visualadvisory{nonroutine}{FLAPS}
 
@@ -305,8 +309,8 @@ time, the on-runway annunciation repeats as a non-routine advisory at
 configurable intervals. Holding in position is defined as the aircraft
 being aligned with a runway while its ground speed doesn't exceed 4
 knots. The aural annunciation is repeated twice per interval (e.g. ``ON
-RUNWAY 09 RIGHT, ON RUNWAY 09 RIGHT'') and displays an amber `ON XX'
-visual advisory. The default intervals are defined as follows:
+RUNWAY 09 RIGHT, ON RUNWAY 09 RIGHT'') and displays an amber non-routine
+`ON XX' visual advisory. The default intervals are defined as follows:
 
 \begin{itemize}
 
@@ -314,14 +318,17 @@ visual advisory. The default intervals are defined as follows:
 
 \item Delay until repeat annunciation: 120 seconds
 
-\item Maximum number of repetitions: 3
+\item Maximum number of annunciations: 3
 
 \end{itemize}
 
 \noindent After the advisory has been repeated for the maximum number of
-repetitions, further advisories are inhibited until the aircraft lines up
-with another runway. Refer to section \ref{sec:Configuration} for the
-interval configuration parameters \confopt{on\_rwy\_warn\_initial},
+times, further advisories are inhibited until the aircraft lines up on
+another runway. Thus, with the default configuration, the annunciations
+occur after holding in position for 1 minute, 3 minutes and 5 minutes.
+Refer to section \ref{sec:Configuration} for the interval configuration
+parameters
+\confopt{on\_rwy\_warn\_initial},
 \confopt{on\_rwy\_warn\_repeat} and \confopt{on\_rwy\_warn\_max\_n}.
 
 \newpage
@@ -338,15 +345,16 @@ interval configuration parameters \confopt{on\_rwy\_warn\_initial},
 \end{wrapfigure}
 
 If the runway length remaining for takeoff is below an operator-defined
-minimum for a safe takeoff, the ``ON RUNWAY'' annunciation is supplemented
-by a runway distance available readout (rounded down to the nearest 100
-feet or meters). The aural advisory is accompanied by a non-routine amber
-visual advisory on the ND:
+minimum for a safe takeoff, the ``ON RUNWAY'' annunciation described in
+subsection \ref{subsec:OnRwyMon} is supplemented by a runway distance
+remaining readout, rounded down to the nearest 100 feet or meters. The
+aural advisory is accompanied by a non-routine amber visual advisory on
+the ND:
 
 \visualadvisory{nonroutine}{ON XX YY}
 
 \noindent Where `XX' is the runway identifier and `YY' is the runway
-length available in hundreds of feet or meters.
+length remaining in hundreds of feet or meters.
 
 \subsection{Short runway takeoff}
 \label{subsec:ShortRwyTakeoffMon}
@@ -361,7 +369,7 @@ length available in hundreds of feet or meters.
 \end{wrapfigure}
 
 If takeoff is attempted on a runway with runway length remaining below an
-operator defined minimum, once ground speed exceeds 40 knots, a warning
+operator defined minimum, once ground speed exceeds 40 knots, a caution
 annunciation is generated: ``CAUTION! SHORT RUNWAY! SHORT RUNWAY!'' The
 aural advisory is accompanied by a caution amber visual advisory on the
 ND:
@@ -386,9 +394,9 @@ for triggering this annunciation are:
 
 \begin{itemize}
 
-\item Aircraft is NOT on a runway
+\item the aircraft is NOT on a runway, and
 
-\item Ground speed exceeds 40 knots
+\item ground speed exceeds 40 knots.
 
 \end{itemize}
 

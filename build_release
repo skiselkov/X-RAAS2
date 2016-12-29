@@ -146,16 +146,22 @@ function install_xtra_files() {
 }
 
 embed=''
+nodoc=no
 
-while getopts "eh" opt; do
+while getopts "edh" opt; do
 	case "$opt" in
 	e)
 		embed="-e"
+		;;
+	d)
+		nodoc=yes
 		;;
 	h)
 		cat << EOF
 Usage: $0 [-eh]
 Options:
+  -d : Continue even if the documentation build failed. Useful if you don't
+       have pdfTeX installed and just want to test build.
   -e : Build an embeddable version of X-RAAS. Embeddable versions auto-inhibit
        when a globally installed version of X-RAAS is detected to prevent
        duplicated annunciations. Embeddable versions also relocate their config
@@ -181,7 +187,7 @@ if ! ( cd FreeType && ./build_freetype_deps ); then
 	exit 1
 fi
 
-if ! ( cd Documentation && make ); then
+if ! ( cd Documentation && make ) && [[ "$nodoc" = "no" ]]; then
 	echo "Documentation build failed, please make sure" \
 	    "you have pdfTeX installed." >&2
 	exit 1
