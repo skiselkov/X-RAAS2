@@ -43,7 +43,8 @@ extern "C" {
  * with this macro's output work regardless of machine & file byte order.
  */
 #define	FOURCC(str) \
-	((str)[0] | ((str)[1] << 8u) | ((str)[2] << 16u) | ((str)[3] << 24u))
+	((unsigned)((str)[0] | ((str)[1] << 8u) | ((str)[2] << 16u) | \
+	((str)[3] << 24u)))
 
 typedef struct riff_chunk {
 	uint32_t	fourcc;		/* In machine-native endian */
