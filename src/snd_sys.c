@@ -275,7 +275,12 @@ snd_sched_cb(float elapsed_since_last_call, float elapsed_since_last_floop,
 		ann->cur_msg++;
 		if (ann->cur_msg < ann->num_msgs) {
 			ann->started = now;
-			wav_play(voice_msgs[ann->msgs[ann->cur_msg]].wav);
+			if (!wav_play(
+			    voice_msgs[ann->msgs[ann->cur_msg]].wav)) {
+				log_init_msg(B_TRUE, INIT_ERR_MSG_TIMEOUT, NULL,
+				    NULL, "Cannot play sound, OpenAL error.\n"
+				    "See Log.txt for more information.");
+			}
 		} else {
 			list_remove(&playback_queue, ann);
 			free(ann->msgs);

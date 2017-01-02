@@ -42,7 +42,7 @@
 #define	FMT_ID	0x20746D66u	/* 'FMT ' */
 #define	DATA_ID	0x61746164u	/* 'DATA' */
 
-static ALCdevice *dev = NULL;
+static ALCdevice *old_dev = NULL, *my_dev = NULL;
 static ALCcontext *old_ctx = NULL, *my_ctx = NULL;
 static bool_t use_shared = B_FALSE;
 static bool_t ctx_saved = B_FALSE;
@@ -53,30 +53,60 @@ static bool_t openal_inited = B_FALSE;
  * sure private contexts are handled properly (when in use). If shared
  * contexts are used, these functions are no-ops.
  */
-static void
+static bool_t
 ctx_save(void)
 {
+	ALuint err;
+
 	if (use_shared)
-		return;
+		return (B_TRUE);
 
 	ASSERT(!ctx_saved);
 	dbg_log(wav, 1, "ctx_save()");
+
 	old_ctx = alcGetCurrentContext();
+	if (old_ctx != NULL) {
+		old_dev = alcGetContextsDevice(old_ctx);
+		VERIFY(old_dev != NULL);
+	} else {
+		old_dev = NULL;
+	}
+
 	alcMakeContextCurrent(my_ctx);
+	if ((err = alcGetError(my_dev)) != ALC_NO_ERROR) {
+		logMsg("Error switching to my audio context (0x%x)", err);
+		return (B_FALSE);
+	}
+
 	ctx_saved = B_TRUE;
+
+	return (B_TRUE);
 }
 
-static void
+static bool_t
 ctx_restore(void)
 {
+	ALuint err;
+
 	if (use_shared)
-		return;
+		return (B_TRUE);
 
 	ASSERT(ctx_saved);
-	dbg_log(wav, 1, "ctx_restore()");
-	if (old_ctx != NULL)
-		alcMakeContextCurrent(old_ctx);
+	/* To prevent tripping ASSERT in ctx_save if ctx_restore fails */
 	ctx_saved = B_FALSE;
+
+	dbg_log(wav, 1, "ctx_restore()");
+	if (old_ctx != NULL) {
+		alcMakeContextCurrent(old_ctx);
+		VERIFY(old_dev != NULL);
+		if ((err = alcGetError(old_dev)) != ALC_NO_ERROR) {
+			logMsg("Error restoring shared audio context (0x%x)",
+			    err);
+			return (B_FALSE);
+		}
+	}
+
+	return (B_TRUE);
 }
 
 void
@@ -90,41 +120,46 @@ openal_set_shared_ctx(bool_t flag)
 bool_t
 openal_init(void)
 {
+
 	dbg_log(wav, 1, "openal_init");
 
 	ASSERT(!openal_inited);
 
-	ctx_save();
+	if (!ctx_save())
+		return (B_FALSE);
 
 	if (!use_shared) {
-		dev = alcOpenDevice(NULL);
-		if (dev == NULL) {
-			logMsg("Cannot init audio system: device open "
-			    "failed (%d)."
+		ALuint err;
+
+		my_dev = alcOpenDevice(NULL);
+		if (my_dev == NULL) {
+			logMsg("Cannot init audio system: device open failed."
 #if	IBM
 			    "\nTry to configure X-RAAS with "
 			    "\"shared_audio_ctx = true\" and retest."
 #endif	/* IBM */
-			    , alGetError());
-			ctx_restore();
+			    );
+			(void) ctx_restore();
 			return (B_FALSE);
 		}
-		my_ctx = alcCreateContext(dev, NULL);
-		if (my_ctx == NULL) {
+		my_ctx = alcCreateContext(my_dev, NULL);
+		if ((err = alcGetError(my_dev)) != ALC_NO_ERROR) {
 			logMsg("Cannot init audio system: create context "
-			    "failed (%d)"
+			    "failed (0x%x)"
 #if	IBM
 			    "\nTry to configure X-RAAS with "
 			    "\"shared_audio_ctx = true\" and retest."
 #endif	/* IBM */
-			    , alGetError());
-			alcCloseDevice(dev);
-			ctx_restore();
+			    , err);
+			alcCloseDevice(my_dev);
+			(void) ctx_restore();
 			return (B_FALSE);
 		}
+		VERIFY(my_ctx != NULL);
 	}
 
-	ctx_restore();
+	if (!ctx_restore())
+		return (B_FALSE);
 
 	openal_inited = B_TRUE;
 
@@ -141,9 +176,9 @@ openal_fini()
 
 	if (!use_shared) {
 		alcDestroyContext(my_ctx);
-		alcCloseDevice(dev);
+		alcCloseDevice(my_dev);
 		my_ctx = NULL;
-		dev = NULL;
+		my_dev = NULL;
 	}
 	openal_inited = B_FALSE;
 }
@@ -241,12 +276,14 @@ wav_load(const char *filename, const char *descr_name)
 			*s = BSWAP16(*s);
 	}
 
-	ctx_save();
+	if (!ctx_save())
+		goto errout;
+
 	alGenBuffers(1, &wav->albuf);
 	if ((err = alGetError()) != AL_NO_ERROR) {
-		logMsg("Error loading WAV file %s: alGenBuffers failed (%d).",
-		    filename, err);
-		ctx_restore();
+		logMsg("Error loading WAV file %s: alGenBuffers failed "
+		    "(0x%x).", filename, err);
+		(void) ctx_restore();
 		goto errout;
 	}
 	if (wav->fmt.bps == 16)
@@ -259,17 +296,17 @@ wav_load(const char *filename, const char *descr_name)
 		    chunkp, chunksz, wav->fmt.srate);
 
 	if ((err = alGetError()) != AL_NO_ERROR) {
-		logMsg("Error loading WAV file %s: alBufferData failed (%d).",
-		    filename, err);
-		ctx_restore();
+		logMsg("Error loading WAV file %s: alBufferData failed "
+		    "(0x%x).", filename, err);
+		(void) ctx_restore();
 		goto errout;
 	}
 
 	alGenSources(1, &wav->alsrc);
 	if ((err = alGetError()) != AL_NO_ERROR) {
-		logMsg("Error loading WAV file %s: alGenSources failed (%d).",
-		    filename, err);
-		ctx_restore();
+		logMsg("Error loading WAV file %s: alGenSources failed "
+		    "(0x%x).", filename, err);
+		(void) ctx_restore();
 		goto errout;
 	}
 #define	CHECK_ERROR(stmt) \
@@ -277,10 +314,11 @@ wav_load(const char *filename, const char *descr_name)
 		stmt; \
 		if ((err = alGetError()) != AL_NO_ERROR) { \
 			logMsg("Error loading WAV file %s, \"%s\" failed " \
-			    "with error %d", filename, #stmt, err); \
+			    "with error 0x%x", filename, #stmt, err); \
 			alDeleteSources(1, &wav->alsrc); \
+			VERIFY(alGetError() == AL_NO_ERROR); \
 			wav->alsrc = 0; \
-			ctx_restore(); \
+			(void) ctx_restore(); \
 			goto errout; \
 		} \
 	} while (0)
@@ -291,7 +329,7 @@ wav_load(const char *filename, const char *descr_name)
 	CHECK_ERROR(alSourcefv(wav->alsrc, AL_POSITION, zeroes));
 	CHECK_ERROR(alSourcefv(wav->alsrc, AL_VELOCITY, zeroes));
 
-	ctx_restore();
+	CHECK_ERROR(ctx_restore());
 
 	dbg_log(wav, 1, "wav load complete, duration %.2fs", wav->duration);
 
@@ -325,7 +363,7 @@ wav_free(wav_t *wav)
 
 	ASSERT(openal_inited);
 
-	ctx_save();
+	VERIFY(ctx_save());
 	free(wav->name);
 	if (wav->alsrc != 0) {
 		alSourceStop(wav->alsrc);
@@ -333,7 +371,7 @@ wav_free(wav_t *wav)
 	}
 	if (wav->albuf != 0)
 		alDeleteBuffers(1, &wav->albuf);
-	ctx_restore();
+	VERIFY(ctx_restore());
 
 	free(wav);
 }
@@ -354,39 +392,44 @@ wav_set_gain(wav_t *wav, float gain)
 
 	ASSERT(openal_inited);
 
-	ctx_save();
+	VERIFY(ctx_save());
 
 	alSourcef(wav->alsrc, AL_GAIN, gain);
 	if ((err = alGetError()) != AL_NO_ERROR)
-		logMsg("Error changing gain of WAV %s, error %d.",
+		logMsg("Error changing gain of WAV %s, error 0x%x.",
 		    wav->name, err);
 
-	ctx_restore();
+	VERIFY(ctx_restore());
 }
 
 /*
  * Starts playback of a WAV file loaded through wav_load. Playback volume
  * is full (1.0) or the last value set by wav_set_gain.
  */
-void
+bool_t
 wav_play(wav_t *wav)
 {
 	ALuint err;
 
 	if (wav == NULL)
-		return;
+		return (B_FALSE);
 
 	dbg_log(wav, 1, "wav_play %s", wav->name);
 
 	ASSERT(openal_inited);
 
-	ctx_save();
+	VERIFY(ctx_save());
 
 	alSourcePlay(wav->alsrc);
-	if ((err = alGetError()) != AL_NO_ERROR)
-		logMsg("Can't play sound: alSourcePlay failed (%d).", err);
+	if ((err = alGetError()) != AL_NO_ERROR) {
+		logMsg("Can't play sound: alSourcePlay failed (0x%x).", err);
+		VERIFY(ctx_restore());
+		return (B_FALSE);
+	}
 
-	ctx_restore();
+	VERIFY(ctx_restore());
+
+	return (B_TRUE);
 }
 
 /*
@@ -396,6 +439,8 @@ wav_play(wav_t *wav)
 void
 wav_stop(wav_t *wav)
 {
+	ALuint err;
+
 	if (wav == NULL)
 		return;
 
@@ -405,7 +450,9 @@ wav_stop(wav_t *wav)
 		return;
 
 	ASSERT(openal_inited);
-	ctx_save();
+	VERIFY(ctx_save());
 	alSourceStop(wav->alsrc);
-	ctx_restore();
+	if ((err = alGetError()) != AL_NO_ERROR)
+		logMsg("Can't stop sound, alSourceStop failed (0x%x).", err);
+	VERIFY(ctx_restore());
 }

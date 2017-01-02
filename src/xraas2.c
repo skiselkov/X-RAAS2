@@ -1043,7 +1043,7 @@ perform_on_rwy_ann(const char *rwy_id, vect2_t pos_v, vect2_t thr_v,
 		append_msglist(&msg, &msg_len, FLAPS_MSG);
 		append_msglist(&msg, &msg_len, FLAPS_MSG);
 		allow_on_rwy_ND_alert = B_FALSE;
-		ND_alert(ND_ALERT_FLAPS, ND_ALERT_CAUTION, NULL, -1);
+		ND_alert(ND_ALERT_FLAPS, ND_ALERT_NONROUTINE, NULL, -1);
 		monitor_override = B_TRUE;
 	}
 
