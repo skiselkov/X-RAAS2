@@ -38,9 +38,9 @@
 
 #include "wav.h"
 
-#define	WAVE_ID	0x45564157u	/* 'WAVE' */
-#define	FMT_ID	0x20746D66u	/* 'FMT ' */
-#define	DATA_ID	0x61746164u	/* 'DATA' */
+#define	WAVE_ID	FOURCC("WAVE")
+#define	FMT_ID	FOURCC("fmt ")
+#define	DATA_ID	FOURCC("data")
 
 static ALCdevice *old_dev = NULL, *my_dev = NULL;
 static ALCcontext *old_ctx = NULL, *my_ctx = NULL;
@@ -196,8 +196,7 @@ wav_load(const char *filename, const char *descr_name)
 	size_t filesz;
 	riff_chunk_t *riff = NULL;
 	uint8_t *filebuf = NULL;
-	uint8_t *chunkp;
-	size_t chunksz;
+	riff_chunk_t *chunk;
 	int sample_sz;
 	ALuint err;
 	ALfloat zeroes[3] = { 0.0, 0.0, 0.0 };
@@ -230,13 +229,13 @@ wav_load(const char *filename, const char *descr_name)
 
 	wav->name = strdup(descr_name);
 
-	chunkp = riff_find_chunk(riff, &chunksz, FMT_ID, 0);
-	if (chunkp == NULL || chunksz != sizeof (wav->fmt)) {
-		logMsg("Error loading WAV file \"%s\": file missing FMT chunk.",
-		    filename);
+	chunk = riff_find_chunk(riff, FMT_ID, 0);
+	if (chunk == NULL || chunk->datasz < sizeof (wav->fmt)) {
+		logMsg("Error loading WAV file \"%s\": file missing or "
+		    "malformed `fmt ' chunk.", filename);
 		goto errout;
 	}
-	memcpy(&wav->fmt, chunkp, sizeof (wav->fmt));
+	memcpy(&wav->fmt, chunk->data, sizeof (wav->fmt));
 	if (riff->bswap) {
 		wav->fmt.datafmt = BSWAP16(wav->fmt.datafmt);
 		wav->fmt.n_channels = BSWAP16(wav->fmt.n_channels);
@@ -259,19 +258,19 @@ wav_load(const char *filename, const char *descr_name)
 	 * of samples.
 	 */
 	sample_sz = (wav->fmt.n_channels * wav->fmt.bps) / 8;
-	chunkp = riff_find_chunk(riff, &chunksz, DATA_ID, 0);
-	if (chunkp == NULL || (chunksz & (sample_sz - 1)) != 0) {
-		logMsg("Error loading WAV file %s: DATA chunk missing or "
+	chunk = riff_find_chunk(riff, DATA_ID, 0);
+	if (chunk == NULL || (chunk->datasz & (sample_sz - 1)) != 0) {
+		logMsg("Error loading WAV file %s: `data' chunk missing or "
 		    "contains bad number of samples.", filename);
 		goto errout;
 	}
 
-	wav->duration = ((double)(chunksz / sample_sz)) / wav->fmt.srate;
+	wav->duration = ((double)(chunk->datasz / sample_sz)) / wav->fmt.srate;
 
 	/* BSWAP the samples if necessary */
 	if (riff->bswap && wav->fmt.bps == 16) {
-		for (uint16_t *s = (uint16_t *)chunkp;
-		    (uint8_t *)s < chunkp + chunksz;
+		for (uint16_t *s = (uint16_t *)chunk->data;
+		    (uint8_t *)s < chunk->data + chunk->datasz;
 		    s++)
 			*s = BSWAP16(*s);
 	}
@@ -289,11 +288,11 @@ wav_load(const char *filename, const char *descr_name)
 	if (wav->fmt.bps == 16)
 		alBufferData(wav->albuf, wav->fmt.n_channels == 2 ?
 		    AL_FORMAT_STEREO16 : AL_FORMAT_MONO16,
-		    chunkp, chunksz, wav->fmt.srate);
+		    chunk->data, chunk->datasz, wav->fmt.srate);
 	else
 		alBufferData(wav->albuf, wav->fmt.n_channels == 2 ?
 		    AL_FORMAT_STEREO8 : AL_FORMAT_MONO8,
-		    chunkp, chunksz, wav->fmt.srate);
+		    chunk->data, chunk->datasz, wav->fmt.srate);
 
 	if ((err = alGetError()) != AL_NO_ERROR) {
 		logMsg("Error loading WAV file %s: alBufferData failed "
@@ -342,8 +341,12 @@ wav_load(const char *filename, const char *descr_name)
 errout:
 	if (filebuf != NULL)
 		free(filebuf);
-	if (riff != NULL)
+	if (riff != NULL) {
+		char *dump = riff_dump(riff);
+		logMsg("File format dump (for debugging):\n%s", dump);
+		free(dump);
 		riff_free_chunk(riff);
+	}
 	wav_free(wav);
 	fclose(fp);
 

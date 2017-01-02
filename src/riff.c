@@ -34,8 +34,9 @@
 
 #include "riff.h"
 
-#define	RIFF_ID	0x46464952u	/* 'RIFF' */
-#define	LIST_ID	0x54534C49u	/* 'LIST' */
+#define	RIFF_ID	FOURCC("RIFF")
+#define	LIST_ID	FOURCC("LIST")
+#define	IS_LIST(chunk)	(chunk->fourcc == RIFF_ID || chunk->fourcc == LIST_ID)
 
 /*
  * Frees a RIFF chunk and all its subchunks. Call this function on the
@@ -65,13 +66,13 @@ riff_parse_chunk(uint8_t *buf, size_t bufsz, bool_t bswap)
 	riff_chunk_t *c = calloc(1, sizeof (*c));
 
 	memcpy(&c->fourcc, buf, sizeof (c->fourcc));
-	memcpy(&c->sz, buf + 4, sizeof (c->sz));
+	memcpy(&c->datasz, buf + 4, sizeof (c->datasz));
 	if (bswap) {
 		c->fourcc = BSWAP32(c->fourcc);
-		c->sz = BSWAP32(c->sz);
+		c->datasz = BSWAP32(c->datasz);
 		c->bswap = B_TRUE;
 	}
-	if (c->sz > bufsz - 8) {
+	if (c->datasz > bufsz - 8) {
 		free(c);
 		return (NULL);
 	}
@@ -80,36 +81,44 @@ riff_parse_chunk(uint8_t *buf, size_t bufsz, bool_t bswap)
 		uint8_t *subbuf;
 
 		/* check there's enough data for a listcc field */
-		if (c->sz < 4) {
+		if (c->datasz < 4) {
 			free(c);
 			return (NULL);
 		}
 		memcpy(&c->listcc, buf + 8, sizeof (c->listcc));
 		if (bswap)
 			c->listcc = BSWAP32(c->listcc);
+
 		/* we exclude the listcc field from our data pointer */
 		c->data = buf + 12;
+		c->datasz -= 4;
+
 		list_create(&c->subchunks, sizeof (riff_chunk_t),
 		    offsetof(riff_chunk_t, node));
 
 		subbuf = c->data;
-		while (consumed != c->sz - 4) {
+		while (consumed != c->datasz) {
 			riff_chunk_t *sc = riff_parse_chunk(subbuf,
-			    c->sz - 4 - consumed, bswap);
+			    c->datasz - consumed, bswap);
 
 			if (sc == NULL) {
 				riff_free_chunk(c);
 				return (NULL);
 			}
 			list_insert_tail(&c->subchunks, sc);
-			consumed += sc->sz + 8;
-			subbuf += sc->sz + 8;
+			consumed += sc->datasz + 8;
+			subbuf += sc->datasz + 8;
+			if (IS_LIST(sc)) {
+				/* because we exclude the listcc from datasz */
+				consumed += 4;
+				subbuf += 4;
+			}
 			if (consumed & 1) {
 				/* realign to two-byte boundary */
 				consumed++;
 				subbuf++;
 			}
-			ASSERT(consumed <= c->sz - 4);
+			ASSERT(consumed <= c->datasz);
 			ASSERT(subbuf <= buf + bufsz);
 		}
 	} else {
@@ -124,11 +133,16 @@ riff_parse_chunk(uint8_t *buf, size_t bufsz, bool_t bswap)
  * Parses a RIFF file and returns its top-level chunk. The parsed structure
  * contains references to the input buffer, so it must not be freed by the
  * caller. Chunk's fourcc's are automatically endian-swapped if the file's
- * endianness is reversed. Chunk contents AREN'T byteswapped.
+ * endianness doesn't match ours. Chunk contents AREN'T byteswapped. Instead,
+ * the caller should use the `bswap' field in the riff_chunk_t to determine
+ * if the file was found to be reverse endian and thus if it needs to
+ * perform byteswapping of chunk contents.
+ *
  * @param filetype The 32-bit little-endian fourcc code identifying the
  *	RIFF file type (e.g. 'WAVE').
  * @param buf Input buffer to parse which contains the entire RIFF file.
  * @param bufsz Input buffer size.
+ *
  * If the file isn't of the appropriate type or is malformed, NULL is
  * returned instead.
  */
@@ -144,7 +158,7 @@ riff_parse(uint32_t filetype, uint8_t *buf, size_t bufsz)
 		return (NULL);
 
 	/* make sure the header signature matches & determine endianness */
-	if (((uint32_t *)buf)[0] == RIFF_ID)
+	if (buf32[0] == RIFF_ID)
 		bswap = B_FALSE;
 	else if (buf32[0] == BSWAP32(RIFF_ID))
 		bswap = B_TRUE;
@@ -165,24 +179,20 @@ riff_parse(uint32_t filetype, uint8_t *buf, size_t bufsz)
 
 /*
  * Locates a specific chunk in a RIFF file. In `topchunk' pass the top-level
- * RIFF file chunk. The `chunksz' will be filled with the size of the chunk
- * being searched for (if found). The remaining arguments must be a
- * 0-terminated list of uint32_t FourCCs of the nested chunks. Don't include
- * the top-level chunk ID.
- * Returns a pointer to the body of the chunk (if found, and chunksz will be
- * populated with the amount of data in the chunk), or NULL if not found.
+ * RIFF file chunk. The remaining arguments must be a 0-terminated list of
+ * uint32_t FourCCs of the nested chunks. Don't include the top-level chunk ID.
+ * Returns a pointer to a riff_chunk_t (if found), or NULL if not found.
  */
-uint8_t *
-riff_find_chunk(riff_chunk_t *topchunk, size_t *chunksz, ...)
+riff_chunk_t *
+riff_find_chunk(riff_chunk_t *topchunk, ...)
 {
 	va_list ap;
 	uint32_t fourcc;
 
 	ASSERT(topchunk != NULL);
 	ASSERT(topchunk->fourcc == RIFF_ID);
-	ASSERT(chunksz != NULL);
 
-	va_start(ap, chunksz);
+	va_start(ap, topchunk);
 	while ((fourcc = va_arg(ap, uint32_t)) != 0) {
 		riff_chunk_t *sc;
 
@@ -204,6 +214,68 @@ riff_find_chunk(riff_chunk_t *topchunk, size_t *chunksz, ...)
 
 	ASSERT(topchunk != NULL);
 
-	*chunksz = topchunk->sz;
-	return (topchunk->data);
+	return (topchunk);
+}
+
+/*
+ * The actual recursive implementation of riff_dump with variable indent.
+ */
+static char *
+riff_dump_impl(const riff_chunk_t *chunk, int indent)
+{
+	char fourcc[5] = {
+	    chunk->fourcc & 0xff, (chunk->fourcc >> 8) & 0xff,
+	    (chunk->fourcc >> 16) & 0xff, (chunk->fourcc >> 24) & 0xff, 0
+	};
+	char listcc[5] = {
+	    chunk->listcc & 0xff, (chunk->listcc >> 8) & 0xff,
+	    (chunk->listcc >> 16) & 0xff, (chunk->listcc >> 24) & 0xff, 0
+	};
+	char indent_str[indent + 1];
+	int len;
+	char *buf;
+
+	memset(indent_str, ' ', indent);
+	indent_str[indent] = 0;
+
+#define	DUMP_FMT_ARGS "%s%s%s%s%s%08x\n", indent_str, fourcc, \
+	    IS_LIST(chunk) ? " " : "       ", IS_LIST(chunk) ? listcc : "", \
+	    IS_LIST(chunk) ? "  " : "", chunk->datasz
+	len = snprintf(NULL, 0, DUMP_FMT_ARGS);
+	buf = malloc(len + 1);
+	snprintf(buf, len + 1, DUMP_FMT_ARGS);
+#undef	DUMP_FMT_ARGS
+
+	if (!IS_LIST(chunk))
+		return (buf);
+
+	for (const riff_chunk_t *sc = list_head(&chunk->subchunks); sc != NULL;
+	    sc = list_next(&chunk->subchunks, sc)) {
+		char *subbuf = riff_dump_impl(sc, indent + 2);
+
+		len += strlen(subbuf);
+		buf = realloc(buf, len + 1);
+		strcat(buf, subbuf);
+		free(subbuf);
+	}
+
+	return (buf);
+}
+
+/*
+ * Returns a malloc'd string containing the format dump of a RIFF file
+ * (for debugging). The string is formatted into individual lines:
+ *
+ * RIFF FTYP ChunkSz
+ *   CHNK      ChunkSz
+ *   LIST CHNK ChunkSz
+ *     CHNK      ChunkSz
+ *     CHNK      ChunkSz
+ *   CHNK      ChunkSz
+ *   ...
+ */
+char *
+riff_dump(const riff_chunk_t *topchunk)
+{
+	return (riff_dump_impl(topchunk, 0));
 }

@@ -34,14 +34,32 @@
 extern "C" {
 #endif
 
-typedef struct riff_chunk {
-	bool_t		bswap;
-	uint32_t	fourcc;
-	uint8_t		*data;
-	uint32_t	sz;
+/*
+ * This macro constructs a 32-bit RIFF chunk ID from a 4-character string
+ * (e.g. FOURCC("WAVE")). The returned 32-bit chunk ID is implicitly in
+ * little endian, since RIFF files are normally little endian. The RIFF
+ * parser performs chunk ID byteswapping internally if it determines that
+ * the file's endianness doesn't match ours, so that direct comparisons
+ * with this macro's output work regardless of machine & file byte order.
+ */
+#define	FOURCC(str) \
+	((str)[0] | ((str)[1] << 8u) | ((str)[2] << 16u) | ((str)[3] << 24u))
 
-	/* populated if fourcc is RIFF_ID or LIST_ID */
-	uint32_t	listcc;
+typedef struct riff_chunk {
+	uint32_t	fourcc;		/* In machine-native endian */
+
+	/*
+	 * Indicates the file was in reverse endian to the machine's native
+	 * byte order. Although the fourcc and listcc fields are in native
+	 * order, anything in `data' is left as-is by the parser. So use
+	 * this field to determine if you need to byteswap `data' contents.
+	 */
+	bool_t		bswap;
+	uint8_t		*data;
+	uint32_t	datasz;
+
+	/* Populated if fourcc is RIFF_ID or LIST_ID */
+	uint32_t	listcc;		/* In machine-native endian */
 	list_t		subchunks;
 
 	list_node_t	node;
@@ -49,7 +67,8 @@ typedef struct riff_chunk {
 
 void riff_free_chunk(riff_chunk_t *c);
 riff_chunk_t *riff_parse(uint32_t filetype, uint8_t *buf, size_t bufsz);
-uint8_t *riff_find_chunk(riff_chunk_t *topchunk, size_t *chunksz, ...);
+riff_chunk_t *riff_find_chunk(riff_chunk_t *topchunk, ...);
+char *riff_dump(const riff_chunk_t *topchunk);
 
 #ifdef	__cplusplus
 }
