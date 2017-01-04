@@ -328,7 +328,7 @@ wav_load(const char *filename, const char *descr_name)
 	CHECK_ERROR(alSourcefv(wav->alsrc, AL_POSITION, zeroes));
 	CHECK_ERROR(alSourcefv(wav->alsrc, AL_VELOCITY, zeroes));
 
-	CHECK_ERROR(ctx_restore());
+	(void) ctx_restore();
 
 	dbg_log(wav, 1, "wav load complete, duration %.2fs", wav->duration);
 
