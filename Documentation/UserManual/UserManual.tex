@@ -413,7 +413,7 @@ advisory on the ND:
 \begin{center}
 \includegraphics[width=0.5\textwidth]{../src/takeoff_roll.pdf}
 \end{center}
-\caption{Taxiway takeoff}
+\caption{Late rotation on takeoff}
 \end{wrapfigure}
 
 If the aircraft is on a runway and accelerates past 40 knots ground
@@ -477,13 +477,12 @@ operations is prohibited.
 \label{subsec:AltmQNHQFEMon}
 
 This is the reverse advisory to the altimeter setting advisory during
-climb and is intended to assist in preventing CFIT (Controlled Flight
-Into Terrain). X-RAAS determines the transition level based on the
-navigational database entries of the airport closest to the aircraft. If
-a fixed transition level is not published, X-RAAS calculates the lowest
-possible transition level based on barometric pressure readings, GPS
-calculated elevation AMSL and a published transition altitude, such that
-the calculated transition level is equal in true elevation AMSL to the
+climb. X-RAAS determines the transition level based on the navigational
+database entries of the airport closest to the aircraft. If a fixed
+transition level is not published, X-RAAS calculates the lowest possible
+transition level based on barometric pressure readings, GPS calculated
+elevation AMSL and a published transition altitude, such that the
+calculated transition level is equal in true elevation AMSL to the
 transition altitude. Please note that this fallback mechanism might not
 be as accurate as using the ATC-assigned transition level, so reliance on
 this annunciation to determine the correct transition level is
@@ -538,7 +537,7 @@ annunciation:
 
 \item Within approximately 3 nm of a runway.
 
-\item Track is aligned with the runway and heading is within 25 degrees
+\item Track is aligned with the runway and heading is within 20 degrees
 of runway heading.
 
 \item In landing configuration.
@@ -1867,6 +1866,10 @@ X-RAAS.
 \item Jean Joubert
 
 \item Kyle Madore
+
+\item Pascal
+``\href{https://www.youtube.com/channel/UCg7RwFfTBq19oIxUkjuo_Ig}{hectopascal}''
+Reichel
 
 \end{itemize}
 
