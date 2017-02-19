@@ -128,6 +128,26 @@ have modified existing scenery packages and would like to force X-RAAS to
 refresh its airport data cache, use the menu entry ``Plugins''
 $\rightarrow$ ``X-RAAS'' $\rightarrow$ ``Recreate data cache''.}
 
+\subsection{Upgrading from X-RAAS 1.0}
+
+Version 2.0 is a complete rewrite of X-RAAS and as such, an existing
+X-RAAS 1.0 installation is obsolete and can be removed from the
+\texttt{Resources/plugins/FlyWithLua/Scripts} folder.
+
+If you have been using customized configuration files in X-RAAS 1.0, you
+can carry these customization over into X-RAAS 2.0 without much
+difficulty. To transfer the global configuration, simply copy the
+\texttt{X-RAAS.cfg} file from the
+\texttt{Resources/plugins/FlyWithLua/Scripts} folder into the new global
+configuration file location in \texttt{<X-Plane>/Output/preferences}. The
+per-aircraft configuration file location has not changed, so there is no
+need to move the per-aircraft configuration files.
+
+Please also refer to section \ref{subsec:GUIConfiguration} for the new
+graphical configuration user interface. The GUI configuration uses the
+same configuration files in its backend and should thus pick up any
+settings made in the configuration files automatically.
+
 \section{Activating X-RAAS in the aircraft}
 \label{sec:ActivatingXRAAS}
 
