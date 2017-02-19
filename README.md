@@ -37,5 +37,5 @@ how to properly interface with an embedded version of X-RAAS.
 
 X-RAAS is *NOT* meant for flight training or use in real avionics. Its
 performance can seriously deviate from the real world system, so *DO NOT*
-rely on it for anything critical. This project has no ties to Honeywell
-or Laminar Research.
+rely on it for anything critical. It was created solely for entertainment
+use. This project has *no* ties to Honeywell or Laminar Research.
