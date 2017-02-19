@@ -12,7 +12,7 @@
  *
  * CDDL HEADER END
  *
- * Copyright 2016 Saso Kiselkov. All rights reserved.
+ * Copyright 2017 Saso Kiselkov. All rights reserved.
  */
 
 #ifndef	_XRAAS2_H_

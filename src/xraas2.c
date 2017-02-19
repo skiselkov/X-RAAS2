@@ -12,7 +12,7 @@
  *
  * CDDL HEADER END
  *
- * Copyright 2016 Saso Kiselkov. All rights reserved.
+ * Copyright 2017 Saso Kiselkov. All rights reserved.
  */
 
 #include <errno.h>
@@ -52,7 +52,7 @@
 #include "xraas2.h"
 #include "xraas_cfg.h"
 
-#define	XRAAS2_VERSION			"2.0rc5"
+#define	XRAAS2_VERSION			"2.0.0"
 #define	XRAAS2_STANDALONE_PLUGIN_SIG	"skiselkov.xraas2"
 
 #ifdef	XRAAS_IS_EMBEDDED
