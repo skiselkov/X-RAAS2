@@ -268,11 +268,9 @@ runway_compar(const void *a, const void *b)
 {
 	const runway_t *ra = a, *rb = b;
 	int res = strcmp(ra->joint_id, rb->joint_id);
-	if (res != 0) {
-		/* make sure the runways are not simply reversals */
-		ASSERT(strcmp(ra->ends[0].id, rb->ends[1].id) != 0);
-		ASSERT(strcmp(ra->ends[1].id, rb->ends[0].id) != 0);
-	}
+	/* check to match runway ID reversals */
+	if (res != 0 && strcmp(ra->joint_id, rb->rev_joint_id) == 0)
+		return (0);
 	if (res < 0)
 		return (-1);
 	else if (res == 0)
@@ -870,7 +868,7 @@ parse_apt_dat_100_line(airport_t *arpt, const char *filename,
 	comps = strsplit(line, " ", B_TRUE, &ncomps);
 	ASSERT(strcmp(comps[0], "100") == 0);
 	if (ncomps < 8 + 9 + 5) {
-		dbg_log(tile, 1, "%s:%d: malformed runway entry, skipping. "
+		dbg_log(tile, 0, "%s:%d: malformed runway entry, skipping. "
 		    "Offending line:\n%s", filename, line_num, line);
 		goto out;
 	}
@@ -913,6 +911,8 @@ parse_apt_dat_100_line(airport_t *arpt, const char *filename,
 
 	snprintf(rwy->joint_id, sizeof (rwy->joint_id), "%s%s",
 	    rwy->ends[0].id, rwy->ends[1].id);
+	snprintf(rwy->rev_joint_id, sizeof (rwy->rev_joint_id), "%s%s",
+	    rwy->ends[1].id, rwy->ends[0].id);
 
 	/* Our extended data cache format */
 	if (ncomps >= 28 && strstr(comps[22], "GPA1:") == comps[22] &&
@@ -932,7 +932,7 @@ parse_apt_dat_100_line(airport_t *arpt, const char *filename,
 	/* validate all parsed info */
 	if (!validate_rwy_end(&rwy->ends[0], error_descr) ||
 	    !validate_rwy_end(&rwy->ends[1], error_descr)) {
-		dbg_log(tile, 1, "%s:%d: malformed runway entry, skipping. "
+		dbg_log(tile, 0, "%s:%d: malformed runway entry, skipping. "
 		    "%s. Offending line:\n%s", filename, line_num, error_descr,
 		    line);
 		free(rwy);
@@ -940,9 +940,9 @@ parse_apt_dat_100_line(airport_t *arpt, const char *filename,
 	}
 
 	if (avl_find(&arpt->rwys, rwy, &where) != NULL) {
-		dbg_log(tile, 1, "%s seems corrupted, it contains a "
-		    "duplicate runway entry %s/%s at airport %s",
-		    filename, rwy->ends[0].id, rwy->ends[1].id, arpt->icao);
+		dbg_log(tile, 0, "%s:%d: duplicate runway entry %s/%s at "
+		    "airport %s. Offending line:\n%s", filename, line_num,
+		    rwy->ends[0].id, rwy->ends[1].id, arpt->icao, line);
 		free(rwy);
 		goto out;
 	}

@@ -61,6 +61,7 @@ struct runway {
 	double		width;
 	runway_end_t	ends[2];
 	char		joint_id[8];
+	char		rev_joint_id[8];
 
 	/* computed on load_airport */
 	double		length;		/* meters */
