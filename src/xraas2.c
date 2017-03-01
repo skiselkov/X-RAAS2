@@ -2539,6 +2539,30 @@ XPluginStart(char *outName, char *outSig, char *outDesc)
 	if (!init_msg_sys_init())
 		return (0);
 
+#ifdef	XRAAS_IS_EMBEDDED
+	p = &plugindir[strlen(xpdir)];
+	if (strlen(plugindir) > strlen(xpdir) &&
+	    (strstr(p, DIRSEP_S "Resources" DIRSEP_S "plugins") == p ||
+	    strstr(p, DIRSEP_S "resources" DIRSEP_S "plugins") == p)) {
+		/*
+		 * This means somebody has installed the embeddable version
+		 * into the global plugins directory. Warn the user.
+		 */
+		log_init_msg(B_TRUE, 10 * INIT_ERR_MSG_TIMEOUT, NULL, NULL,
+		    "X-RAAS(%s) CAUTION: it seems you have installed an "
+		    "embeddable version of X-RAAS into X-Plane's global "
+		    "Resources" DIRSEP_S "plugins folder.\n"
+		    "The embeddable version is meant to be embedded into an "
+		    "aircraft model by its developer.\n"
+		    "If you would like to use X-RAAS as a stand-alone plugin, "
+		    "download the stand-alone version.\n"
+		    "If you are an aircraft developer, please move the "
+		    "X-RAAS plugin into your aircraft's \"plugins\" folder.",
+		    XRAAS2_VERSION);
+		plugin_conflict = B_TRUE;
+	}
+#endif	/* XRAAS_IS_EMBEDDED */
+
 	return (1);
 }
 

@@ -15,4 +15,5 @@ qmake/win.xpl_resource.rc
 qmake/output
 FreeType/freetype-*
 X-RAAS2
+X-RAAS2_embed
 .DS_Store

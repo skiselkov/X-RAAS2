@@ -137,21 +137,29 @@ function install_xtra_files() {
 	for (( I=0; $I < ${#DIST_FILES[@]}; I=$I + 2 )); do
 		FILE="${DIST_FILES[$I]}"
 		DSTDIR="${DIST_FILES[$I+1]}"
+		# Documentation isn't needed in the embeddable build
+		if [ -n "${embed_suffix}" ] &&
+		    ( [[ "$DSTDIR" == Documentation/* ]] ||
+		    [[ "$DSTDIR" == Documentation ]] ); then
+			continue
+		fi
 		if [[ "$DSTDIR" = "" ]]; then
 			DSTDIR="$(dirname "$FILE")"
 		fi
-		mkdir -p "X-RAAS2/$DSTDIR"
-		cp "$FILE" "X-RAAS2/$DSTDIR"
+		mkdir -p "X-RAAS2${embed_suffix}/$DSTDIR"
+		cp "$FILE" "X-RAAS2${embed_suffix}/$DSTDIR"
 	done
 }
 
 embed=''
+embed_suffix=''
 nodoc=no
 
 while getopts "edh" opt; do
 	case "$opt" in
 	e)
 		embed="-e"
+		embed_suffix="_embed"
 		;;
 	d)
 		nodoc=yes
@@ -187,27 +195,29 @@ if ! ( cd FreeType && ./build_freetype_deps ); then
 	exit 1
 fi
 
-if ! ( cd Documentation && make ) && [[ "$nodoc" = "no" ]]; then
-	echo "Documentation build failed, please make sure" \
-	    "you have pdfTeX installed." >&2
+if [[ "$nodoc" == "no" ]] && ! ( cd Documentation && make ) ; then
+	cat << EOF >&2
+Documentation build failed, please make sure you have pdfTeX installed.
+To skip building documentation, use the -d flag.
+EOF
 	exit 1
 fi
 
-rm -rf X-RAAS2
+rm -rf X-RAAS2 X-RAAS2_embed
 
 case `uname` in
 Linux)
 	( cd qmake && ./build-win-lin $embed ) && \
-	    mkdir -p X-RAAS2/{32,64} && \
-	    cp qmake/output/32/{win,lin}.xpl X-RAAS2/32 && \
-	    cp qmake/output/64/{win,lin}.xpl X-RAAS2/64 && \
+	    mkdir -p X-RAAS2${embed_suffix}/{32,64} && \
+	    cp qmake/output/32/{win,lin}.xpl X-RAAS2${embed_suffix}/32 && \
+	    cp qmake/output/64/{win,lin}.xpl X-RAAS2${embed_suffix}/64 && \
 	    install_xtra_files
 	;;
 Darwin)
 	( cd qmake && ./build-mac $embed ) && \
-	    mkdir -p X-RAAS2/{32,64} && \
-	    cp qmake/output/32/mac.xpl X-RAAS2/32 && \
-	    cp qmake/output/64/mac.xpl X-RAAS2/64 && \
+	    mkdir -p X-RAAS2${embed_suffix}/{32,64} && \
+	    cp qmake/output/32/mac.xpl X-RAAS2${embed_suffix}/32 && \
+	    cp qmake/output/64/mac.xpl X-RAAS2${embed_suffix}/64 && \
 	    install_xtra_files
 	;;
 *)
