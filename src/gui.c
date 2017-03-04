@@ -1048,7 +1048,7 @@ update_main_window(void)
 {
 #define	UPDATE_BUTTON_STATE(button) \
 	XPSetWidgetProperty(buttons.button, xpProperty_ButtonState, \
-	    xraas_state->button)
+	    xraas_state->config.button)
 
 	UPDATE_BUTTON_STATE(enabled);
 	UPDATE_BUTTON_STATE(allow_helos);
@@ -1058,7 +1058,7 @@ update_main_window(void)
 	UPDATE_BUTTON_STATE(us_runway_numbers);
 	for (int i = 0; i < NUM_MONITORS; i++)
 		XPSetWidgetProperty(buttons.monitors[i],
-		    xpProperty_ButtonState, xraas_state->monitors[i]);
+		    xpProperty_ButtonState, xraas_state->config.monitors[i]);
 	UPDATE_BUTTON_STATE(disable_ext_view);
 	UPDATE_BUTTON_STATE(override_electrical);
 	UPDATE_BUTTON_STATE(override_replay);
@@ -1076,7 +1076,7 @@ update_main_window(void)
 #define	UPDATE_TEXT_FIELD(field, fmt) \
 	do { \
 		char buf[32]; \
-		snprintf(buf, sizeof (buf), fmt, xraas_state->field); \
+		snprintf(buf, sizeof (buf), fmt, xraas_state->config.field); \
 		XPSetWidgetDescriptor(text_fields.field, buf); \
 	} while (0)
 
@@ -1092,13 +1092,13 @@ update_main_window(void)
 	UPDATE_TEXT_FIELD(on_rwy_warn_max_n, "%d");
 	UPDATE_TEXT_FIELD(long_land_lim_abs, "%d");
 	UPDATE_TEXT_FIELD(nd_alert_timeout, "%d");
-	if (strcmp(xraas_state->nd_alert_overlay_font,
+	if (strcmp(xraas_state->config.nd_alert_overlay_font,
 	    ND_alert_overlay_default_font) == 0)
 		XPSetWidgetDescriptor(text_fields.nd_alert_overlay_font,
 		    "default");
 	else
 		XPSetWidgetDescriptor(text_fields.nd_alert_overlay_font,
-		    xraas_state->nd_alert_overlay_font);
+		    xraas_state->config.nd_alert_overlay_font);
 	UPDATE_TEXT_FIELD(nd_alert_overlay_font_size, "%d");
 
 #undef	UPDATE_TEXT_FIELD
@@ -1107,7 +1107,7 @@ update_main_window(void)
 	do { \
 		XPSetWidgetProperty(scrollbars.field, \
 		    xpProperty_ScrollBarSliderPosition, \
-		    xraas_state->field * multiplier); \
+		    xraas_state->config.field * multiplier); \
 		main_window_cb(xpMsg_ScrollBarSliderPositionChanged, \
 		    main_win, (intptr_t)scrollbars.field, 0); \
 	} while (0)
@@ -1198,7 +1198,7 @@ gui_update(void)
 {
 	XPLMEnableMenuItem(root_menu, dbg_gui_menu_item, xraas_inited);
 	XPLMCheckMenuItem(root_menu, dbg_gui_menu_item,
-	    xraas_state->debug_graphical ? xplm_Menu_Checked :
+	    xraas_state->config.debug_graphical ? xplm_Menu_Checked :
 	    xplm_Menu_Unchecked);
 	update_main_window();
 }

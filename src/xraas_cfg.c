@@ -59,73 +59,72 @@ const char *const monitor_conf_keys[NUM_MONITORS] = {
 static void
 reset_config(xraas_state_t *state)
 {
+	memset(&state->config, 0, sizeof (state->config));
+
 	/*
 	 * No need to set B_FALSE/zero values here, since the config has
 	 * already been bzero'ed.
 	 */
-	state->enabled = B_TRUE;
-	state->min_engines = 2;
-	state->min_mtow = 5700;
-	state->auto_disable_notify = B_TRUE;
-	state->startup_notify = B_TRUE;
-	state->use_imperial = B_TRUE;
-	state->voice_female = B_TRUE;
-	state->voice_volume = 1.0;
-	state->min_takeoff_dist = 1000;
-	state->min_landing_dist = 800;
-	state->min_rotation_dist = 400;
-	state->min_rotation_angle = 3;
-	state->stop_dist_cutoff = 1600;
-	state->min_landing_flap = 0.5;
-	state->min_takeoff_flap = 0.1;
-	state->max_takeoff_flap = 0.75;
-	state->on_rwy_warn_initial = 60;
-	state->on_rwy_warn_repeat = 120;
-	state->on_rwy_warn_max_n = 3;
-	state->gpa_limit_mult = 2;
-	state->gpa_limit_max = 8;
-	state->disable_ext_view = B_TRUE;
-	state->speak_units = B_TRUE;
-	state->long_land_lim_abs = 610;	/* 2000 feet */
-	state->long_land_lim_fract = 0.25;
-	state->nd_alerts_enabled = B_TRUE;
-	state->nd_alert_filter = ND_ALERT_ROUTINE;
-	state->nd_alert_overlay_enabled = B_TRUE;
-	state->nd_alert_timeout = 7;
-	state->nd_alert_overlay_font = strdup(ND_alert_overlay_default_font);
-	state->nd_alert_overlay_font_size = ND_alert_overlay_default_font_size;
+	state->config.enabled = B_TRUE;
+	state->config.min_engines = 2;
+	state->config.min_mtow = 5700;
+	state->config.auto_disable_notify = B_TRUE;
+	state->config.startup_notify = B_TRUE;
+	state->config.use_imperial = B_TRUE;
+	state->config.voice_female = B_TRUE;
+	state->config.voice_volume = 1.0;
+	state->config.min_takeoff_dist = 1000;
+	state->config.min_landing_dist = 800;
+	state->config.min_rotation_dist = 400;
+	state->config.min_rotation_angle = 3;
+	state->config.stop_dist_cutoff = 1600;
+	state->config.min_landing_flap = 0.5;
+	state->config.min_takeoff_flap = 0.1;
+	state->config.max_takeoff_flap = 0.75;
+	state->config.on_rwy_warn_initial = 60;
+	state->config.on_rwy_warn_repeat = 120;
+	state->config.on_rwy_warn_max_n = 3;
+	state->config.gpa_limit_mult = 2;
+	state->config.gpa_limit_max = 8;
+	state->config.disable_ext_view = B_TRUE;
+	state->config.speak_units = B_TRUE;
+	state->config.long_land_lim_abs = 610;	/* 2000 feet */
+	state->config.long_land_lim_fract = 0.25;
+	state->config.nd_alerts_enabled = B_TRUE;
+	state->config.nd_alert_filter = ND_ALERT_ROUTINE;
+	state->config.nd_alert_overlay_enabled = B_TRUE;
+	state->config.nd_alert_timeout = 7;
+	my_strlcpy(state->config.nd_alert_overlay_font,
+	    ND_alert_overlay_default_font,
+	    sizeof (state->config.nd_alert_overlay_font));
+	state->config.nd_alert_overlay_font_size =
+	    ND_alert_overlay_default_font_size;
 
 	for (int i = 0; i < NUM_MONITORS; i++)
-		state->monitors[i] = B_TRUE;
+		state->config.monitors[i] = B_TRUE;
 
 	/* The QFE monitor is the exception - off by default */
-	state->monitors[ALTM_QFE_MON] = B_FALSE;
+	state->config.monitors[ALTM_QFE_MON] = B_FALSE;
 
 	openal_set_shared_ctx(B_FALSE);
 
 	memset(&xraas_debug_config, 0, sizeof (xraas_debug_config));
+
+	my_strlcpy(state->config.GPWS_priority_dataref,
+	    "sim/cockpit2/annunciators/GPWS",
+	    sizeof (state->config.GPWS_priority_dataref));
+	my_strlcpy(state->config.GPWS_inop_dataref,
+	    "sim/cockpit/warnings/annunciators/GPWS",
+	    sizeof (state->config.GPWS_inop_dataref));
 }
 
 static void
 reset_state(xraas_state_t *state)
 {
-	memset(state, 0, sizeof (*state));
-
-	state->enabled = B_TRUE;
-
-	my_strlcpy(state->GPWS_priority_dataref,
-	    "sim/cockpit2/annunciators/GPWS",
-	    sizeof (state->GPWS_priority_dataref));
-	my_strlcpy(state->GPWS_inop_dataref,
-	    "sim/cockpit/warnings/annunciators/GPWS",
-	    sizeof (state->GPWS_inop_dataref));
-
 	state->on_rwy_timer = -1;
-
 	state->TATL_field_elev = TATL_FIELD_ELEV_UNSET;
 	state->TATL_transition = -1;
 	state->bus_loaded = -1;
-
 	reset_config(state);
 }
 
@@ -137,9 +136,10 @@ process_conf(xraas_state_t *state, conf_t *conf)
 #define	CONF_GET(type, varname) \
 	do { \
 		/* first try the new name, then the old one */ \
-		if (!conf_get_ ## type(conf, #varname, &state->varname)) \
+		if (!conf_get_ ## type(conf, #varname, \
+		    &state->config.varname)) \
 			(void) conf_get_ ## type(conf, "raas_" #varname, \
-			    &state->varname); \
+			    &state->config.varname); \
 	} while (0)
 	CONF_GET(b, enabled);
 	CONF_GET(b, allow_helos);
@@ -181,31 +181,32 @@ process_conf(xraas_state_t *state, conf_t *conf)
 	CONF_GET(i, nd_alert_timeout);
 	CONF_GET(b, debug_graphical);
 	if (conf_get_str(conf, "nd_alert_overlay_font", &str)) {
-		free(state->nd_alert_overlay_font);
-		state->nd_alert_overlay_font = strdup(str);
+		my_strlcpy(state->config.nd_alert_overlay_font, str,
+		    sizeof (state->config.nd_alert_overlay_font));
 	}
 	CONF_GET(i, nd_alert_overlay_font_size);
 #undef	CONF_GET
 
 	for (int i = 0; i < NUM_MONITORS; i++) {
 		if (conf_get_b(conf, monitor_conf_keys[i],
-		    &state->monitors[i])) {
+		    &state->config.monitors[i])) {
 			int l = strlen(monitor_conf_keys[i]) + 6;
 			char buf[l];
 			snprintf(buf, l, "raas_%s", monitor_conf_keys[i]);
-			(void) conf_get_b(conf, buf, &state->monitors[i]);
+			(void) conf_get_b(conf, buf,
+			    &state->config.monitors[i]);
 		}
 	}
 
-	if (conf_get_b(conf, "openal_shared", &state->openal_shared))
-		openal_set_shared_ctx(state->openal_shared);
+	if (conf_get_b(conf, "openal_shared", &state->config.openal_shared))
+		openal_set_shared_ctx(state->config.openal_shared);
 
 	if (conf_get_str(conf, "gpws_prio_dr", &str))
-		my_strlcpy(state->GPWS_priority_dataref, str,
-		    sizeof (state->GPWS_priority_dataref));
+		my_strlcpy(state->config.GPWS_priority_dataref, str,
+		    sizeof (state->config.GPWS_priority_dataref));
 	if (conf_get_str(conf, "gpws_inop_dr", &str))
-		my_strlcpy(state->GPWS_inop_dataref, str,
-		    sizeof (state->GPWS_inop_dataref));
+		my_strlcpy(state->config.GPWS_inop_dataref, str,
+		    sizeof (state->config.GPWS_inop_dataref));
 
 #define	CONF_GET_DEBUG(value) \
 	conf_get_i(conf, "debug_" #value, &xraas_debug_config.value)

@@ -113,7 +113,7 @@ alert_sched_cb(float elapsed_since_last_call, float elapsed_since_last_floop,
 	UNUSED(refcon);
 
 	if (alert_status != 0 && (microclock() - alert_start_time >
-	    SEC2USEC(xraas_state->nd_alert_timeout))) {
+	    SEC2USEC(xraas_state->config.nd_alert_timeout))) {
 		if (overlay.buf != NULL) {
 			glDeleteTextures(1, &overlay.texture);
 			free(overlay.buf);
@@ -142,7 +142,7 @@ ND_alerts_init(void)
 		return (B_FALSE);
 	}
 	filename = mkpathname(xraas_plugindir, "data", "fonts",
-	    xraas_state->nd_alert_overlay_font, NULL);
+	    xraas_state->config.nd_alert_overlay_font, NULL);
 	if ((err = FT_New_Face(overlay.ft, filename, 0, &overlay.face)) != 0) {
 		log_init_msg(B_TRUE, INIT_ERR_MSG_TIMEOUT, NULL, NULL,
 		    "ND alert overlay initialization error: cannot "
@@ -186,7 +186,7 @@ render_alert_texture(void)
 	int color, r, g, b;
 	int text_w, text_h;
 	enum { MARGIN_SIZE = 10 };
-	int font_size = xraas_state->nd_alert_overlay_font_size;
+	int font_size = xraas_state->config.nd_alert_overlay_font_size;
 
 	VERIFY(XRAAS_ND_msg_decode(alert_status, msg, &color) != 0);
 
@@ -273,13 +273,13 @@ ND_alert(nd_alert_msg_type_t msg, nd_alert_level_t level, const char *rwy_id,
 
 	ASSERT(msg >= ND_ALERT_FLAPS && msg <= ND_ALERT_DEEP_LAND);
 
-	if (!xraas_state->nd_alerts_enabled)
+	if (!xraas_state->config.nd_alerts_enabled)
 		return;
 
 	dbg_log(nd_alert, 1, "msg: %d level: %d rwy_ID: %s dist: %d",
 	    msg, level, rwy_id, dist);
 
-	if (level < (nd_alert_level_t)xraas_state->nd_alert_filter) {
+	if (level < (nd_alert_level_t)xraas_state->config.nd_alert_filter) {
 		dbg_log(nd_alert, 2, "suppressed due to filter setting");
 		return;
 	}
@@ -309,7 +309,7 @@ ND_alert(nd_alert_msg_type_t msg, nd_alert_level_t level, const char *rwy_id,
 
 	/* encode the optional distance field */
 	if (dist >= 0) {
-		if (xraas_state->use_imperial)
+		if (xraas_state->config.use_imperial)
 			msg |= (((int)MET2FEET(dist) / 100) & 0xff) << 16;
 		else
 			msg |= ((dist / 100) & 0xff) << 16;
@@ -318,7 +318,8 @@ ND_alert(nd_alert_msg_type_t msg, nd_alert_level_t level, const char *rwy_id,
 	alert_status = msg;
 	alert_start_time = microclock();
 
-	if (xraas_state->nd_alert_overlay_enabled && alert_overlay_dis == 0)
+	if (xraas_state->config.nd_alert_overlay_enabled &&
+	    alert_overlay_dis == 0)
 		render_alert_texture();
 }
 

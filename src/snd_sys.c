@@ -91,7 +91,7 @@ set_sound_on(bool_t flag)
 {
 	for (int i = 0; i < NUM_MSGS; i++)
 		wav_set_gain(voice_msgs[i].wav,
-		    flag ? xraas_state->voice_volume : 0);
+		    flag ? xraas_state->config.voice_volume : 0);
 }
 
 static int
@@ -122,7 +122,7 @@ play_msg(msg_type_t *msg, size_t msg_len, msg_prio_t prio)
 {
 	ann_t *ann;
 
-	if (xraas_state->use_tts) {
+	if (xraas_state->config.use_tts) {
 		char *buf;
 		size_t buflen = 0;
 		for (size_t i = 0; i < msg_len; i++)
@@ -168,7 +168,7 @@ modify_cur_msg(msg_type_t *msg, size_t msg_len, msg_prio_t prio)
 {
 	ann_t *ann;
 
-	if (xraas_state->use_tts)
+	if (xraas_state->config.use_tts)
 		return (B_FALSE);
 
 	ASSERT(inited);
@@ -228,12 +228,12 @@ snd_sched_cb(float elapsed_since_last_call, float elapsed_since_last_floop,
 	 * the cockpit and AC power is on.
 	 */
 	if (view_is_ext && (!view_is_external() ||
-	    !xraas_state->disable_ext_view)) {
+	    !xraas_state->config.disable_ext_view)) {
 		dbg_log(snd, 1, "view has moved inside, unmuting");
 		set_sound_on(B_TRUE);
 		view_is_ext = B_FALSE;
 	} else if (!view_is_ext && view_is_external() &&
-	    xraas_state->disable_ext_view) {
+	    xraas_state->config.disable_ext_view) {
 		dbg_log(snd, 1, "view has moved outside, muting");
 		set_sound_on(B_FALSE);
 		view_is_ext = B_TRUE;
@@ -298,7 +298,7 @@ snd_sys_init(const char *plugindir)
 
 	dbg_log(snd, 1, "snd_sys_init");
 
-	if (xraas_state->use_tts)
+	if (xraas_state->config.use_tts)
 		return (B_TRUE);
 
 	ASSERT(!inited);
@@ -307,7 +307,7 @@ snd_sys_init(const char *plugindir)
 	if (!openal_init())
 		return (B_FALSE);
 
-	gender_dir = (xraas_state->voice_female ? "female" : "male");
+	gender_dir = (xraas_state->config.voice_female ? "female" : "male");
 
 	for (msg_type_t msg = 0; msg < NUM_MSGS; msg++) {
 		char fname[32];
@@ -326,7 +326,8 @@ snd_sys_init(const char *plugindir)
 			free(pathname);
 			goto errout;
 		}
-		wav_set_gain(voice_msgs[msg].wav, xraas_state->voice_volume);
+		wav_set_gain(voice_msgs[msg].wav,
+		    xraas_state->config.voice_volume);
 		free(pathname);
 	}
 
@@ -356,7 +357,7 @@ snd_sys_fini(void)
 
 	if (!inited)
 		return;
-	ASSERT(!xraas_state->use_tts);
+	ASSERT(!xraas_state->config.use_tts);
 
 	for (ann_t *ann = list_head(&playback_queue); ann != NULL;
 	    ann = list_head(&playback_queue)) {

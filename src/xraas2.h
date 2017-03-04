@@ -73,61 +73,64 @@ enum {
 };
 
 typedef struct xraas_state {
-	bool_t		enabled;
+	struct {
+		bool_t	enabled;
 
-	int		min_engines;		/* count */
-	int		min_mtow;		/* kg */
-	bool_t		allow_helos;
-	bool_t		auto_disable_notify;
-	bool_t		startup_notify;
-	bool_t		override_electrical;
-	bool_t		override_replay;
-	bool_t		use_tts;
-	bool_t		speak_units;
-	bool_t		use_imperial;
+		int		min_engines;		/* count */
+		int		min_mtow;		/* kg */
+		bool_t		allow_helos;
+		bool_t		auto_disable_notify;
+		bool_t		startup_notify;
+		bool_t		override_electrical;
+		bool_t		override_replay;
+		bool_t		use_tts;
+		bool_t		speak_units;
+		bool_t		use_imperial;
 
-	/* monitor enablings */
-	bool_t		monitors[NUM_MONITORS];
+		/* monitor enablings */
+		bool_t		monitors[NUM_MONITORS];
 
-	int		min_takeoff_dist;		/* meters */
-	int		min_landing_dist;		/* meters */
-	int		min_rotation_dist;		/* meters */
-	double		min_rotation_angle;		/* degrees */
-	int		stop_dist_cutoff;		/* meters */
-	bool_t		voice_female;
-	double		voice_volume;
-	bool_t		disable_ext_view;
-	double		min_landing_flap;		/* ratio, 0-1 */
-	double		min_takeoff_flap;		/* ratio, 0-1 */
-	double		max_takeoff_flap;		/* ratio, 0-1 */
+		int		min_takeoff_dist;	/* meters */
+		int		min_landing_dist;	/* meters */
+		int		min_rotation_dist;	/* meters */
+		double		min_rotation_angle;	/* degrees */
+		int		stop_dist_cutoff;	/* meters */
+		bool_t		voice_female;
+		double		voice_volume;
+		bool_t		disable_ext_view;
 
-	bool_t		nd_alerts_enabled;
-	int		nd_alert_filter;		/* nd_alert_level_t */
-	bool_t		nd_alert_overlay_enabled;
-	bool_t		nd_alert_overlay_force;
-	int		nd_alert_timeout;		/* seconds */
-	char		*nd_alert_overlay_font;		/* file name */
-	int		nd_alert_overlay_font_size;	/* pixel value */
+		double		min_landing_flap;	/* ratio, 0-1 */
+		double		min_takeoff_flap;	/* ratio, 0-1 */
+		double		max_takeoff_flap;	/* ratio, 0-1 */
 
-	int		on_rwy_warn_initial;		/* seconds */
-	int		on_rwy_warn_repeat;		/* seconds */
-	int		on_rwy_warn_max_n;		/* count */
+		bool_t		nd_alerts_enabled;
+		int		nd_alert_filter;	/* nd_alert_level_t */
+		bool_t		nd_alert_overlay_enabled;
+		bool_t		nd_alert_overlay_force;
+		int		nd_alert_timeout;		/* seconds */
+		char		nd_alert_overlay_font[MAX_PATH]; /* file name */
+		int		nd_alert_overlay_font_size; /* pixel value */
 
-	double		gpa_limit_mult;			/* multiplier */
-	double		gpa_limit_max;			/* degrees */
+		int		on_rwy_warn_initial;	/* seconds */
+		int		on_rwy_warn_repeat;	/* seconds */
+		int		on_rwy_warn_max_n;	/* count */
 
-	char		GPWS_priority_dataref[128];
-	char		GPWS_inop_dataref[128];
+		double		gpa_limit_mult;		/* multiplier */
+		double		gpa_limit_max;		/* degrees */
 
-	bool_t		us_runway_numbers;
+		char		GPWS_priority_dataref[128];
+		char		GPWS_inop_dataref[128];
 
-	bool_t		say_deep_landing;	/* Say 'DEEP landing' */
-	int		long_land_lim_abs;	/* meters */
-	double		long_land_lim_fract;	/* fraction, 0-1 */
+		bool_t		us_runway_numbers;
 
-	bool_t		openal_shared;
-	bool_t		debug_graphical;
-	bool_t		debug;
+		bool_t		say_deep_landing;	/* Say 'DEEP landing' */
+		int		long_land_lim_abs;	/* meters */
+		double		long_land_lim_fract;	/* fraction, 0-1 */
+
+		bool_t		openal_shared;
+		bool_t		debug_graphical;
+		bool_t		debug;
+	} config;
 
 	rwy_key_tbl_t	on_rwy_ann;
 	rwy_key_tbl_t	apch_rwy_ann;

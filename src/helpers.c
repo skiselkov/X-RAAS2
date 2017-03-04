@@ -518,12 +518,12 @@ microclock(void)
 {
 #if	IBM
 	LARGE_INTEGER val, freq;
-	QueryPerformanceFrequency(&freq);
-	QueryPerformanceCounter(&val);
+	VERIFY(QueryPerformanceFrequency(&freq));
+	VERIFY(QueryPerformanceCounter(&val));
 	return ((val.QuadPart * 1000000ll) / freq.QuadPart);
 #else	/* !IBM */
 	struct timeval tv;
-	gettimeofday(&tv, NULL);
+	VERIFY(gettimeofday(&tv, NULL) == 0);
 	return ((tv.tv_sec * 1000000ll) + tv.tv_usec);
 #endif	/* !IBM */
 }
