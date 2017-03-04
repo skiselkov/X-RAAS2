@@ -31,6 +31,10 @@
 #include <sys/types.h>
 #include <math.h>
 
+#if	IBM
+#include <windows.h>
+#endif	/* IBM */
+
 #include "types.h"
 
 #ifdef	__cplusplus
