@@ -203,7 +203,7 @@ EOF
 	exit 1
 fi
 
-rm -rf X-RAAS2 X-RAAS2_embed
+rm -rf X-RAAS2${embed_suffix}
 
 case `uname` in
 Linux)
