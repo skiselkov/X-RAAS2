@@ -52,7 +52,7 @@
 #include "xraas2.h"
 #include "xraas_cfg.h"
 
-#define	XRAAS2_VERSION			"2.0.1"
+#define	XRAAS2_VERSION			"2.0.2"
 #define	XRAAS2_STANDALONE_PLUGIN_SIG	"skiselkov.xraas2"
 
 #ifdef	XRAAS_IS_EMBEDDED
