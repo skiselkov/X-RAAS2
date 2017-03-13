@@ -1542,8 +1542,7 @@ load_xp11_navdata(airportdb_t *db)
 	char *dirpath;
 	bool_t success = B_FALSE;
 
-	dirpath = mkpathname(db->xpdir, "Resources", "Custom Data", "CIFP",
-	    NULL);
+	dirpath = mkpathname(db->xpdir, "Custom Data", "CIFP", NULL);
 	if (file_exists(dirpath, &isdir) && isdir) {
 		if (!load_CIFP_dir(db, dirpath))
 			logMsg("%s: error parsing navdata, falling "
