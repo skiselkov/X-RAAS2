@@ -46,6 +46,7 @@ typedef struct {
 } debug_config_t;
 
 extern debug_config_t xraas_debug_config;
+extern bool_t xraas_private_log;
 
 /*
  * This lets us chop out the basename (last path component) from __FILE__
@@ -69,9 +70,13 @@ void log_backtrace(void);
 
 #define	dbg_log(class, level, ...) \
 	do { \
-		log_impl(&xraas_debug_config.class, level, \
-		    log_basename(__FILE__), __LINE__, \
-		    "[" #class "/" #level "] " __VA_ARGS__); \
+		if (xraas_debug_config.class >= level || \
+		    xraas_debug_config.all >= level || \
+		    xraas_private_log) { \
+			log_impl(&xraas_debug_config.class, level, \
+			    log_basename(__FILE__), __LINE__, \
+			    "[" #class "/" #level "] " __VA_ARGS__); \
+		} \
 	} while (0)
 
 #ifdef __cplusplus

@@ -40,24 +40,25 @@
 #define	PREFIX_FMT	"%s %s[%s:%d]: ", timedate, PREFIX, filename, line
 
 debug_config_t xraas_debug_config;
-static FILE *my_log_fp = NULL;
+static FILE *private_log_fp = NULL;
+bool_t xraas_private_log = B_FALSE;
 
 static void
-close_my_log(void)
+close_private_log(void)
 {
-	VERIFY(my_log_fp != NULL);
-	fclose(my_log_fp);
-	my_log_fp = NULL;
+	VERIFY(private_log_fp != NULL);
+	fclose(private_log_fp);
+	private_log_fp = NULL;
 }
 
 static void
-open_my_log(void)
+open_private_log(void)
 {
 	char *filename = mkpathname(xraas_xpdir, "Output", "caches",
 	    "X-RAAS_log.txt", NULL);
-	my_log_fp = fopen(filename, "wb");
-	if (my_log_fp)
-		atexit(close_my_log);
+	private_log_fp = fopen(filename, "wb");
+	if (private_log_fp)
+		atexit(close_private_log);
 	free(filename);
 }
 
@@ -82,9 +83,6 @@ log_impl_v(const int *class, int level, const char *filename, int line,
 	struct tm *tm;
 	time_t t;
 
-	if (my_log_fp == NULL)
-		open_my_log();
-
 	t = time(NULL);
 	tm = localtime(&t);
 	VERIFY(strftime(timedate, sizeof (timedate), DATE_FMT, tm) != 0);
@@ -99,8 +97,12 @@ log_impl_v(const int *class, int level, const char *filename, int line,
 	(void) vsnprintf(&buf[prefix_len], len + 1, fmt, ap);
 	(void) sprintf(&buf[strlen(buf)], "\n");
 
-	if (my_log_fp != NULL)
-		fputs(buf, my_log_fp);
+	if (xraas_private_log) {
+		if (private_log_fp == NULL)
+			open_private_log();
+		if (private_log_fp != NULL)
+			fputs(buf, private_log_fp);
+	}
 	if (class == NULL || *class >= level ||
 	    xraas_debug_config.all >= level) {
 		XPLMDebugString(buf);
@@ -198,9 +200,13 @@ log_backtrace(void)
 		}
 	}
 
-	if (my_log_fp != NULL) {
-		fputs(backtrace_buf, my_log_fp);
-		fflush(my_log_fp);
+	if (xraas_private_log) {
+		if (private_log_fp == NULL)
+			open_private_log();
+		if (private_log_fp != NULL) {
+			fputs(backtrace_buf, private_log_fp);
+			fflush(private_log_fp);
+		}
 	}
 	XPLMDebugString(backtrace_buf);
 	fputs(backtrace_buf, stderr);
@@ -224,9 +230,13 @@ log_backtrace(void)
 	for (i = 1, j = BACKTRACE_STRLEN; i < sz; i++)
 		j += sprintf(&msg[j], "%s\n", fnames[i]);
 
-	if (my_log_fp != NULL) {
-		fputs(msg, my_log_fp);
-		fflush(my_log_fp);
+	if (xraas_private_log) {
+		if (private_log_fp == NULL)
+			open_private_log();
+		if (private_log_fp != NULL) {
+			fputs(msg, private_log_fp);
+			fflush(private_log_fp);
+		}
 	}
 	XPLMDebugString(msg);
 	fputs(msg, stderr);

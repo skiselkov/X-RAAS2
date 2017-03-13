@@ -1195,6 +1195,10 @@ parse_airports_txt_A_line(airportdb_t *db, const char *filename,
 	if (arpt == NULL)
 		goto out;
 
+	/* airport already seen in previous version of the database, skip */
+	if (arpt->in_navdb)
+		goto out;
+
 	if (arpt->geo_linked)
 		geo_unlink_airport(db, arpt);
 	arpt->refpt = GEO_POS3(atof(comps[3]), atof(comps[4]),
@@ -1337,6 +1341,9 @@ load_arinc42418_arpt_data(const char *filename, airport_t *arpt)
 		return (B_FALSE);
 	}
 
+	/* airport already seen in previous version of the database, skip */
+	if (arpt->in_navdb)
+		return (B_TRUE);
 	arpt->in_navdb = B_TRUE;
 
 	while (!feof(fp)) {
@@ -1532,27 +1539,26 @@ static bool_t
 load_xp11_navdata(airportdb_t *db)
 {
 	bool_t isdir;
-	char *dirpath_custom;
+	char *dirpath;
 	bool_t success = B_FALSE;
 
-	dirpath_custom = mkpathname(db->xpdir,
-	    "Resources", "Custom Data", "CIFP", NULL);
-	if (file_exists(dirpath_custom, &isdir) && isdir) {
-		success = load_CIFP_dir(db, dirpath_custom);
-		if (!success)
+	dirpath = mkpathname(db->xpdir, "Resources", "Custom Data", "CIFP",
+	    NULL);
+	if (file_exists(dirpath, &isdir) && isdir) {
+		if (!load_CIFP_dir(db, dirpath))
 			logMsg("%s: error parsing navdata, falling "
-			    "back to default data.", dirpath_custom);
+			    "back to default data.", dirpath);
 	}
-	free(dirpath_custom);
+	free(dirpath);
+
+	dirpath = mkpathname(db->xpdir, "Resources", "default data", "CIFP",
+	    NULL);
+	success = load_CIFP_dir(db, dirpath);
 	if (!success) {
-		char *dirpath_default = mkpathname(db->xpdir,
-		    "Resources", "default data", "CIFP", NULL);
-		success = load_CIFP_dir(db, dirpath_default);
-		if (!success)
-			logMsg("%s: error parsing navdata, "
-			    "please check your install", dirpath_default);
-		free(dirpath_default);
+		logMsg("%s: error parsing navdata, please check your install",
+		    dirpath);
 	}
+	free(dirpath);
 
 	return (success);
 }
@@ -1867,12 +1873,21 @@ recreate_cache(airportdb_t *db)
 		 * airport, because we don't have TA/TL info on them.
 		 */
 		if (!arpt->in_navdb) {
-			dbg_log(tile, 5, "Airport %s is missing geo_xrefs, "
-			    "dropping it", arpt->icao);
+			logMsg("Error: airport %s not found in navdata, "
+			    "dropping it.", arpt->icao);
 			geo_unlink_airport(db, arpt);
 			avl_remove(&db->apt_dat, arpt);
 			free_airport(arpt);
 		}
+	}
+	if (avl_numnodes(&db->apt_dat) == 0) {
+		log_init_msg(B_TRUE, INIT_ERR_MSG_TIMEOUT, NULL, NULL,
+		    "X-RAAS navigational database error: it appears your "
+		    "simulator's navigational database is broken,\n"
+		    "or your simulator contains no airport scenery. Please "
+		    "reinstall the database and retry.");
+		success = B_FALSE;
+		goto out;
 	}
 
 	if (!recreate_cache_skeleton(db, &apt_dat_files)) {
