@@ -549,6 +549,8 @@ read_apt_dat_insert(airportdb_t *db, airport_t *arpt)
 		apt_dat_insert(db, arpt);
 		geo_link_airport(db, arpt);
 	} else {
+		dbg_log(tile, 3, "Skipping airport %s without any usable "
+		    "runways", arpt->icao);
 		free_airport(arpt);
 	}
 }
@@ -1865,6 +1867,8 @@ recreate_cache(airportdb_t *db)
 		 * airport, because we don't have TA/TL info on them.
 		 */
 		if (!arpt->in_navdb) {
+			dbg_log(tile, 5, "Airport %s is missing geo_xrefs, "
+			    "dropping it", arpt->icao);
 			geo_unlink_airport(db, arpt);
 			avl_remove(&db->apt_dat, arpt);
 			free_airport(arpt);
@@ -1876,6 +1880,9 @@ recreate_cache(airportdb_t *db)
 		goto out;
 	}
 
+	dbg_log(tile, 5, "Creating airport data cache for %ld airports",
+	    avl_numnodes(&db->apt_dat));
+
 	for (airport_t *arpt = avl_first(&db->apt_dat); arpt != NULL;
 	    arpt = AVL_NEXT(&db->apt_dat, arpt)) {
 		char *dirname;
@@ -1885,6 +1892,7 @@ recreate_cache(airportdb_t *db)
 
 		dirname = apt_dat_cache_dir(db, GEO3_TO_GEO2(arpt->refpt),
 		    NULL);
+		dbg_log(tile, 5, "Writing %s to %s", arpt->icao, dirname);
 		if (!create_directory(dirname) || !write_apt_dat(db, arpt)) {
 			free(dirname);
 			success = B_FALSE;

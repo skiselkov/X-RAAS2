@@ -60,17 +60,18 @@ const char *log_basename(const char *filename);
 #endif	/* !__GNUC__ && !__clang__ */
 
 #define	logMsg(...) \
-	log_impl(log_basename(__FILE__), __LINE__, __VA_ARGS__)
-void log_impl(const char *filename, int line, const char *fmt,
-	...) PRINTF_ATTR(3);
-void log_impl_v(const char *filename, int line, const char *fmt, va_list ap);
+	log_impl(NULL, 0, log_basename(__FILE__), __LINE__, __VA_ARGS__)
+void log_impl(const int *class, int level, const char *filename, int line,
+    const char *fmt, ...) PRINTF_ATTR(5);
+void log_impl_v(const int *class, int level, const char *filename, int line,
+    const char *fmt, va_list ap);
 void log_backtrace(void);
 
 #define	dbg_log(class, level, ...) \
 	do { \
-		if (xraas_debug_config.class >= level || \
-		    xraas_debug_config.all >= level) \
-			logMsg("[" #class "/" #level "] " __VA_ARGS__); \
+		log_impl(&xraas_debug_config.class, level, \
+		    log_basename(__FILE__), __LINE__, \
+		    "[" #class "/" #level "] " __VA_ARGS__); \
 	} while (0)
 
 #ifdef __cplusplus

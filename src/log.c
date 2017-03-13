@@ -33,24 +33,47 @@
 #include "assert.h"
 #include "helpers.h"
 #include "log.h"
+#include "xraas2.h"
 
 #define	PREFIX		"X-RAAS"
 #define	DATE_FMT	"%Y-%m-%d %H:%M:%S"
 #define	PREFIX_FMT	"%s %s[%s:%d]: ", timedate, PREFIX, filename, line
 
 debug_config_t xraas_debug_config;
+static FILE *my_log_fp = NULL;
+
+static void
+close_my_log(void)
+{
+	VERIFY(my_log_fp != NULL);
+	fclose(my_log_fp);
+	my_log_fp = NULL;
+}
+
+static void
+open_my_log(void)
+{
+	char *filename = mkpathname(xraas_xpdir, "Output", "caches",
+	    "X-RAAS_log.txt", NULL);
+	my_log_fp = fopen(filename, "wb");
+	if (my_log_fp)
+		atexit(close_my_log);
+	free(filename);
+}
 
 void
-log_impl(const char *filename, int line, const char *fmt, ...)
+log_impl(const int *class, int level, const char *filename, int line,
+    const char *fmt, ...)
 {
 	va_list ap;
 	va_start(ap, fmt);
-	log_impl_v(filename, line, fmt, ap);
+	log_impl_v(class, level, filename, line, fmt, ap);
 	va_end(ap);
 }
 
 void
-log_impl_v(const char *filename, int line, const char *fmt, va_list ap)
+log_impl_v(const int *class, int level, const char *filename, int line,
+    const char *fmt, va_list ap)
 {
 	va_list ap_copy;
 	char timedate[32];
@@ -58,6 +81,9 @@ log_impl_v(const char *filename, int line, const char *fmt, va_list ap)
 	size_t prefix_len, len;
 	struct tm *tm;
 	time_t t;
+
+	if (my_log_fp == NULL)
+		open_my_log();
 
 	t = time(NULL);
 	tm = localtime(&t);
@@ -73,8 +99,13 @@ log_impl_v(const char *filename, int line, const char *fmt, va_list ap)
 	(void) vsnprintf(&buf[prefix_len], len + 1, fmt, ap);
 	(void) sprintf(&buf[strlen(buf)], "\n");
 
-	XPLMDebugString(buf);
-	puts(buf);
+	if (my_log_fp != NULL)
+		fputs(buf, my_log_fp);
+	if (class == NULL || *class >= level ||
+	    xraas_debug_config.all >= level) {
+		XPLMDebugString(buf);
+		puts(buf);
+	}
 
 	free(buf);
 }
@@ -167,6 +198,10 @@ log_backtrace(void)
 		}
 	}
 
+	if (my_log_fp != NULL) {
+		fputs(msg, my_log_fp);
+		fflush(my_log_fp);
+	}
 	XPLMDebugString(backtrace_buf);
 	fputs(backtrace_buf, stderr);
 
@@ -189,6 +224,10 @@ log_backtrace(void)
 	for (i = 1, j = BACKTRACE_STRLEN; i < sz; i++)
 		j += sprintf(&msg[j], "%s\n", fnames[i]);
 
+	if (my_log_fp != NULL) {
+		fputs(msg, my_log_fp);
+		fflush(my_log_fp);
+	}
 	XPLMDebugString(msg);
 	fputs(msg, stderr);
 

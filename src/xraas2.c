@@ -2469,38 +2469,8 @@ XPluginStart(char *outName, char *outSig, char *outDesc)
 {
 	char *p;
 
-	/* Inhibit startup if another X-RAAS instance was found. */
-	if (XPLMFindPluginBySignature(XRAAS2_STANDALONE_PLUGIN_SIG) !=
-	    XPLM_NO_PLUGIN_ID) {
-		plugin_conflict = B_TRUE;
-#ifndef	XRAAS_IS_EMBEDDED
-		/*
-		 * This is a rather unexpected situation if we are stand-alone
-		 * and indicates an installation problem. Warn the user.
-		 */
-		logMsg("CAUTION: it seems your simulator is loading X-RAAS "
-		    "twice. Please check your installation to make sure "
-		    "there aren't any duplicate copies of the plugin!");
-		return (0);
-#endif	/* !XRAAS_IS_EMBEDDED */
-	}
-
 	/* Always use Unix-native paths on the Mac! */
 	XPLMEnableFeature("XPLM_USE_NATIVE_PATHS", 1);
-
-	strcpy(outName, XRAAS2_PLUGIN_NAME);
-	strcpy(outSig, XRAAS2_PLUGIN_SIG);
-	strcpy(outDesc, XRAAS2_PLUGIN_DESC);
-
-	if (plugin_conflict) {
-		/*
-		 * We can't simply return 0 here, as that emits a rather
-		 * nasty-looking error message into the X-Plane Log.txt.
-		 * Instead, we simply report success and internally inhibit
-		 * all operations.
-		 */
-		return (1);
-	}
 
 	XPLMGetSystemPath(xpdir);
 	XPLMGetPrefsPath(prefsdir);
@@ -2517,6 +2487,36 @@ XPluginStart(char *outName, char *outSig, char *outDesc)
 	fix_pathsep(prefsdir);
 	fix_pathsep(plugindir);
 #endif	/* IBM */
+
+	strcpy(outName, XRAAS2_PLUGIN_NAME);
+	strcpy(outSig, XRAAS2_PLUGIN_SIG);
+	strcpy(outDesc, XRAAS2_PLUGIN_DESC);
+
+	/* Inhibit startup if another X-RAAS instance was found. */
+	if (XPLMFindPluginBySignature(XRAAS2_STANDALONE_PLUGIN_SIG) !=
+	    XPLM_NO_PLUGIN_ID) {
+		plugin_conflict = B_TRUE;
+#ifndef	XRAAS_IS_EMBEDDED
+		/*
+		 * This is a rather unexpected situation if we are stand-alone
+		 * and indicates an installation problem. Warn the user.
+		 */
+		logMsg("CAUTION: it seems your simulator is loading X-RAAS "
+		    "twice. Please check your installation to make sure "
+		    "there aren't any duplicate copies of the plugin!");
+		return (0);
+#endif	/* !XRAAS_IS_EMBEDDED */
+	}
+
+	if (plugin_conflict) {
+		/*
+		 * We can't simply return 0 here, as that emits a rather
+		 * nasty-looking error message into the X-Plane Log.txt.
+		 * Instead, we simply report success and internally inhibit
+		 * all operations.
+		 */
+		return (1);
+	}
 
 	if (strlen(xpdir) > 0 && xpdir[strlen(xpdir) - 1] == DIRSEP) {
 		/*
