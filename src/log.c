@@ -199,7 +199,7 @@ log_backtrace(void)
 	}
 
 	if (my_log_fp != NULL) {
-		fputs(msg, my_log_fp);
+		fputs(backtrace_buf, my_log_fp);
 		fflush(my_log_fp);
 	}
 	XPLMDebugString(backtrace_buf);
