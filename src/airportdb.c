@@ -1333,17 +1333,19 @@ load_arinc42418_arpt_data(const char *filename, airport_t *arpt)
 {
 	char *line = NULL;
 	size_t linecap = 0;
-	FILE *fp = fopen(filename, "r");
+	FILE *fp;
 	int line_num = 0;
 
+	/* airport already seen in previous version of the database, skip */
+	if (arpt->in_navdb)
+		return (B_TRUE);
+
+	fp = fopen(filename, "r");
 	if (fp == NULL) {
 		logMsg("Can't open %s: %s", filename, strerror(errno));
 		return (B_FALSE);
 	}
 
-	/* airport already seen in previous version of the database, skip */
-	if (arpt->in_navdb)
-		return (B_TRUE);
 	arpt->in_navdb = B_TRUE;
 
 	while (!feof(fp)) {
