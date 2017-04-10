@@ -1264,7 +1264,7 @@ long_landing_check(const runway_t *rwy, double dist, vect2_t opp_thr_v,
 
 			state.long_landing_ann = B_TRUE;
 			ND_alert(state.config.say_deep_landing ?
-			    ND_ALERT_DEEP_LAND : ND_ALERT_DEEP_LAND,
+			    ND_ALERT_DEEP_LAND : ND_ALERT_LONG_LAND,
 			    ND_ALERT_CAUTION, NULL, -1);
 		} else {
 			perform_rwy_dist_remaining_callouts(opp_thr_v, pos_v,
