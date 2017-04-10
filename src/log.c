@@ -43,9 +43,11 @@ debug_config_t xraas_debug_config;
 static FILE *private_log_fp = NULL;
 bool_t xraas_private_log = B_FALSE;
 
-static void
+void
 close_private_log(void)
 {
+	if (private_log_fp == NULL)
+		return;
 	VERIFY(private_log_fp != NULL);
 	fclose(private_log_fp);
 	private_log_fp = NULL;
@@ -57,8 +59,6 @@ open_private_log(void)
 	char *filename = mkpathname(xraas_xpdir, "Output", "caches",
 	    "X-RAAS_log.txt", NULL);
 	private_log_fp = fopen(filename, "wb");
-	if (private_log_fp)
-		atexit(close_private_log);
 	free(filename);
 }
 

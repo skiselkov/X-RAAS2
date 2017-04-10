@@ -2579,6 +2579,8 @@ XPluginStart(char *outName, char *outSig, char *outDesc)
 PLUGIN_API void
 XPluginStop(void)
 {
+	close_private_log();
+
 	if (plugin_conflict)
 		return;
 

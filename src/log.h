@@ -48,6 +48,8 @@ typedef struct {
 extern debug_config_t xraas_debug_config;
 extern bool_t xraas_private_log;
 
+void close_private_log(void);
+
 /*
  * This lets us chop out the basename (last path component) from __FILE__
  * at compile time. This works on GCC and Clang. The fallback mechanism

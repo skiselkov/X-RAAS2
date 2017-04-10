@@ -58,6 +58,7 @@ extern "C" {
 		if (!(x)) { \
 			logMsg("assertion \"%s\" failed\n", #x); \
 			log_backtrace(); \
+			close_private_log(); \
 			abort(); \
 		} \
 	} while (0)
