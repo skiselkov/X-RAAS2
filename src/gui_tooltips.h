@@ -42,6 +42,7 @@ static const char *enabled_tooltip[] = {
 	"OFF: X-RAAS startup is completely inhibited.",
 	NULL
 };
+#ifndef	XRAAS_IS_EMBEDDED
 static const char *allow_helos_tooltip[] = {
 	"ON: permit startup if the current aircraft is a helicopter.",
 	"OFF: inhibit startup if the current aircraft is a helicopter.",
@@ -58,6 +59,7 @@ static const char *startup_notify_tooltip[] = {
 	"(This setting doesn't inhibit startup of X-RAAS itself.)",
 	NULL
 };
+#endif	/* !XRAAS_IS_EMBEDDED */
 static const char *use_imperial_tooltip[] = {
 	"ON: use feet as the unit of measure in annunciations.",
 	"OFF: use meters as the unit of measure in annunciations.",
@@ -243,6 +245,7 @@ static const char *disable_ext_view_tooltip[] = {
 	"display of visual overlay annunciations is permitted.",
 	NULL
 };
+#ifndef	XRAAS_IS_EMBEDDED
 static const char *override_electrical_tooltip[] = {
 	"ON: permit startup even if insufficient power is being applied "
 	"to the aircraft's electrical buses.",
@@ -250,6 +253,7 @@ static const char *override_electrical_tooltip[] = {
 	"to the aircraft's electrical buses.",
 	NULL
 };
+#endif	/* !XRAAS_IS_EMBEDDED */
 static const char *override_replay_tooltip[] = {
 	"ON: permit X-RAAS operation even if the simulator is currently in "
 	"replay mode.",
@@ -479,6 +483,7 @@ static const char *say_deep_landing_tooltip[] = {
 	MAN_REF("4.15"),
 	NULL
 };
+#ifndef	XRAAS_IS_EMBEDDED
 static const char *auto_disable_notify_tooltip[] = {
 	"When the currently loaded aircraft doesn't meet the minimum",
 	"requirements for X-RAAS to activate, X-RAAS displays a short message",
@@ -490,6 +495,7 @@ static const char *auto_disable_notify_tooltip[] = {
 	MAN_REF("5.1"),
 	NULL
 };
+#endif	/* !XRAAS_IS_EMBEDDED */
 
 #ifdef	__cplusplus
 }

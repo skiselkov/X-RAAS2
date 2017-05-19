@@ -63,6 +63,12 @@
 #define	TOOLTIP_HINT	"Hint: hover your mouse cursor over any knob to " \
 			"show a short description of what it does."
 
+typedef enum {
+	CONFIG_TARGET_LIVERY,
+	CONFIG_TARGET_AIRCRAFT,
+	CONFIG_TARGET_GLOBAL
+} conf_target_t;
+
 enum {
 	LAYOUT_START_X =	10,
 	LAYOUT_START_Y =	40,
@@ -70,14 +76,14 @@ enum {
 	BUTTON_HEIGHT =		20,
 	BUTTON_WIDTH =		200,
 
-	TEXT_FIELD_WIDTH =	270,
+	TEXT_FIELD_WIDTH =	300,
 	TEXT_FIELD_HEIGHT =	20,
 	WINDOW_MARGIN =		10,
 
 	TOOLTIP_LINE_HEIGHT =	13,
 	TOOLTIP_WINDOW_OFFSET =	5,
 
-	COLUMN_X =		300,
+	COLUMN_X =		330,
 	COLUMN_Y =		BUTTON_HEIGHT * NUM_MONITORS + WINDOW_MARGIN,
 	BUTTON_CHIN_Y =		120,
 	MAIN_WINDOW_WIDTH =	3 * COLUMN_X + 4 * WINDOW_MARGIN,
@@ -133,6 +139,8 @@ static struct {
 	XPWidgetID	nd_alert_overlay_force;
 	XPWidgetID	openal_shared;
 
+	XPWidgetID	save_liv_conf;
+	XPWidgetID	reset_liv_conf;
 	XPWidgetID	save_acf_conf;
 	XPWidgetID	reset_acf_conf;
 #ifndef	XRAAS_IS_EMBEDDED
@@ -335,23 +343,33 @@ gen_config(void)
 	return (conf_text);
 }
 
+static char *
+config_target2filename(conf_target_t target)
+{
+	switch (target) {
+	case CONFIG_TARGET_LIVERY:
+		return (mkpathname(xraas_acf_livpath, "X-RAAS.cfg", NULL));
+	case CONFIG_TARGET_AIRCRAFT:
+		return (mkpathname(xraas_acf_dirpath, "X-RAAS.cfg", NULL));
+	case CONFIG_TARGET_GLOBAL:
+		return (mkpathname(xraas_prefsdir, "X-RAAS.cfg", NULL));
+	default:
+		VERIFY(0);
+	}
+}
+
 static void
-save_config(bool_t acf_config)
+save_config(conf_target_t target)
 {
 	char *config;
-	char *filename = mkpathname(acf_config ? xraas_acf_dirpath :
-	    xraas_prefsdir, "X-RAAS.cfg", NULL);
+	char *filename = config_target2filename(target);
 	FILE *fp = fopen(filename, "w");
 
 	if (fp == NULL) {
-		char buf[256];
-		int err = errno;
-
-		snprintf(buf, sizeof (buf), "Error writing configuration "
-		    "file: %s", strerror(err));
-		XPSetWidgetDescriptor(text_fields.status_msg, buf);
 		logMsg("Error writing configuration file %s: %s", filename,
-		    strerror(err));
+		    strerror(errno));
+		XPSetWidgetDescriptor(text_fields.status_msg,
+		    "Error writing configuration, see Log.txt for details.");
 		free(filename);
 		return;
 	}
@@ -366,29 +384,50 @@ save_config(bool_t acf_config)
 	xraas_init();
 	gui_update();
 
-	XPSetWidgetDescriptor(text_fields.status_msg, acf_config ?
-	    "Saved aircraft configuration" : "Saved global configuration");
+	switch (target) {
+	case CONFIG_TARGET_LIVERY:
+		XPSetWidgetDescriptor(text_fields.status_msg,
+		    "Saved airline configuration");
+		break;
+	case CONFIG_TARGET_AIRCRAFT:
+		XPSetWidgetDescriptor(text_fields.status_msg,
+		    "Saved aircraft configuration");
+		break;
+	case CONFIG_TARGET_GLOBAL:
+		XPSetWidgetDescriptor(text_fields.status_msg,
+		    "Saved global configuration");
+		break;
+	}
 }
 
 static void
-reset_config(bool_t acf_config)
+reset_config(conf_target_t target)
 {
-	char *filename = mkpathname(acf_config ? xraas_acf_dirpath :
-	    xraas_prefsdir, "X-RAAS.cfg", NULL);
+	char *filename = config_target2filename(target);
 
 	if (remove_file(filename, B_TRUE)) {
 		xraas_fini();
 		xraas_init();
 		gui_update();
-		XPSetWidgetDescriptor(text_fields.status_msg,
-		    acf_config ? "Aircraft configuration reset successful" :
-		    "Global configuration reset successful");
+		switch (target) {
+		case CONFIG_TARGET_LIVERY:
+			XPSetWidgetDescriptor(text_fields.status_msg,
+			    "Airline configuration reset successful");
+			break;
+		case CONFIG_TARGET_AIRCRAFT:
+			XPSetWidgetDescriptor(text_fields.status_msg,
+			    "Aircraft configuration reset successful");
+			break;
+		case CONFIG_TARGET_GLOBAL:
+			XPSetWidgetDescriptor(text_fields.status_msg,
+			    "Global configuration reset successful");
+			break;
+		default:
+			VERIFY(0);
+		}
 	} else {
 		XPSetWidgetDescriptor(text_fields.status_msg,
-		    acf_config ? "Error resetting aircraft configuration, "
-		    "see Log.txt for details." :
-		    "Error resetting aircraft configuration, see Log.txt "
-		    "for details.");
+		    "Error resetting configuration, see Log.txt for details.");
 	}
 	free(filename);
 }
@@ -695,18 +734,22 @@ main_window_cb(XPWidgetMessage msg, XPWidgetID widget, intptr_t param1,
 	} else if (msg == xpMsg_PushButtonPressed) {
 		XPWidgetID btn = (XPWidgetID)param1;
 
-		if (btn == buttons.save_acf_conf)
-			save_config(B_TRUE);
+		if (btn == buttons.save_liv_conf)
+			save_config(CONFIG_TARGET_LIVERY);
+		else if (btn == buttons.reset_liv_conf)
+			reset_config(CONFIG_TARGET_LIVERY);
+		else if (btn == buttons.save_acf_conf)
+			save_config(CONFIG_TARGET_AIRCRAFT);
 		else if (btn == buttons.reset_acf_conf)
-			reset_config(B_TRUE);
+			reset_config(CONFIG_TARGET_AIRCRAFT);
 #ifndef	XRAAS_IS_EMBEDDED
 		else if (btn == buttons.save_glob_conf)
-			save_config(B_FALSE);
+			save_config(CONFIG_TARGET_GLOBAL);
 		else if (btn == buttons.reset_glob_conf)
-			reset_config(B_FALSE);
+			reset_config(CONFIG_TARGET_GLOBAL);
 #endif	/* !XRAAS_IS_EMBEDDED */
 		else
-			assert(0);
+			VERIFY(0);
 	}
 
 	return (0);
@@ -854,12 +897,14 @@ create_main_window(void)
 	    PushButton, CheckBox, speak_units_tooltip);
 	LAYOUT_BUTTON(say_deep_landing, "Say 'DEEP LANDING'",
 	    PushButton, CheckBox, say_deep_landing_tooltip);
+#ifndef	XRAAS_IS_EMBEDDED
 	LAYOUT_BUTTON(allow_helos, "Start up in helicopters",
 	    PushButton, CheckBox, allow_helos_tooltip);
 	LAYOUT_BUTTON(startup_notify, "Show startup notification",
 	    PushButton, CheckBox, startup_notify_tooltip);
 	LAYOUT_BUTTON(auto_disable_notify, "Notify when X-RAAS auto-inhibits",
 	    PushButton, CheckBox, auto_disable_notify_tooltip);
+#endif	/* !XRAAS_IS_EMBEDDED */
 	LAYOUT_BUTTON(disable_ext_view, "Silence in external views",
 	    PushButton, CheckBox, disable_ext_view_tooltip);
 	LAYOUT_BUTTON(nd_alerts_enabled, "Visual alerts",
@@ -869,8 +914,10 @@ create_main_window(void)
 	LAYOUT_BUTTON(nd_alert_overlay_force,
 	    "Always show visual alerts using overlay",
 	    PushButton, CheckBox, nd_alert_overlay_force_tooltip);
+#ifndef	XRAAS_IS_EMBEDDED
 	LAYOUT_BUTTON(override_electrical, "Override electrical check",
 	    PushButton, CheckBox, override_electrical_tooltip);
+#endif	/* !XRAAS_IS_EMBEDDED */
 	LAYOUT_BUTTON(override_replay, "Show in replay mode",
 	    PushButton, CheckBox, override_replay_tooltip);
 	LAYOUT_BUTTON(use_tts, "Use Text-To-Speech",
@@ -986,26 +1033,33 @@ create_main_window(void)
 		tooltip_new(tts, x, y, w, h, tooltip); \
 	} while (0)
 
+	LAYOUT_PUSH_BUTTON(save_liv_conf, WINDOW_MARGIN, MAIN_WINDOW_HEIGHT -
+	    70, BUTTON_WIDTH, 18, "SAVE airline configuration",
+	    save_acf_tooltip);
+	LAYOUT_PUSH_BUTTON(reset_liv_conf, MAIN_WINDOW_WIDTH - BUTTON_WIDTH -
+	    WINDOW_MARGIN, MAIN_WINDOW_HEIGHT - 70, BUTTON_WIDTH, 18,
+	    "RESET airline configuration", reset_acf_tooltip);
+
 #ifdef	XRAAS_IS_EMBEDDED
 	LAYOUT_PUSH_BUTTON(save_acf_conf, WINDOW_MARGIN, MAIN_WINDOW_HEIGHT -
-	    70, BUTTON_WIDTH, 18, "SAVE configuration",
+	    50, BUTTON_WIDTH, 18, "SAVE configuration",
 	    save_acf_tooltip);
 	LAYOUT_PUSH_BUTTON(reset_acf_conf, MAIN_WINDOW_WIDTH - BUTTON_WIDTH -
-	    WINDOW_MARGIN, MAIN_WINDOW_HEIGHT - 70, BUTTON_WIDTH, 18,
+	    WINDOW_MARGIN, MAIN_WINDOW_HEIGHT - 50, BUTTON_WIDTH, 18,
 	    "RESET configuration", reset_acf_tooltip);
 #else	/* !XRAAS_IS_EMBEDDED */
 	LAYOUT_PUSH_BUTTON(save_acf_conf, WINDOW_MARGIN, MAIN_WINDOW_HEIGHT -
-	    70, BUTTON_WIDTH, 18, "SAVE aircraft configuration",
+	    50, BUTTON_WIDTH, 18, "SAVE aircraft configuration",
 	    save_acf_tooltip);
 	LAYOUT_PUSH_BUTTON(save_glob_conf, WINDOW_MARGIN, MAIN_WINDOW_HEIGHT -
-	    50, BUTTON_WIDTH, 18, "SAVE global configuration",
+	    30, BUTTON_WIDTH, 18, "SAVE global configuration",
 	    save_glob_tooltip);
 
 	LAYOUT_PUSH_BUTTON(reset_acf_conf, MAIN_WINDOW_WIDTH - BUTTON_WIDTH -
-	    WINDOW_MARGIN, MAIN_WINDOW_HEIGHT - 70, BUTTON_WIDTH, 18,
+	    WINDOW_MARGIN, MAIN_WINDOW_HEIGHT - 50, BUTTON_WIDTH, 18,
 	    "RESET aircraft configuration", reset_acf_tooltip);
 	LAYOUT_PUSH_BUTTON(reset_glob_conf, MAIN_WINDOW_WIDTH - BUTTON_WIDTH -
-	    WINDOW_MARGIN, MAIN_WINDOW_HEIGHT - 50, BUTTON_WIDTH, 18,
+	    WINDOW_MARGIN, MAIN_WINDOW_HEIGHT - 30, BUTTON_WIDTH, 18,
 	    "RESET global configuration", reset_glob_tooltip);
 #endif	/* !XRAAS_IS_EMBEDDED */
 
@@ -1027,9 +1081,10 @@ create_main_window(void)
 	    TEXT_FIELD_HEIGHT, 1, TOOLTIP_HINT, 0, main_win,
 	    xpWidgetClass_Caption);
 
-	text_fields.status_msg = create_widget_rel(WINDOW_MARGIN,
-	    MAIN_WINDOW_HEIGHT - 27, B_FALSE, MAIN_WINDOW_WIDTH -
-	    2 * WINDOW_MARGIN, 18, 1, "", 0, main_win, xpWidgetClass_Caption);
+	text_fields.status_msg = create_widget_rel(2 * WINDOW_MARGIN +
+	    BUTTON_WIDTH, MAIN_WINDOW_HEIGHT - 27, B_FALSE,
+	    MAIN_WINDOW_WIDTH - 2 * BUTTON_WIDTH - 4 * WINDOW_MARGIN,
+	    18, 1, "", 0, main_win, xpWidgetClass_Caption);
 }
 
 static void

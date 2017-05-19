@@ -52,7 +52,7 @@
 #include "xraas2.h"
 #include "xraas_cfg.h"
 
-#define	XRAAS2_VERSION			"2.0.3"
+#define	XRAAS2_VERSION			"2.1"
 #define	XRAAS2_STANDALONE_PLUGIN_SIG	"skiselkov.xraas2"
 
 #ifdef	XRAAS_IS_EMBEDDED
@@ -221,11 +221,14 @@ static char prefsdir[512] = { 0 };
 static char plugindir[512] = { 0 };
 static char acf_path[512] = { 0 };
 static char acf_dirpath[512] = { 0 };
+static XPLMDataRef acf_livpath_dr = NULL;
+static char acf_livpath[1024] = { 0 };
 static char acf_filename[512] = { 0 };
 
 const char *xraas_xpdir = xpdir;
 const char *xraas_prefsdir = prefsdir;
 const char *xraas_acf_dirpath = acf_dirpath;
+const char *xraas_acf_livpath = acf_livpath;
 const char *xraas_plugindir = plugindir;
 
 static const char *FJS737[] = { "B732", NULL };
@@ -2298,9 +2301,11 @@ chk_acf_is_helo(void)
 static void
 startup_complete(void)
 {
+#ifndef	XRAAS_IS_EMBEDDED
 	log_init_msg(state.config.startup_notify, STARTUP_MSG_TIMEOUT, NULL,
 	    NULL, "X-RAAS(%s): Runway Awareness OK; %s.", XRAAS2_VERSION,
 	    state.config.use_imperial ? "Feet" : "Meters");
+#endif	/* !XRAAS_IS_EMBEDDED */
 }
 
 void
@@ -2308,6 +2313,7 @@ xraas_init(void)
 {
 	bool_t airportdb_created = B_FALSE;
 	char *sep;
+	char livpath[1024];
 
 	ASSERT(!xraas_inited);
 
@@ -2319,6 +2325,9 @@ xraas_init(void)
 	if ((sep = strrchr(acf_path, DIRSEP)) != NULL) {
 		memset(acf_dirpath, 0, sizeof (acf_dirpath));
 		memcpy(acf_dirpath, acf_path, sep - acf_path);
+#if	IBM
+		fix_pathsep(acf_dirpath);
+#endif
 	} else {
 		/* aircraft's dirpath is unknown */
 		logMsg("WARNING: can't determine your aircraft's directory "
@@ -2327,6 +2336,15 @@ xraas_init(void)
 		    "configuration loading).", acf_path);
 		acf_dirpath[0] = 0;
 	}
+
+	memset(livpath, 0, sizeof (livpath));
+	XPLMGetDatab(acf_livpath_dr, livpath, 0, sizeof (livpath));
+#if	IBM
+	fix_pathsep(livpath);
+#endif
+	snprintf(acf_livpath, sizeof (acf_livpath), "%s%c%s", xpdir,
+	    DIRSEP, livpath);
+	logMsg("acf_livpath: \"%s\"", acf_livpath);
 
 	if (!load_configs(&state))
 		return;
@@ -2573,6 +2591,9 @@ XPluginStart(char *outName, char *outSig, char *outDesc)
 	}
 #endif	/* XRAAS_IS_EMBEDDED */
 
+	acf_livpath_dr = XPLMFindDataRef("sim/aircraft/view/acf_livery_path");
+	VERIFY(acf_livpath_dr != NULL);
+
 	return (1);
 }
 
@@ -2618,6 +2639,7 @@ XPluginReceiveMessage(XPLMPluginID src, int msg, void *param)
 	UNUSED(param);
 
 	switch (msg) {
+	case XPLM_MSG_LIVERY_LOADED:
 	case XPLM_MSG_AIRPORT_LOADED:
 		xraas_fini();
 		xraas_init();

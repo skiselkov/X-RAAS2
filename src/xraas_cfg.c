@@ -277,5 +277,7 @@ load_configs(xraas_state_t *state)
 #endif	/* !XRAAS_IS_EMBEDDED */
 	if (!load_config(state, xraas_acf_dirpath))
 		return (B_FALSE);
+	if (!load_config(state, xraas_acf_livpath))
+		return (B_FALSE);
 	return (B_TRUE);
 }

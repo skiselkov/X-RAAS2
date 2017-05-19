@@ -1040,10 +1040,10 @@ configuration window shown in figure \ref{GUIConfigurationWindow}.
 \label{GUIConfigurationWindow}
 \end{figure}
 
-When open, the window will reflect the state of the current configuration
-of X-RAAS. You can make changes to the configuration and save it, or
-reset it to a default state. The following table explains what every
-control does:
+\noindent When open, the window will reflect the state of the current
+configuration of X-RAAS. You can make changes to the configuration and
+save it, or reset it to a default state. The following table explains
+what every control in the configuration window does:
 
 \newcommand{\guiconfbtn}[1]{#1\label{gui_conf_btn_label_#1}}
 
@@ -1667,32 +1667,43 @@ The pixel size of the font to use for the ND alert overlay. & \textbf{28} &
 \hline
 
 \guiconfbtn{65} &
-Saves the current configuration into the currently loaded aircraft. The
-configuration will then only be applied to that specific aircraft. &
+Saves the current configuration into the airline-specific configuration
+location. See section \ref{subsec:ConfigStorage} for more information. &
 \emph{N/A} & \multicolumn{1}{|c|}{\emph{N/A}} \\
 
 \hline
 
 \guiconfbtn{66} &
-Saves the current configuration as the global configuration. The
-configuration will be applied to any aircraft which doesn't have its own
-aircraft-specific configuration. &
+Saves the current configuration into the aircraft-specific configuration
+location. See section \ref{subsec:ConfigStorage} for more information. &
 \emph{N/A} & \multicolumn{1}{|c|}{\emph{N/A}} \\
 
 \hline
 
 \guiconfbtn{67} &
-Resets the aircraft-specific configuration to its default values. If
-there is a global configuration, it will be applied. Otherwise, the
-default configuration will be applied. &
+Saves the current configuration as the global configuration location.
+See section \ref{subsec:ConfigStorage} for more information. &
 \emph{N/A} & \multicolumn{1}{|c|}{\emph{N/A}} \\
 
 \hline
 
 \guiconfbtn{68} &
-Resets the global configuration to its default values. If there is an
-aircraft-specific configuration, it will be applied when the associated
-aircraft is loaded. Otherwise the default configuration will be applied. &
+Removes the airline-specific configuration (if it exists). See section
+\ref{subsec:ConfigStorage} for more information. &
+\emph{N/A} & \multicolumn{1}{|c|}{\emph{N/A}} \\
+
+\hline
+
+\guiconfbtn{69} &
+Removes the aircraft-specific configuration (if it exists). See section
+\ref{subsec:ConfigStorage} for more information. &
+\emph{N/A} & \multicolumn{1}{|c|}{\emph{N/A}} \\
+
+\hline
+
+\guiconfbtn{70} &
+Removes the global configuration (if it exists). See section
+\ref{subsec:ConfigStorage} for more information. &
 \emph{N/A} & \multicolumn{1}{|c|}{\emph{N/A}} \\
 
 \end{supertabular}
@@ -1706,8 +1717,9 @@ The text-based configuration file is called \texttt{X-RAAS.cfg}. A sample
 file is provided in the \texttt{sample-config} folder in the X-RAAS
 distribution package. You can open it up in any text editor such as
 Notepad or TextEdit. Please note, that the file must first be moved to a
-different folder if you want to use it (see below). The configuration
-file is simply a set of lines in the following format:
+different folder if you want to use it (see section
+\ref{subsec:ConfigStorage}). The configuration file is simply a set of
+lines in the following format:
 
 \filetext{<Parameter> = <Value>}
 
@@ -1724,23 +1736,52 @@ by X-RAAS:
 \filetext{\# This is a comment. X-RAAS ignores what's on this line.\\
 <Parameter> = <Value>}
 
-\noindent X-RAAS looks for the configuration file in two locations, first
-in the \texttt{Output/preferences} folder under X-Plane's global folder and
-then in the aircraft folder of the currently loaded aircraft. If both are
-present, X-RAAS loads both files in this order, so any parameter set in
-the global configuration file in the \texttt{preferences} folder can be
-overridden by the configuration file in the aircraft folder, giving the
-ability to override global settings on a per-aircraft basis.
+\subsection{Configuration storage and loading}
+\label{subsec:ConfigStorage}
+
+X-RAAS supports three kinds of saved configurations, depending on where
+the configuration file is stored. The files are loaded in the following
+order:
+
+\begin{description}
+
+\item[Airline configuration:] This configuration is stored in the livery
+folder of the currently loaded livery in the currently loaded aircraft
+(e.g.\ ``\texttt{Aircraft/Laminar Research/Boeing
+737-800/liveries/Delta/XRAAS.cfg}''). This allows for per-airline and even
+per-airframe customizations of the configuration.
+
+\item[Aircraft configuration:] This configuration is stored in the
+aircraft's installation folder in X-Plane (e.g.\ ``\texttt{Aircraft/Laminar
+Research/Boeing 737-800/XRAAS.cfg}'').
+
+\item[Global configuration:] This configuration is stored in the global
+X-RAAS configuration folder
+(``\texttt{Output/preferences/X-RAAS/XRAAS.cfg}'').
+
+\end{description}
+
+\noindent If no custom configuration was found, X-RAAS reverts to its
+hard-coded default settings. You may choose to manually edit the
+configuration file. If a specific configuration rule is not present in
+the file, a lower-priority configuration file may override it. Therefore
+it is possible to hand-edit only specific configuration rules in the
+higher priority configuration files and leave other options for
+lower-priority configuration files.
 
 \filetext{
-\hspace*{-.5em}\fileicon{folder.png} <X-Plane Folder>\\
+\hspace*{-.5em}\fileicon{folder.png} \textbf{<X-Plane Folder>}\\
 \hspace*{1.5em}\fileicon{folder.png} Aircraft\\
-\hspace*{3em}\fileicon{folder.png} <Your Aircraft's Folder>\\
-\hspace*{4.5em}\fileicon{file.png} X-RAAS.cfg\hspace*{2em}{\small
+\hspace*{3em}\fileicon{folder.png} \textbf{<Your Aircraft's Folder>}\\
+\hspace*{4.5em}\fileicon{file.png} X-RAAS.cfg\hspace*{4em}{\small
 \textsf{$\leftarrow$ overrides global settings only for this aircraft}}\\
+\hspace*{4.5em}\fileicon{folder.png} liveries\\
+\hspace*{6em}\fileicon{folder.png} <Currently Loaded Livery>\\
+\hspace*{7.5em}\fileicon{file.png} X-RAAS.cfg\hspace*{1em}{\small
+\textsf{$\leftarrow$ overrides aircraft settings only for this livery}}\\\
 \hspace*{1.5em}\fileicon{folder.png} Output\\
 \hspace*{3em}\fileicon{folder.png} preferences\\
-\hspace*{4.5em}\fileicon{file.png} X-RAAS.cfg\hspace*{2em}{\small
+\hspace*{4.5em}\fileicon{file.png} X-RAAS.cfg\hspace*{4em}{\small
 \textsf{$\leftarrow$ overrides settings shared by all aircraft}}
 }
 
