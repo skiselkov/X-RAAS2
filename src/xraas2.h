@@ -132,6 +132,8 @@ typedef struct xraas_state {
 		bool_t		debug;
 	} config;
 
+	bool_t		input_faulted;	/* when adc_collect failed */
+
 	rwy_key_tbl_t	on_rwy_ann;
 	rwy_key_tbl_t	apch_rwy_ann;
 	bool_t		apch_rwys_ann;		/* when multiple met criteria */
@@ -173,7 +175,6 @@ typedef struct xraas_state {
 	char		TATL_source[8];
 
 	bool_t		view_is_ext;
-	int		bus_loaded;
 	double		last_elev;			/* in meters */
 	double		last_gs;			/* in m/s */
 	uint64_t	last_units_call;		/* microclock time */

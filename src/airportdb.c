@@ -1874,8 +1874,8 @@ recreate_cache(airportdb_t *db)
 		 * airport, because we don't have TA/TL info on them.
 		 */
 		if (!arpt->in_navdb) {
-			logMsg("Error: airport %s not found in navdata, "
-			    "dropping it.", arpt->icao);
+			dbg_log(tile, 1, "Error: airport %s not found in "
+			    "navdata, dropping it.", arpt->icao);
 			geo_unlink_airport(db, arpt);
 			avl_remove(&db->apt_dat, arpt);
 			free_airport(arpt);
@@ -1896,7 +1896,7 @@ recreate_cache(airportdb_t *db)
 		goto out;
 	}
 
-	dbg_log(tile, 5, "Creating airport data cache for %ld airports",
+	logMsg("Creating airport data cache for %ld airports",
 	    avl_numnodes(&db->apt_dat));
 
 	for (airport_t *arpt = avl_first(&db->apt_dat); arpt != NULL;

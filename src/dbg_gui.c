@@ -23,10 +23,10 @@
 #include <GL/gl.h>
 #endif	/* LIN */
 
-#include <XPLMDataAccess.h>
 #include <XPLMDisplay.h>
 #include <XPLMGraphics.h>
 
+#include "airdata.h"
 #include "airportdb.h"
 #include "assert.h"
 #include "geom.h"
@@ -37,7 +37,6 @@
 #include "dbg_gui.h"
 
 bool_t dbg_gui_inited = B_FALSE;
-static XPLMDataRef *lat_dr = NULL, *lon_dr = NULL;
 static int screen_x, screen_y;
 static double scale;
 
@@ -82,8 +81,7 @@ draw_cb(XPLMDrawingPhase phase, int before, void *refcon)
 		return (1);
 	ASSERT(arpt->load_complete);
 
-	pos_v = geo2fpp(GEO_POS2(XPLMGetDatad(lat_dr), XPLMGetDatad(lon_dr)),
-	    &arpt->fpp);
+	pos_v = geo2fpp(GEO_POS2(adc->lat, adc->lon), &arpt->fpp);
 	vel_v = acf_vel_vector(RWY_PROXIMITY_TIME_FACT);
 	tgt_v = vect2_add(pos_v, vel_v);
 
@@ -141,11 +139,6 @@ dbg_gui_init(void)
 	dbg_log(dbg_gui, 1, "init");
 
 	ASSERT(!dbg_gui_inited);
-
-	lat_dr = XPLMFindDataRef("sim/flightmodel/position/latitude");
-	VERIFY(lat_dr != NULL);
-	lon_dr = XPLMFindDataRef("sim/flightmodel/position/longitude");
-	VERIFY(lon_dr != NULL);
 
 	XPLMRegisterDrawCallback(draw_cb, xplm_Phase_Window, 0, NULL);
 

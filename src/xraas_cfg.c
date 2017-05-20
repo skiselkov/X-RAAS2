@@ -124,7 +124,6 @@ reset_state(xraas_state_t *state)
 	state->on_rwy_timer = -1;
 	state->TATL_field_elev = TATL_FIELD_ELEV_UNSET;
 	state->TATL_transition = -1;
-	state->bus_loaded = -1;
 	reset_config(state);
 }
 
