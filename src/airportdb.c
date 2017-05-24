@@ -158,7 +158,6 @@
 #define	RWY_APCH_PROXIMITY_LAT_DISPL	(RWY_APCH_PROXIMITY_LON_DISPL * \
 	__builtin_tan(DEG2RAD(RWY_APCH_PROXIMITY_LAT_ANGLE)))
 #define	XRAAS_CACHE_VERSION		6
-#define	ARPT_LOAD_LIMIT			NM2MET(8)	/* meters, 8nm */
 
 #define	VGSI_LAT_DISPL_FACT		2	/* rwy width multiplier */
 #define	VGSI_HDG_MATCH_THRESH		5	/* degrees */
@@ -1596,18 +1595,18 @@ get_xp11_airac_cycle(const char *xpdir, int *cycle)
 	size_t linecap = 0;
 	char *filename;
 	FILE *fp;
+	bool_t success = B_FALSE;
 
 	/* First try 'Custom Data', then 'default data' */
 	filename = mkpathname(xpdir, "Custom Data", "earth_nav.dat", NULL);
 	fp = fopen(filename, "r");
-	free(filename);
 	if (fp == NULL) {
+		free(filename);
 		filename = mkpathname(xpdir, "Resources", "default data",
 		    "earth_nav.dat", NULL);
 		fp = fopen(filename, "r");
-		free(filename);
 		if (fp == NULL)
-			return (B_FALSE);
+			goto out;
 	}
 
 	while (!feof(fp)) {
@@ -1617,10 +1616,19 @@ get_xp11_airac_cycle(const char *xpdir, int *cycle)
 		    (word_start = strstr(line, " data cycle ")) == NULL)
 			continue;
 		/* constant is length of " data cycle " string */
-		return (sscanf(word_start + 12, "%d", cycle) == 1);
+		success = (sscanf(word_start + 12, "%d", cycle) == 1);
+		if (success)
+			break;
+	}
+	if (success) {
+		dbg_log(tile, 1, "AIRAC cycle in file %s: %d", filename,
+		    *cycle);
 	}
 
-	return (B_FALSE);
+out:
+	free(filename);
+
+	return (success);
 }
 
 /*
@@ -1896,7 +1904,7 @@ recreate_cache(airportdb_t *db)
 		goto out;
 	}
 
-	logMsg("Creating airport data cache for %ld airports",
+	dbg_log(tile, 0, "Creating airport data cache for %ld airports",
 	    avl_numnodes(&db->apt_dat));
 
 	for (airport_t *arpt = avl_first(&db->apt_dat); arpt != NULL;

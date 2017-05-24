@@ -26,8 +26,10 @@
 #ifndef	_XRAAS_AIRDATA_H_
 #define	_XRAAS_AIRDATA_H_
 
+#include <stdlib.h>
 #include <XPLMDataAccess.h>
 
+#include "geom.h"
 #include "types.h"
 
 #ifdef	__cplusplus
@@ -46,18 +48,23 @@ extern "C" {
 #define	NUM_GEAR	10
 
 typedef struct {
-	double	rad_alt;
+	double	baro_alt;	/* feet */
+	double	baro_set;	/* in.Hg */
+	double	baro_sl;	/* in.Hg */
+	double	rad_alt;	/* feet */
 
-	double	baro_alt;
-	double	cas;
-	double	gs;
+	double	lat;		/* degrees */
+	double	lon;		/* degrees */
+	double	elev;		/* meters */
 
-	double	lat;
-	double	lon;
-	double	elev;
-	double	hdg;
+	double	hdg;		/* degrees true */
+	double	pitch;		/* degrees nose up */
 
-	double	pitch;
+	double	cas;		/* knots */
+	double	gs;		/* meters/second */
+
+	int	trans_alt;	/* feet */
+	int	trans_lvl;	/* feet */
 
 	float	nw_offset;
 	double	flaprqst;
@@ -66,8 +73,10 @@ typedef struct {
 	float	gear[NUM_GEAR];
 	int	gear_type[NUM_GEAR];
 
-	double	baro_set;
-	double	baro_sl;
+	double	takeoff_flaps;	/* flaprqst value from FMS, NAN if N/A */
+	double	landing_flaps;	/* flaprqst value from FMS, NAN if N/A */
+	double	vref;		/* knots from FMS, NAN if N/A */
+	double	vapp;		/* knots from FMS, NAN if N/A */
 } adc_t;
 
 typedef struct {
@@ -91,6 +100,7 @@ typedef struct {
 	XPLMDataRef num_engines;
 	XPLMDataRef mtow;
 	XPLMDataRef ICAO;
+	XPLMDataRef author;
 	XPLMDataRef gpws_prio;
 	XPLMDataRef gpws_inop;
 	XPLMDataRef replay_mode;
@@ -102,6 +112,18 @@ extern const drs_t *drs;
 bool_t adc_init(void);
 void adc_fini(void);
 bool_t adc_collect(void);
+
+bool_t adc_gpwc_rwy_data(geo_pos3_t *thr_pos, double *len, double *width,
+    double *trk);
+
+void ff_a320_find_nearest_rwy(void);
+bool_t ff_a320_is_loaded(void);
+bool_t ff_a320_powered(void);
+bool_t ff_a320_suppressed(void);
+bool_t ff_a320_alerting(void);
+bool_t ff_a320_inhibit(void);
+bool_t ff_a320_inhibit_ex(void);
+bool_t ff_a320_inhibit_flaps(void);
 
 #ifdef	__cplusplus
 }

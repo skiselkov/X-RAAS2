@@ -46,27 +46,36 @@
 #include "gui.h"
 #include "gui_tooltips.h"
 
-#ifdef	XRAAS_IS_EMBEDDED
-#define	XRAAS_MENU_NAME_STANDALONE	"X-RAAS (embedded)"
-#define	XRAAS_MENU_NAME			"X-RAAS (embedded)"
-#else	/* !XRAAS_IS_EMBEDDED */
-#define	XRAAS_MENU_NAME			"X-RAAS"
-#endif	/* !XRAAS_IS_EMBEDDED */
+#ifdef		XRAAS_IS_EMBEDDED
+# define	XRAAS_MENU_NAME_STANDALONE	"X-RAAS (embedded)"
+# if		ACF_TYPE == FF_A320_ACF_TYPE
+#  define	XRAAS_MENU_NAME			"X-RAAS (Airbus A320)"
+# else		/* !ACF_TYPE */
+#  define	XRAAS_MENU_NAME			"X-RAAS (embedded)"
+# endif		/* !ACF_TYPE */
+#else		/* !XRAAS_IS_EMBEDDED */
+# define	XRAAS_MENU_NAME			"X-RAAS"
+#endif		/* !XRAAS_IS_EMBEDDED */
+
 #define	CONFIG_GUI_CMD_NAME		"X-RAAS configuration..."
 #define	DBG_GUI_TOGGLE_CMD_NAME		"Toggle debug overlay"
 #define	RAAS_RESET_CMD_NAME		"Reset"
 #define	RECREATE_CACHE_CMD_NAME		"Recreate data cache"
-#if	IBM
-#define	NEWLINE "\r\n"
-#else	/* !IBM */
-#define	NEWLINE "\n"
-#endif	/* !IBM */
 
-#define	COPYRIGHT1	"Copyright 2017 Saso Kiselkov. All rights reserved."
+#if		IBM
+# define	NEWLINE "\r\n"
+#else		/* !IBM */
+# define	NEWLINE "\n"
+#endif		/* !IBM */
+
+#define	COPYRIGHT1	XRAAS_MENU_NAME " version " XRAAS2_VERSION \
+	"   Copyright 2017 Saso Kiselkov. All rights reserved."
 #define	COPYRIGHT2	"X-RAAS is open-source software. See COPYING for " \
 			"more information."
 #define	TOOLTIP_HINT	"Hint: hover your mouse cursor over any knob to " \
 			"show a short description of what it does."
+
+static bool_t gui_inited = B_FALSE;
 
 typedef enum {
 	CONFIG_TARGET_LIVERY,
@@ -303,8 +312,11 @@ gen_config(void)
 			    NEWLINE, #text_field, buf);\
 	} while (0)
 
+#if	ACF_TYPE == NO_ACF_TYPE
+	/* These don't make sense in type-specific embedded scenarios */
 	GEN_TEXT_CONF(min_engines);
 	GEN_TEXT_CONF(min_mtow);
+#endif
 	GEN_TEXT_CONF(min_takeoff_dist);
 	GEN_TEXT_CONF(min_landing_dist);
 	GEN_TEXT_CONF(min_rotation_dist);
@@ -336,9 +348,12 @@ gen_config(void)
 
 	GEN_FRACT_CONF(long_land_lim_fract, 0.01);
 	GEN_FRACT_CONF(voice_volume, 0.01);
+#if	ACF_TYPE == NO_ACF_TYPE
+	/* We get these directly from the FMS of the host aircraft */
 	GEN_FRACT_CONF(min_landing_flap, 0.01);
 	GEN_FRACT_CONF(min_takeoff_flap, 0.01);
 	GEN_FRACT_CONF(max_takeoff_flap, 0.01);
+#endif	/* ACF_TYPE == NO_ACF_TYPE */
 	GEN_FRACT_CONF(gpa_limit_max, 0.1);
 	GEN_FRACT_CONF(gpa_limit_mult, 0.1);
 	GEN_FRACT_CONF(nd_alert_filter, 1);
@@ -355,6 +370,7 @@ config_target2filename(conf_target_t target)
 	case CONFIG_TARGET_LIVERY:
 		return (mkpathname(xraas_acf_livpath, "X-RAAS.cfg", NULL));
 	case CONFIG_TARGET_AIRCRAFT:
+		logMsg("xraas_acf_dirpath: %s", xraas_acf_dirpath);
 		return (mkpathname(xraas_acf_dirpath, "X-RAAS.cfg", NULL));
 	case CONFIG_TARGET_GLOBAL:
 		return (mkpathname(xraas_prefsdir, "X-RAAS.cfg", NULL));
@@ -840,7 +856,7 @@ create_main_window(void)
 	tooltip_set_t *tts;
 
 	main_win = create_widget_rel(100, 100, B_FALSE, MAIN_WINDOW_WIDTH,
-	    MAIN_WINDOW_HEIGHT, 0, "X-RAAS Configuration", 1, NULL,
+	    MAIN_WINDOW_HEIGHT, 0, XRAAS_MENU_NAME " Configuration", 1, NULL,
 	    xpWidgetClass_MainWindow);
 	XPSetWidgetProperty(main_win, xpProperty_MainWindowHasCloseBoxes, 1);
 	XPAddWidgetCallback(main_win, main_window_cb);
@@ -948,12 +964,14 @@ create_main_window(void)
 	    &main_win_scrollbar_cbs, x, y, "Audio volume", 0, 100, 10,
 	    B_FALSE, 1.0, "%", NULL, voice_volume_tooltip);
 	y += TEXT_FIELD_HEIGHT;
+#if	ACF_TYPE == NO_ACF_TYPE
 	text_fields.min_engines = layout_text_field(main_win, tts, x, y,
 	    "Minimum number of engines", 1, NULL, min_engines_tooltip, B_FALSE);
 	y += TEXT_FIELD_HEIGHT;
 	text_fields.min_mtow = layout_text_field(main_win, tts, x, y,
 	    "Minimum MTOW", 6, "kg", min_mtow_tooltip, B_FALSE);
 	y += TEXT_FIELD_HEIGHT;
+#endif	/* ACF_TYPE == NO_ACF_TYPE */
 	text_fields.min_takeoff_dist = layout_text_field(main_win, tts, x, y,
 	    "Minimum takeoff distance", 4, "m", min_takeoff_dist_tooltip,
 	    B_FALSE);
@@ -1002,6 +1020,7 @@ create_main_window(void)
 	    &main_win_scrollbar_cbs, x, y, "Long landing limit fraction", 0,
 	    100, 10, B_FALSE, 0.01, NULL, NULL, long_land_lim_fract_tooltip);
 	y += TEXT_FIELD_HEIGHT;
+#if	ACF_TYPE == NO_ACF_TYPE
 	scrollbars.min_landing_flap = layout_scroll_control(main_win, tts,
 	    &main_win_scrollbar_cbs, x, y, "Minimum landing flaps", 0, 100,
 	    10, B_FALSE, 0.01, NULL, NULL, min_landing_flap_tooltip);
@@ -1014,6 +1033,7 @@ create_main_window(void)
 	    &main_win_scrollbar_cbs, x, y, "Maximum takeoff flaps", 0, 100,
 	    10, B_FALSE, 0.01, NULL, NULL, max_takeoff_flap_tooltip);
 	y += TEXT_FIELD_HEIGHT;
+#endif	/* ACF_TYPE == NO_ACF_TYPE */
 	text_fields.nd_alert_timeout = layout_text_field(main_win, tts, x, y,
 	    "Visual alert timeout", 3, "sec", nd_alert_timeout_tooltip,
 	    B_FALSE);
@@ -1040,10 +1060,10 @@ create_main_window(void)
 
 	LAYOUT_PUSH_BUTTON(save_liv_conf, WINDOW_MARGIN, MAIN_WINDOW_HEIGHT -
 	    70, BUTTON_WIDTH, 18, "SAVE airline configuration",
-	    save_acf_tooltip);
+	    save_liv_tooltip);
 	LAYOUT_PUSH_BUTTON(reset_liv_conf, MAIN_WINDOW_WIDTH - BUTTON_WIDTH -
 	    WINDOW_MARGIN, MAIN_WINDOW_HEIGHT - 70, BUTTON_WIDTH, 18,
-	    "RESET airline configuration", reset_acf_tooltip);
+	    "RESET airline configuration", reset_liv_tooltip);
 
 #ifdef	XRAAS_IS_EMBEDDED
 	LAYOUT_PUSH_BUTTON(save_acf_conf, WINDOW_MARGIN, MAIN_WINDOW_HEIGHT -
@@ -1238,24 +1258,32 @@ unregister_commands(void)
 void
 gui_init(void)
 {
+	if (gui_inited)
+		return;
 	tooltip_init();
 	create_menu();
 	create_main_window();
 	register_commands();
+	gui_inited = B_TRUE;
 }
 
 void
 gui_fini(void)
 {
+	if (!gui_inited)
+		return;
 	destroy_menu();
 	destroy_main_window();
 	tooltip_fini();
 	unregister_commands();
+	gui_inited = B_FALSE;
 }
 
 void
 gui_update(void)
 {
+	if (!gui_inited)
+		return;
 	XPLMEnableMenuItem(root_menu, dbg_gui_menu_item, xraas_inited);
 	XPLMCheckMenuItem(root_menu, dbg_gui_menu_item,
 	    xraas_state->config.debug_graphical ? xplm_Menu_Checked :

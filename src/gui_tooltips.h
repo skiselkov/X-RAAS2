@@ -310,6 +310,7 @@ static const char *voice_female_tooltip[] = {
 	"OFF: the voice of aural annunciations is male.",
 	NULL
 };
+#if	ACF_TYPE == NO_ACF_TYPE
 static const char *min_engines_tooltip[] = {
 	"Minimum number of engines the aircraft must have for it to be "
 	"considered an 'airliner' and permit X-RAAS startup.",
@@ -322,10 +323,41 @@ static const char *min_mtow_tooltip[] = {
 	MAN_REF("3"),
 	NULL
 };
+#endif	/* ACF_TYPE == NO_ACF_TYPE */
 static const char *voice_volume_tooltip[] = {
 	"The relative audio volume for aural annunciations",
 	NULL
 };
+static const char *save_liv_tooltip[] = {
+	"Save the current airline configuration. This configuration will then",
+	"only be applied if the current livery is loaded into the aircraft.",
+	"Otherwise the aircraft configuration will be loaded.",
+	MAN_REF("5"),
+	NULL
+};
+static const char *reset_liv_tooltip[] = {
+	"Reset the airline configuration. If there is an aircraft ",
+	"configuration, it will be applied. Otherwise, the default",
+	"configuration will be applied.",
+	MAN_REF("5"),
+	NULL
+};
+#ifdef	XRAAS_IS_EMBEDDED
+static const char *save_acf_tooltip[] = {
+	"Save the current aircraft configuration. This configuration",
+	"will then only be applied if no airline configuration exists",
+	"for the currently loaded livery.",
+	MAN_REF("5"),
+	NULL
+};
+static const char *reset_acf_tooltip[] = {
+	"Reset the aircraft configuration to its default values.",
+	"If there is an airline configuration, it will be applied.",
+	"Otherwise, the default configuration will be applied.",
+	MAN_REF("5"),
+	NULL
+};
+#else	/* !XRAAS_IS_EMBEDDED */
 static const char *save_acf_tooltip[] = {
 	"Save the current configuration into the currently loaded aircraft.",
 	"The configuration will then only be applied to that specific "
@@ -340,7 +372,6 @@ static const char *reset_acf_tooltip[] = {
 	MAN_REF("5"),
 	NULL
 };
-#ifndef	XRAAS_IS_EMBEDDED
 static const char *save_glob_tooltip[] = {
 	"Save the current configuration as the global configuration. The",
 	"configuration will be applied to any aircraft which doesn't have",
@@ -357,7 +388,7 @@ static const char *reset_glob_tooltip[] = {
 	MAN_REF("5"),
 	NULL
 };
-#endif	/* XRAAS_IS_EMBEDDED */
+#endif	/* !XRAAS_IS_EMBEDDED */
 static const char *min_takeoff_dist_tooltip[] = {
 	"The minimum runway length remaining that is considered to be safe",
 	"for conducting a takeoff. If the runway length remaining is less",
@@ -439,6 +470,7 @@ static const char *nd_alert_timeout_tooltip[] = {
 	"Number of seconds for which visual alerts are displayed on the ND.",
 	NULL
 };
+#if	ACF_TYPE == NO_ACF_TYPE
 static const char *min_landing_flap_tooltip[] = {
 	"Minimum relative flap handle position, including and above which the",
 	"flaps setting is considered a valid flaps setting for landing.",
@@ -457,6 +489,7 @@ static const char *max_takeoff_flap_tooltip[] = {
 	MAN_REF("4.2"),
 	NULL
 };
+#endif	/* ACF_TYPE == NO_ACF_TYPE */
 static const char *nd_alert_filter_tooltip[] = {
 	"A filter which controls what visual alerts are displayed on the ND:",
 	"ALL: all visual alerts are displayed (routine, non-routine, caution).",

@@ -21,7 +21,7 @@
 # On Linux also do "apt install libopenal-dev:x86_64 libopenal-dev:i386".
 
 embed=no
-acf_type=''
+acf_type=0
 while getopts "et:" opt; do
 	case "$opt" in
 	e)
@@ -64,6 +64,12 @@ qmake -set CROSS_COMPILE i686-w64-mingw32- && \
     mv release/win.xpl1.dll output/32/win.xpl
 if [ $? != 0 ] ; then
   exit
+fi
+
+if [[ "$acf_type" == 1 ]]; then
+	# The FlightFactor A320 currently only supports Windows, so don't
+	# even bother building any other version of the plugin.
+	exit
 fi
 
 make distclean > /dev/null

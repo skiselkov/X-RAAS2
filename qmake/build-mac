@@ -20,7 +20,7 @@
 # have `qmake' available in your $PATH.
 
 embed=no
-acf_type=''
+acf_type=0
 while getopts "et:" opt; do
 	case "$opt" in
 	e)
@@ -28,6 +28,7 @@ while getopts "et:" opt; do
 		;;
 	t)
 		acf_type="$OPTARG"
+		;;
 	*)
 		echo "Bad option $opt. Use ./build_release to build X-RAAS2" >&2
 		exit 1

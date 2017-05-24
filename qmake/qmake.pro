@@ -23,7 +23,7 @@ CONFIG -= thread exceptions qt rtti debug
 VERSION = 1.0.0
 
 INCLUDEPATH += ../FreeType/freetype-2.7/include
-INCLUDEPATH += ../SDK/CHeaders/XPLM ../SDK/CHeaders/Widgets
+INCLUDEPATH += ../SDK/CHeaders/XPLM ../SDK/CHeaders/Widgets ../SDK
 # Always just use the shipped OpenAL headers for predictability.
 # The ABI is X-Plane-internal and stable anyway.
 INCLUDEPATH += ../OpenAL/include

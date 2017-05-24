@@ -49,14 +49,29 @@ extern "C" {
 
 #ifdef	DEBUG
 #define	ASSERT(x)		VERIFY(x)
+#define	ASSERT_MSG(x, fmt, ...)	VERIFY_MSG(x, fmt, __VA_ARGS__)
 #else	/* !DEBUG */
 #define	ASSERT(x)		UNUSED(x)
+#define	ASSERT_MSG(x, fmt, ...)	UNUSED(x)
 #endif	/* !DEBUG */
+
+#define	VERIFY_MSG(x, fmt, ...) \
+	do { \
+		if (!(x)) { \
+			logMsg("%s:%d: assertion \"%s\" failed: " fmt, \
+			    log_basename(__FILE__), __LINE__, #x, \
+			    __VA_ARGS__); \
+			log_backtrace(); \
+			close_private_log(); \
+			abort(); \
+		} \
+	} while (0)
 
 #define	VERIFY(x) \
 	do { \
 		if (!(x)) { \
-			logMsg("assertion \"%s\" failed\n", #x); \
+			logMsg("%s:%d: assertion \"%s\" failed", \
+			    log_basename(__FILE__), __LINE__, #x); \
 			log_backtrace(); \
 			close_private_log(); \
 			abort(); \

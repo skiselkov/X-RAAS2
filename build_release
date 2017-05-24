@@ -54,7 +54,7 @@ DIST_FILES=(
     'api/c/XRAAS_ND_msg_decode.h'		'Documentation/api/c'
     'api/c/XRAAS_ND_msg_decode.c'		'Documentation/api/c'
     'api/c/test_sample.c'			'Documentation/api/c'
-    'Documentation/AvionicsIntegrationGuide/AvionicsIntegrationGuide.pdf'
+    'Documentation/AvionicsIntegrationGuide/AvionicsIntegrationGuide.pdf' \
 	'Documentation'
     'Documentation/UserManual/UserManual.pdf'	'Documentation'
     'data/fonts/Aileron/Aileron-Regular.otf'			''
@@ -138,9 +138,14 @@ function install_xtra_files() {
 		FILE="${DIST_FILES[$I]}"
 		DSTDIR="${DIST_FILES[$I+1]}"
 		# Documentation isn't needed in the embeddable build
-		if [ -n "${embed_suffix}" ] &&
+		# (except when it's the FF A320!)
+		if [ -n "${embed}" ] && [[ "$acf_type" != 1 ]] &&
 		    ( [[ "$DSTDIR" == Documentation/* ]] ||
 		    [[ "$DSTDIR" == Documentation ]] ); then
+			continue
+		fi
+		if [[ "$acf_type" == 1 ]] && ( [[ "$FILE" == api/* ]] ||
+		    [[ "$FILE" == */AvionicsIntegrationGuide.pdf ]] ); then
 			continue
 		fi
 		if [[ "$DSTDIR" = "" ]]; then
@@ -154,19 +159,25 @@ function install_xtra_files() {
 embed=''
 embed_suffix=''
 nodoc=no
-acf_type=''
+acf_type=0
 
 while getopts "edht:" opt; do
 	case "$opt" in
 	e)
-		embed="-e"
-		embed_suffix="_embed"
+		if [ -z "$embed" ]; then
+			embed="-e"
+			embed_suffix="_embed"
+		fi
 		;;
 	d)
 		nodoc=yes
 		;;
 	t)
 		case "$OPTARG" in
+			FF_A320)
+				acf_type=1
+				embed_suffix=""
+				;;
 			*)
 				echo "Invalid aircraft type." \
 				    "Try \"$0 -h\" for help" >&2
@@ -174,7 +185,6 @@ while getopts "edht:" opt; do
 				;;
 		esac
 		embed="-e"
-		embed_suffix="_embed"
 		;;
 	h)
 		cat << EOF
@@ -187,7 +197,10 @@ Options:
        duplicated annunciations. Embeddable versions also relocate their config
        files and data cache so that they don't interfere with a global version.
   -t <acf_type>: Build an embeddable version specifically geared towards a
-       particular aircraft model. This implies "-e".
+       particular aircraft model. This implies "-e". Currently supported
+       aircraft models are:
+       *) FF_A320 : The FlightFactor Airbus A320-200. The resulting plugin
+                    will be named simply "X-RAAS2".
   -h : Show this help screen.
 EOF
 		exit
@@ -221,13 +234,24 @@ rm -rf X-RAAS2${embed_suffix}
 
 case `uname` in
 Linux)
-	( cd qmake && ./build-win-lin $embed -t "$acf_type" ) && \
-	    mkdir -p X-RAAS2${embed_suffix}/{32,64} && \
-	    cp qmake/output/32/{win,lin}.xpl X-RAAS2${embed_suffix}/32 && \
-	    cp qmake/output/64/{win,lin}.xpl X-RAAS2${embed_suffix}/64 && \
-	    install_xtra_files
+	set -e
+	( cd qmake && ./build-win-lin $embed -t "$acf_type" )
+	mkdir -p X-RAAS2${embed_suffix}/{32,64}
+	if [[ "$acf_type" == 1 ]]; then
+		cp qmake/output/32/win.xpl X-RAAS2${embed_suffix}/32
+		cp qmake/output/64/win.xpl X-RAAS2${embed_suffix}/64
+	else
+		cp qmake/output/32/{win,lin}.xpl X-RAAS2${embed_suffix}/32
+		cp qmake/output/64/{win,lin}.xpl X-RAAS2${embed_suffix}/64
+	fi
+	install_xtra_files
+	set +e
 	;;
 Darwin)
+	if [[ "$acf_type" == 1 ]]; then
+		echo "The FlightFactor Airbus A320 isn't supported on Mac." >&2
+		exit 1
+	fi
 	( cd qmake && ./build-mac $embed -t "$acf_type" ) && \
 	    mkdir -p X-RAAS2${embed_suffix}/{32,64} && \
 	    cp qmake/output/32/mac.xpl X-RAAS2${embed_suffix}/32 && \

@@ -116,6 +116,15 @@ reset_config(xraas_state_t *state)
 	my_strlcpy(state->config.GPWS_inop_dataref,
 	    "sim/cockpit/warnings/annunciators/GPWS",
 	    sizeof (state->config.GPWS_inop_dataref));
+
+
+#if	ACF_TYPE == FF_A320_ACF_TYPE
+	/* Tuned defaults for the A320 */
+	state->config.enabled = B_FALSE;
+	state->config.min_landing_dist = 1100;
+	state->config.min_takeoff_dist = 1500;
+	state->config.nd_alert_overlay_enabled = B_FALSE;
+#endif	/* FF_A320_ACF_TYPE */
 }
 
 static void
@@ -224,6 +233,8 @@ process_conf(xraas_state_t *state, conf_t *conf)
 	CONF_GET_DEBUG(startup);
 	CONF_GET_DEBUG(tile);
 	CONF_GET_DEBUG(wav);
+	CONF_GET_DEBUG(adc);
+	CONF_GET_DEBUG(ff_a320);
 #undef	CONF_GET_DEBUG
 }
 

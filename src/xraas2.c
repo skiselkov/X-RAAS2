@@ -53,20 +53,31 @@
 #include "xraas2.h"
 #include "xraas_cfg.h"
 
-#define	XRAAS2_VERSION			"2.1"
 #define	XRAAS2_STANDALONE_PLUGIN_SIG	"skiselkov.xraas2"
 
 #ifdef	XRAAS_IS_EMBEDDED
+#if	ACF_TYPE == FF_A320_ACF_TYPE
+#define	XRAAS2_PLUGIN_NAME		"X-RAAS " XRAAS2_VERSION \
+					" (FlightFactor Airbus A320)"
+#define	XRAAS2_PLUGIN_DESC		"A simulation of the Runway " \
+					"Awareness and Advisory System " \
+					"(FlightFactor Airbus A320 version)"
+#define	XRAAS2_PLUGIN_SIG		XRAAS2_STANDALONE_PLUGIN_SIG "_ff_a320"
+#define	XRAAS2_DR_PREFIX		"xraas_ff_a320"
+#else	/* ACF_TYPE == NO_ACF_TYPE */
 #define	XRAAS2_PLUGIN_NAME		"X-RAAS " XRAAS2_VERSION " (embed)"
 #define	XRAAS2_PLUGIN_DESC		"A simulation of the Runway " \
 					"Awareness and Advisory System " \
 					"(embedded version)"
 #define	XRAAS2_PLUGIN_SIG		XRAAS2_STANDALONE_PLUGIN_SIG "_embedded"
+#define	XRAAS2_DR_PREFIX		"xraas_embed"
+#endif	/* ACF_TYPE == NO_ACF_TYPE */
 #else	/* !XRAAS_IS_EMBEDDED */
 #define	XRAAS2_PLUGIN_NAME		"X-RAAS " XRAAS2_VERSION
 #define	XRAAS2_PLUGIN_DESC		"A simulation of the Runway " \
 					"Awareness and Advisory System"
 #define	XRAAS2_PLUGIN_SIG		XRAAS2_STANDALONE_PLUGIN_SIG
+#define	XRAAS2_DR_PREFIX		"xraas"
 #endif	/* !XRAAS_IS_EMBEDDED */
 
 #define	EXEC_INTVAL			0.5		/* seconds */
@@ -84,7 +95,6 @@
 #define	STARTUP_DELAY			3		/* seconds */
 #define	STARTUP_MSG_TIMEOUT		4		/* seconds */
 #define	ARPT_RELOAD_INTVAL		10		/* seconds */
-#define	ARPT_LOAD_LIMIT			(8 * 1852)	/* meters, 8nm */
 #define	ACCEL_STOP_SPD_THRESH		2.6		/* m/s, 5 knots */
 #define	STOP_INIT_DELAY			300		/* meters */
 #define	BOGUS_THR_ELEV_LIMIT		500		/* feet */
@@ -193,22 +203,70 @@ static struct {
 	const XPLMDataTypeID	type;
 	const char		*name;
 } overrides[NUM_OVERRIDES] = {
-    { .type = xplmType_Int,	.name =  "xraas/override/GPWS_prio" },
-    { .type = xplmType_Int,	.name =  "xraas/override/GPWS_prio_act" },
-    { .type = xplmType_Int,	.name =  "xraas/override/GPWS_inop" },
-    { .type = xplmType_Int,	.name =  "xraas/override/GPWS_inop_act" },
-    { .type = xplmType_Int,	.name =  "xraas/override/GPWS_flaps_ovrd" },
-    { .type = xplmType_Int,	.name =  "xraas/override/GPWS_flaps_ovrd_act" },
-    { .type = xplmType_Int,	.name =  "xraas/override/GPWS_terr_ovrd" },
-    { .type = xplmType_Int,	.name =  "xraas/override/GPWS_terr_ovrd_act" },
-    { .type = xplmType_Int,	.name =  "xraas/override/Vapp" },
-    { .type = xplmType_Int,	.name =  "xraas/override/Vapp_act" },
-    { .type = xplmType_Int,	.name =  "xraas/override/Vref" },
-    { .type = xplmType_Int,	.name =  "xraas/override/Vref_act" },
-    { .type = xplmType_Int,	.name =  "xraas/override/takeoff_flaps" },
-    { .type = xplmType_Float,	.name =  "xraas/override/takeoff_flaps_act" },
-    { .type = xplmType_Int,	.name =  "xraas/override/landing_flaps" },
-    { .type = xplmType_Float,	.name =  "xraas/override/landing_flaps_act" }
+	{
+		.type = xplmType_Int,
+		.name = XRAAS2_DR_PREFIX "/override/GPWS_prio"
+	},
+	{
+		.type = xplmType_Int,
+		.name = XRAAS2_DR_PREFIX "/override/GPWS_prio_act"
+	},
+	{
+		.type = xplmType_Int,
+		.name = XRAAS2_DR_PREFIX "/override/GPWS_inop"
+	},
+	{
+		.type = xplmType_Int,
+		.name = XRAAS2_DR_PREFIX "/override/GPWS_inop_act"
+	},
+	{
+		.type = xplmType_Int,
+		.name = XRAAS2_DR_PREFIX "/override/GPWS_flaps_ovrd"
+	},
+	{
+		.type = xplmType_Int,
+		.name = XRAAS2_DR_PREFIX "/override/GPWS_flaps_ovrd_act"
+	},
+	{
+		.type = xplmType_Int,
+		.name = XRAAS2_DR_PREFIX "/override/GPWS_terr_ovrd"
+	},
+	{
+		.type = xplmType_Int,
+		.name = XRAAS2_DR_PREFIX "/override/GPWS_terr_ovrd_act"
+	},
+	{
+		.type = xplmType_Int,
+		.name = XRAAS2_DR_PREFIX "/override/Vapp"
+	},
+	{
+		.type = xplmType_Int,
+		.name = XRAAS2_DR_PREFIX "/override/Vapp_act"
+	},
+	{
+		.type = xplmType_Int,
+		.name = XRAAS2_DR_PREFIX "/override/Vref"
+	},
+	{
+		.type = xplmType_Int,
+		.name = XRAAS2_DR_PREFIX "/override/Vref_act"
+	},
+	{
+		.type = xplmType_Int,
+		.name = XRAAS2_DR_PREFIX "/override/takeoff_flaps"
+	},
+	{
+		.type = xplmType_Float,
+		.name = XRAAS2_DR_PREFIX "/override/takeoff_flaps_act"
+	},
+	{
+		.type = xplmType_Int,
+		.name = XRAAS2_DR_PREFIX "/override/landing_flaps"
+	},
+	{
+		.type = xplmType_Float,
+		.name = XRAAS2_DR_PREFIX "/override/landing_flaps_act"
+	}
 };
 
 static XPLMDataRef	input_faulted_dr = NULL;
@@ -347,29 +405,41 @@ GPWS_is_inop(void)
 {
 	if (overrides[OVRD_GPWS_INOP].value_i != 0)
 		return (overrides[OVRD_GPWS_INOP_ACT].value_i != 0);
-	else
-		return (XPLMGetDatai(drs->gpws_inop) != 0);
+	return (drs->gpws_inop != NULL ?XPLMGetDatai(drs->gpws_inop) != 0 :
+	    B_FALSE);
 }
 
 /*
  * Returns true if the GPWS has requested priority for its annunciations.
- * Our output is supressed.
+ * Our output is suppressed.
  */
 bool_t
 GPWS_has_priority(void)
 {
 	if (overrides[OVRD_GPWS_PRIO].value_i != 0)
 		return (overrides[OVRD_GPWS_PRIO_ACT].value_i != 0);
-	return (drs->gpws_prio ? XPLMGetDatai(drs->gpws_prio) != 0 : B_FALSE);
+	if (ff_a320_is_loaded())
+		return (ff_a320_suppressed() || ff_a320_alerting());
+	return (drs->gpws_prio != NULL ? XPLMGetDatai(drs->gpws_prio) != 0 :
+	    B_FALSE);
 }
 
 static bool_t
-chk_acf_dr(const char **icaos, const char *drname)
+chk_acf_dr(const char **icaos, const char *author, const char *drname)
 {
 	char icao[8];
 
 	memset(icao, 0, sizeof (icao));
 	XPLMGetDatab(drs->ICAO, icao, 0, sizeof (icao) - 1);
+
+	if (author != NULL) {
+		char acf_author[64];
+		memset(acf_author, 0, sizeof (acf_author));
+		XPLMGetDatab(drs->author, acf_author, 0,
+		    sizeof (acf_author) - 1);
+		if (strcmp(acf_author, author) != 0)
+			return (B_FALSE);
+	}
 
 	for (const char **icaos_i = icaos; *icaos_i != NULL; icaos_i++) {
 		if (strcmp(icao, *icaos_i) == 0)
@@ -388,19 +458,22 @@ gpws_terr_ovrd(void)
 {
 	if (overrides[OVRD_GPWS_TERR_OVRD].value_i != 0) {
 		return (overrides[OVRD_GPWS_TERR_OVRD_ACT].value_i != 0);
-	} else if (chk_acf_dr(FF757, "anim/75/button")) {
+	} else if (chk_acf_dr(FF757, NULL, "anim/75/button")) {
 		return (XPLMGetDatai(XPLMFindDataRef("anim/75/button")) == 1);
-	} else if (chk_acf_dr(FF777, "anim/51/button")) {
+	} else if (chk_acf_dr(FF777, NULL, "anim/51/button")) {
 		return (XPLMGetDatai(XPLMFindDataRef("anim/51/button")) == 1);
-	} else if (chk_acf_dr(IXEG737, "ixeg/733/misc/egpws_gear_act")) {
+	} else if (chk_acf_dr(IXEG737, NULL, "ixeg/733/misc/egpws_gear_act")) {
 		return (XPLMGetDatai(XPLMFindDataRef(
 		    "ixeg/733/misc/egpws_gear_act")) == 1);
-	} else if (chk_acf_dr(FJS737, "FJS/732/Annun/GPWS_InhibitSwitch")) {
+	} else if (chk_acf_dr(FJS737, "FlyJsim",
+	    "FJS/732/Annun/GPWS_InhibitSwitch")) {
 		return (XPLMGetDatai(XPLMFindDataRef(
 		    "FJS/732/Annun/GPWS_InhibitSwitch")) == 1);
-	} else if (chk_acf_dr(JAR, "sim/custom/xap/gpws_terr")) {
+	} else if (chk_acf_dr(JAR, NULL, "sim/custom/xap/gpws_terr")) {
 		return (XPLMGetDatai(XPLMFindDataRef(
 		    "sim/custom/xap/gpws_terr")) == 1);
+	} else if (ff_a320_is_loaded()) {
+		return (ff_a320_inhibit() || ff_a320_inhibit_ex());
 	}
 	return (B_FALSE);
 }
@@ -416,16 +489,18 @@ gpws_flaps_ovrd(void)
 {
 	if (overrides[OVRD_GPWS_FLAPS_OVRD].value_i != 0) {
 		return (overrides[OVRD_GPWS_FLAPS_OVRD_ACT].value_i != 0);
-	} else if (chk_acf_dr(FF757, "anim/72/button")) {
+	} else if (chk_acf_dr(FF757, NULL, "anim/72/button")) {
 		return (XPLMGetDatai(XPLMFindDataRef("anim/72/button")) == 1);
-	} else if (chk_acf_dr(FF777, "anim/79/button")) {
+	} else if (chk_acf_dr(FF777, NULL, "anim/79/button")) {
 		return (XPLMGetDatai(XPLMFindDataRef("anim/79/button")) == 1);
-	} else if (chk_acf_dr(IXEG737, "ixeg/733/misc/egpws_flap_act")) {
+	} else if (chk_acf_dr(IXEG737, NULL, "ixeg/733/misc/egpws_flap_act")) {
 		return (XPLMGetDatai(XPLMFindDataRef(
 		    "ixeg/733/misc/egpws_flap_act")) == 1);
-	} else if (chk_acf_dr(JAR, "sim/custom/xap/gpws_flap")) {
+	} else if (chk_acf_dr(JAR, NULL, "sim/custom/xap/gpws_flap")) {
 		return (XPLMGetDatai(XPLMFindDataRef(
 		    "sim/custom/xap/gpws_flap")) != 0);
+	} else if (ff_a320_is_loaded()) {
+		return (ff_a320_inhibit() || ff_a320_inhibit_flaps());
 	}
 	return (gpws_terr_ovrd());
 }
@@ -515,6 +590,11 @@ load_nearest_airports(void)
 	 */
 	rwy_key_tbl_remove_distant(&state.apch_rwy_ann, state.cur_arpts);
 	rwy_key_tbl_remove_distant(&state.air_apch_rwy_ann, state.cur_arpts);
+
+#ifdef	XRAAS_IS_EMBEDDED
+	if (ff_a320_is_loaded())
+		ff_a320_find_nearest_rwy();
+#endif	/* XRAAS_IS_EMBEDDED */
 }
 
 /*
@@ -886,32 +966,42 @@ ground_runway_approach(void)
 }
 
 /*
- * Returns true if the current flaps setting is valid for takeoff.
+ * Returns true if the current flaps setting is valid for takeoff or landing
+ * (depending on the takeoff parameter).
  * If the FMS provides an override, we check the flaps setting exactly.
- * Otherwise we use the {min,max}_takeoff_flap limits.
+ * Otherwise we use the min_takeoff_flap/max_takeoff_flap or min_landing_flap
+ * limits.
  */
 static bool_t
-flaps_set4takeoff(void)
+flaps_chk(bool_t takeoff)
 {
-	if (overrides[TAKEOFF_FLAPS].value_i != 0)
-		return (fabs(adc->flaprqst -
-		    overrides[TAKEOFF_FLAPS_ACT].value_f) < 0.01);
-	return (adc->flaprqst >= state.config.min_takeoff_flap &&
-	    adc->flaprqst <= state.config.max_takeoff_flap);
-}
+	double lower_gate, upper_gate;
 
-/*
- * Returns true if the current flaps setting is valid for landing.
- * If the FMS provides an override, we check the flaps setting exactly.
- * Otherwise we use the min_landing_flap limit.
- */
-static bool_t
-flaps_set4landing(void)
-{
-	if (overrides[LANDING_FLAPS].value_i != 0)
-		return (fabs(adc->flaprqst -
-		    overrides[LANDING_FLAPS_ACT].value_f) < 0.01);
-	return (adc->flaprqst >= state.config.min_landing_flap);
+	if (takeoff) {
+		if (!isnan(adc->takeoff_flaps)) {
+			lower_gate = upper_gate = adc->takeoff_flaps;
+		} else if (overrides[TAKEOFF_FLAPS].value_i != 0) {
+			lower_gate = upper_gate =
+			    overrides[TAKEOFF_FLAPS_ACT].value_f;
+		} else {
+			lower_gate = state.config.min_takeoff_flap;
+			upper_gate = state.config.max_takeoff_flap;
+		}
+	} else {
+		if (!isnan(adc->landing_flaps)) {
+			lower_gate = upper_gate = adc->landing_flaps;
+		} else if (overrides[LANDING_FLAPS].value_i != 0) {
+			lower_gate = upper_gate =
+			    overrides[LANDING_FLAPS_ACT].value_f;
+		} else {
+			lower_gate = state.config.min_landing_flap;
+			upper_gate = 1.0;
+		}
+	}
+	dbg_log(config, 2, "flaps_chk (%s) %.02f <= %.02f <= %.02f",
+	    takeoff ? "takeoff" : "landing", lower_gate, adc->flaprqst,
+	    upper_gate);
+	return (lower_gate <= adc->flaprqst && adc->flaprqst <= upper_gate);
 }
 
 static void
@@ -954,8 +1044,12 @@ perform_on_rwy_ann(const char *rwy_id, vect2_t pos_v, vect2_t thr_v,
 		monitor_override = B_TRUE;
 	}
 
-	if (!flaps_set4takeoff() && !state.landing &&
+	if (!flaps_chk(B_TRUE) && !state.landing &&
 	    !gpws_flaps_ovrd() && flap_check) {
+		dbg_log(apch_cfg_chk, 1, "FLAPS: flaprqst = %g "
+		    "min_flap = %g (adc: %g ovrd: %g)", adc->flaprqst,
+		    state.config.min_landing_flap, adc->landing_flaps,
+		    overrides[LANDING_FLAPS_ACT].value_f);
 		append_msglist(&msg, &msg_len, FLAPS_MSG);
 		append_msglist(&msg, &msg_len, FLAPS_MSG);
 		allow_on_rwy_ND_alert = B_FALSE;
@@ -1442,29 +1536,38 @@ get_land_spd(bool_t *vref)
 	*vref = B_FALSE;
 
 	/* first try the overrides */
+	if (!isnan(adc->vapp) && adc->vapp > MIN_APPCH_SPD) {
+		*vref = B_FALSE;
+		return (adc->vapp);
+	}
+	if (!isnan(adc->vref) && adc->vref > MIN_APPCH_SPD) {
+		*vref = B_TRUE;
+		return (adc->vref);
+	}
 	if (overrides[OVRD_VAPP].value_i != 0) {
-		if (overrides[OVRD_VAPP_ACT].value_i != 0)
+		*vref = B_FALSE;
+		if (overrides[OVRD_VAPP_ACT].value_i > MIN_APPCH_SPD)
 			return (overrides[OVRD_VAPP_ACT].value_i);
 		else
 			return (NAN);
 	}
 	if (overrides[OVRD_VREF].value_i != 0) {
 		*vref = B_TRUE;
-		if (overrides[OVRD_VREF_ACT].value_i != 0)
-			return (overrides[OVRD_VREF_ACT].value_i);
+		if (overrides[OVRD_VREF_ACT].value_i > MIN_APPCH_SPD)
+			return (overrides[OVRD_VREF].value_i);
 		else
 			return (NAN);
 	}
 
 	/* FlightFactor 777 */
-	if (chk_acf_dr(FF777, "T7Avionics/fms/vref")) {
+	if (chk_acf_dr(FF777, NULL, "T7Avionics/fms/vref")) {
 		val = XPLMGetDatai(XPLMFindDataRef("T7Avionics/fms/vref"));
 		if (val < MIN_APPCH_SPD)
 			return (NAN);
 		*vref = B_FALSE;
 		return (val);
 	/* JARDesigns A320 & A330 */
-	} else if (chk_acf_dr(JAR, "sim/custom/xap/pfd/vappr_knots")) {
+	} else if (chk_acf_dr(JAR, NULL, "sim/custom/xap/pfd/vappr_knots")) {
 		/* First try the Vapp, otherwise fall back to Vref */
 		val = XPLMGetDatai(XPLMFindDataRef(
 		    "sim/custom/xap/pfd/vappr_knots"));
@@ -1625,11 +1728,11 @@ apch_cfg_chk(const char *arpt_id, const char *rwy_id, double height_abv_thr,
 		dbg_log(apch_cfg_chk, 2, "gpa_act = %.02f rwy_gpa = %.02f",
 		    gpa_act, rwy_gpa);
 		if (rwy_key_tbl_get(flap_ann_table, arpt_id, rwy_id) == 0 &&
-		    !flaps_set4landing() && !gpws_flaps_ovrd() &&
+		    !flaps_chk(B_FALSE) && !gpws_flaps_ovrd() &&
 		    state.config.monitors[flaps_mon]) {
 			dbg_log(apch_cfg_chk, 1, "FLAPS: flaprqst = %g "
-			    "min_flap = %g (ovrd: %g)", adc->flaprqst,
-			    state.config.min_landing_flap,
+			    "min_flap = %g (adc: %g ovrd: %g)", adc->flaprqst,
+			    state.config.min_landing_flap, adc->landing_flaps,
 			    overrides[LANDING_FLAPS_ACT].value_f);
 			if (!critical)
 				ann_apch_cfg(msg, msg_len, add_pause,
@@ -1818,7 +1921,7 @@ air_runway_approach(void)
 	 * likely trying to land onto something that's not a runway.
 	 */
 	if (in_apch_bbox == 0 && clb_rate < 0 && !gear_is_up() &&
-	    flaps_set4landing()) {
+	    flaps_chk(B_FALSE)) {
 		if (adc->rad_alt <= OFF_RWY_HEIGHT_MAX) {
 			/* only annunciate if we're above the minimum height */
 			if (adc->rad_alt >= OFF_RWY_HEIGHT_MIN &&
@@ -1877,29 +1980,23 @@ find_nearest_curarpt(void)
 }
 
 static void
-altimeter_setting(void)
+guess_TATL_from_airport(int *TA, int *TL, bool_t *field_changed)
 {
-	if (adc->rad_alt < RADALT_GRD_THRESH)
-		return;
-
 	const airport_t *cur_arpt = find_nearest_curarpt();
-	bool_t field_changed = B_FALSE;
-	double elev = MET2FEET(adc->elev);
-	int64_t now = microclock();
 
 	if (cur_arpt != NULL) {
 		const char *arpt_id = cur_arpt->icao;
 		dbg_log(altimeter, 2, "find_nearest_curarpt() = %s", arpt_id);
-		state.TA = cur_arpt->TA;
-		state.TL = cur_arpt->TL;
+		*TA = cur_arpt->TA;
+		*TL = cur_arpt->TL;
 		state.TATL_field_elev = cur_arpt->refpt.elev;
 		if (strcmp(arpt_id, state.TATL_source) != 0) {
 			my_strlcpy(state.TATL_source, arpt_id,
 			    sizeof (state.TATL_source));
-			field_changed = B_TRUE;
+			*field_changed = B_TRUE;
 			dbg_log(altimeter, 1, "TATL_source: %s "
 			    "TA: %d TL: %d field_elev: %d", arpt_id,
-			    state.TA, state.TL, state.TATL_field_elev);
+			    *TA, *TL, state.TATL_field_elev);
 		}
 	} else {
 		float lat = adc->lat, lon = adc->lon;
@@ -1935,59 +2032,103 @@ altimeter_setting(void)
 		}
 
 		if (cur_arpt != NULL) {
-			state.TA = cur_arpt->TA;
-			state.TL = cur_arpt->TL;
+			*TA = cur_arpt->TA;
+			*TL = cur_arpt->TL;
 			state.TATL_field_elev = cur_arpt->refpt.elev;
 			my_strlcpy(state.TATL_source, cur_arpt->icao,
 			    sizeof (state.TATL_source));
-			field_changed = B_TRUE;
+			*field_changed = B_TRUE;
 			dbg_log(altimeter, 1, "TATL_source: %s "
 			    "TA: %d TA: %d field_elev: %d", cur_arpt->icao,
-			    state.TA, state.TL, state.TATL_field_elev);
+			    *TA, *TL, state.TATL_field_elev);
 		}
 	}
 
-	if (state.TL == 0) {
-		if (field_changed)
-			dbg_log(altimeter, 1, "TL = 0");
-		if (state.TA != 0) {
-			if (adc->baro_sl > STD_BARO_REF) {
-				state.TL = state.TA;
-			} else {
-				double qnh = adc->baro_sl * 33.85;
-				state.TL = state.TA + 28 * (1013 - qnh);
-			}
-			if (field_changed)
-				dbg_log(altimeter, 1, "TL(auto) = %d",
-				    state.TL);
-		}
-	}
-	if (state.TA == 0) {
-		if (field_changed)
-			dbg_log(altimeter, 1, "TA(auto) = %d", state.TA);
-		state.TA = state.TL;
+}
+
+/*
+ * Altimeter setting check processing. We establish the current TA & TL
+ * values and compare it with our barometric altimeter reading, GPS elevation
+ * and try to determine if the aircraft should be in the ALT or FL regime.
+ * Depending on the regime in effect, we call "ALTIMETER SETTING" either
+ * when the baro subscale setting isn't 1013 (FL regime) or when the actual
+ * altimeter reading differs from true GPS elevation by a certain margin
+ * (ALT regime).
+ */
+static void
+altimeter_setting(void)
+{
+	int TA = 0, TL = 0;
+	int elev = MET2FEET(adc->elev), baro_alt = adc->baro_alt;
+	int64_t now;
+	bool_t field_changed = B_FALSE;
+
+	/* Don't do anything if radalt indicates we're on the ground */
+	if (adc->rad_alt < RADALT_GRD_THRESH)
+		return;
+
+	now = microclock();
+
+	/*
+	 * We use two approaches for guessing at the TA & TL:
+	 * 1) We can receive the values directly from the FMS via the ADC
+	 *	bridge. This is the preferred method.
+	 * 2) We can pull the values from the navdb. Since we do not know
+	 *	the exact departure & destination aerodromes, this approach
+	 *	takes a bit more guessing.
+	 */
+	if (adc->trans_alt != 0 || adc->trans_lvl != 0) {
+		TA = adc->trans_alt;
+		TL = adc->trans_lvl;
+	} else {
+		guess_TATL_from_airport(&TA, &TL, &field_changed);
 	}
 
-	if (state.TA != 0 && elev > state.TA &&
-	    state.TATL_state == TATL_STATE_ALT) {
+	/*
+	 * In the above case when TA & TL were auto-determined from the
+	 * navdb, sometimes the TA or TL aren't published. Provided we
+	 * have at least one value, we can synthesize the other parameter.
+	 * 1) If we have TA but not TL, we compute a TL that is equal in
+	 *	absolute vertical position to the TA value at the current
+	 *	sea-level pressure (from adc->baro_sl). Obviously this is
+	 *	a bit of a cheat that we could only do in a simulator.
+	 * 2) If we have TL but not TA, we can't really tell where the
+	 *	actual TA is supposed to go. Therefore we simply set it
+	 *	to the same value as the published TL to avoid excessive
+	 *	TATL state transitions.
+	 */
+	if (TL == 0 && TA != 0) {
+		if (adc->baro_sl > STD_BARO_REF) {
+			TL = TA;
+		} else {
+			double qnh = adc->baro_sl * 33.85;
+			TL = TA + 28 * (1013 - qnh);
+		}
+		if (field_changed)
+			dbg_log(altimeter, 1, "TL(auto) = %d", TL);
+	}
+	if (TA == 0) {
+		if (field_changed)
+			dbg_log(altimeter, 1, "TA(auto) = %d", TA);
+		TA = TL;
+	}
+
+	/*
+	 * If we have a TA and our present baro altitude is above it,
+	 * and we were transition.
+	 */
+	if (TA != 0 && baro_alt > TA && state.TATL_state == TATL_STATE_ALT) {
 		state.TATL_transition = microclock();
 		state.TATL_state = TATL_STATE_FL;
-		dbg_log(altimeter, 1, "elev > TA (%d) transitioning "
-		    "state.TATL_state = fl", state.TA);
+		dbg_log(altimeter, 1, "baro_alt (%d) > TA (%d) transitioning "
+		    "state.TATL_state = fl", baro_alt, TA);
 	}
 
-	if (state.TL != 0 && elev < state.TA &&
-	    adc->baro_alt < state.TL &&
-	    /*
-	     * If there's a gap between the altitudes and flight levels,
-	     * don't transition until we're below the state.TA
-	     */
-	    (state.TA == 0 || elev < state.TA) &&
-	    state.TATL_state == TATL_STATE_FL) {
+	if (TL != 0 && baro_alt < TL && state.TATL_state == TATL_STATE_FL) {
 		state.TATL_transition = microclock();
 		state.TATL_state = TATL_STATE_ALT;
-		dbg_log(altimeter, 1, "baro_alt < TL (%d) "
-		    "transitioning state.TATL_state = alt", state.TL);
+		dbg_log(altimeter, 1, "baro_alt (%d) < TL (%d) "
+		    "transitioning state.TATL_state = alt", baro_alt, TL);
 	}
 
 	if (state.TATL_transition != -1) {
@@ -2029,7 +2170,7 @@ altimeter_setting(void)
 		    now - state.TATL_transition >
 		    SEC2USEC(ALTM_SETTING_TIMEOUT)) {
 			double d_ref = fabs(adc->baro_set - STD_BARO_REF);
-			dbg_log(altimeter, 1, "fl check; d_ref: %.1f", d_ref);
+			dbg_log(altimeter, 1, "fl check; d_ref: %.03f", d_ref);
 			if (d_ref > ALTM_SETTING_BARO_ERR_LIMIT &&
 			    state.config.monitors[ALTM_QNE_MON]) {
 				msg_type_t *msg = NULL;
@@ -2053,6 +2194,9 @@ xraas_is_on(void)
 	float bus_volts[2];
 	bool_t turned_on;
 
+	if (ff_a320_is_loaded() && !GPWS_is_inop())
+		return (ff_a320_powered());
+
 	XPLMGetDatavf(drs->bus_volt, bus_volts, 0, 2);
 
 	turned_on = ((bus_volts[0] > MIN_BUS_VOLT ||
@@ -2068,18 +2212,57 @@ xraas_is_on(void)
 static void
 raas_exec(void)
 {
-	if (!xraas_is_on()) {
-		dbg_log(pwr_state, 1, "is_on = false");
-		return;
-	}
+	dbg_log(pwr_state, 3, "raas_exec");
 
+	/*
+	 * Ahead of the enabling check so that we can provide sensible runway
+	 * info in the embedded FF A320 case.
+	 */
 	state.input_faulted = !adc_collect();
 	if (state.input_faulted) {
 		dbg_log(pwr_state, 1, "input_fault = true");
 		return;
 	}
-
 	load_nearest_airports();
+
+#ifdef	XRAAS_IS_EMBEDDED
+	if (plugin_conflict) {
+		/*
+		 * There appears to be a stand-alone version of the plugin
+		 * installed. The embedded versions tend to be more tightly
+		 * bound to their aircraft model, so we want to disable a
+		 * global stand-alone version in this case.
+		 */
+		XPLMDataRef dr_inop = XPLMFindDataRef(
+		    "xraas/override/GPWS_inop");
+		XPLMDataRef dr_inop_act = XPLMFindDataRef(
+		    "xraas/override/GPWS_inop_act");
+		if (dr_inop != NULL && dr_inop_act != NULL) {
+			XPLMSetDatai(dr_inop, 1);
+			XPLMSetDatai(dr_inop_act, 1);
+		} else {
+			logMsg("CAUTION: there appears to be a global X-RAAS "
+			    "installation in this simulator, but I seem to be "
+			    "unable to override it. Please disable the global "
+			    "X-RAAS plugin or else the RAAS functionality "
+			    "won't work reliably.");
+			return;
+		}
+	}
+#endif	/* XRAAS_IS_EMBEDDED */
+
+
+#ifdef	XRAAS_IS_EMBEDDED
+	if (!state.config.enabled)
+		return;
+#else	/* !XRAAS_IS_EMBEDDED */
+	VERIFY(state.config.enabled);
+#endif	/* !XRAAS_IS_EMBEDDED */
+
+	if (!xraas_is_on()) {
+		dbg_log(pwr_state, 1, "is_on = false");
+		return;
+	}
 
 	if (adc->rad_alt > RADALT_FLARE_THRESH) {
 		if (!state.departed) {
@@ -2138,8 +2321,11 @@ raas_exec_cb(float elapsed_since_last_call, float elapsed_since_last_floop,
 	return (EXEC_INTVAL);
 }
 
+#if	ACF_TYPE == NO_ACF_TYPE
 /*
  * Check if the aircraft is a helicopter (or at least says it flies like one).
+ * This isn't used on embedded type-specific builds, because there we *know*
+ * about aircraft compatibility for certain.
  */
 static bool_t
 chk_acf_is_helo(void)
@@ -2163,6 +2349,7 @@ chk_acf_is_helo(void)
 	free(line);
 	return (result);
 }
+#endif	/* ACF_TYPE == NO_ACF_TYPE */
 
 static void
 startup_complete(void)
@@ -2183,17 +2370,20 @@ xraas_init(void)
 
 	ASSERT(!xraas_inited);
 
+	dbg_log(startup, 1, "xraas_init");
+
 	/* these must go ahead of config parsing */
 	XPLMGetNthAircraftModel(0, acf_filename, acf_path);
 	if (strlen(acf_filename) == 0)
 		/* no aircraft loaded yet */
 		return;
+#if	IBM
+	fix_pathsep(acf_filename);
+	fix_pathsep(acf_path);
+#endif
 	if ((sep = strrchr(acf_path, DIRSEP)) != NULL) {
 		memset(acf_dirpath, 0, sizeof (acf_dirpath));
 		memcpy(acf_dirpath, acf_path, sep - acf_path);
-#if	IBM
-		fix_pathsep(acf_dirpath);
-#endif
 	} else {
 		/* aircraft's dirpath is unknown */
 		logMsg("WARNING: can't determine your aircraft's directory "
@@ -2210,17 +2400,23 @@ xraas_init(void)
 #endif
 	snprintf(acf_livpath, sizeof (acf_livpath), "%s%c%s", xpdir,
 	    DIRSEP, livpath);
-	logMsg("acf_livpath: \"%s\"", acf_livpath);
 
 	if (!load_configs(&state))
 		return;
 
 	if (!state.config.enabled) {
 		logMsg("X-RAAS: DISABLED");
+		/*
+		 * When running in embedded mode, we never really get disabled.
+		 * Instead, we keep on running the flight loop, but only the
+		 * nearest airport fetch. This allows us to provide the host
+		 * avionics with the nearest runway location information (e.g.
+		 * the FF A320 needs this).
+		 */
+#ifndef	XRAAS_IS_EMBEDDED
 		return;
+#endif
 	}
-
-	dbg_log(startup, 1, "xraas_init");
 
 	if (!snd_sys_init(plugindir) || !ND_alerts_init() || !adc_init())
 		goto errout;
@@ -2234,6 +2430,9 @@ xraas_init(void)
 	if (!recreate_cache(&state.airportdb))
 		goto errout;
 
+#if	ACF_TYPE == NO_ACF_TYPE
+	/* Type-specific builds aren't bound by these */
+
 	if (chk_acf_is_helo() && !state.config.allow_helos) {
 		log_init_msg(state.config.auto_disable_notify,
 		    INIT_ERR_MSG_TIMEOUT,
@@ -2241,7 +2440,6 @@ xraas_init(void)
 		    "X-RAAS: auto-disabled: aircraft is a helicopter.");
 		goto errout;
 	}
-
 	if (XPLMGetDatai(drs->num_engines) < state.config.min_engines ||
 	    XPLMGetDataf(drs->mtow) < state.config.min_mtow) {
 		char icao[8];
@@ -2259,6 +2457,7 @@ xraas_init(void)
 		    XPLMGetDataf(drs->mtow));
 		goto errout;
 	}
+#endif	/* ACF_TYPE == NO_ACF_TYPE */
 
 	rwy_key_tbl_create(&state.accel_stop_max_spd, "accel_stop_max_spd");
 	rwy_key_tbl_create(&state.on_rwy_ann, "on_rwy_ann");
@@ -2275,8 +2474,6 @@ xraas_init(void)
 	rwy_key_tbl_create(&state.air_apch_spd3_ann, "air_apch_spd3_ann");
 
 	XPLMRegisterFlightLoopCallback(raas_exec_cb, EXEC_INTVAL, NULL);
-
-	overrides_init();
 	input_faulted_dr = dr_intf_add_i("xraas/state/input_faulted",
 	    (int *)&state.input_faulted, B_FALSE);
 
@@ -2299,8 +2496,10 @@ xraas_fini(void)
 	if (!xraas_inited)
 		return;
 
+#ifndef	XRAAS_IS_EMBEDDED
 	if (!state.config.enabled)
 		return;
+#endif	/* XRAAS_IS_EMBEDDED */
 
 	dbg_log(startup, 1, "xraas_fini");
 
@@ -2335,7 +2534,6 @@ xraas_fini(void)
 	if (state.config.debug_graphical)
 		dbg_gui_fini();
 
-	overrides_fini();
 	dr_intf_remove(input_faulted_dr);
 
 	xraas_inited = B_FALSE;
@@ -2383,16 +2581,6 @@ XPluginStart(char *outName, char *outSig, char *outDesc)
 		    "there aren't any duplicate copies of the plugin!");
 		return (0);
 #endif	/* !XRAAS_IS_EMBEDDED */
-	}
-
-	if (plugin_conflict) {
-		/*
-		 * We can't simply return 0 here, as that emits a rather
-		 * nasty-looking error message into the X-Plane Log.txt.
-		 * Instead, we simply report success and internally inhibit
-		 * all operations.
-		 */
-		return (1);
 	}
 
 	if (strlen(xpdir) > 0 && xpdir[strlen(xpdir) - 1] == DIRSEP) {
@@ -2446,12 +2634,18 @@ XPluginStart(char *outName, char *outSig, char *outDesc)
 		    "If you are an aircraft developer, please move the "
 		    "X-RAAS plugin into your aircraft's \"plugins\" folder.",
 		    XRAAS2_VERSION);
-		plugin_conflict = B_TRUE;
+		return (0);
 	}
 #endif	/* XRAAS_IS_EMBEDDED */
 
 	acf_livpath_dr = XPLMFindDataRef("sim/aircraft/view/acf_livery_path");
 	VERIFY(acf_livpath_dr != NULL);
+
+	/*
+	 * Override initialization has to happen during startup to allow an
+	 * aircraft-specific plugin to override us in its load routine.
+	 */
+	overrides_init();
 
 	return (1);
 }
@@ -2460,19 +2654,13 @@ PLUGIN_API void
 XPluginStop(void)
 {
 	close_private_log();
-
-	if (plugin_conflict)
-		return;
-
+	overrides_fini();
 	init_msg_sys_fini();
 }
 
 PLUGIN_API int
 XPluginEnable(void)
 {
-	if (plugin_conflict)
-		return (1);
-
 	xraas_init();
 	gui_init();
 	return (1);
@@ -2481,9 +2669,6 @@ XPluginEnable(void)
 PLUGIN_API void
 XPluginDisable(void)
 {
-	if (plugin_conflict)
-		return;
-
 	gui_fini();
 	xraas_fini();
 }
@@ -2491,9 +2676,6 @@ XPluginDisable(void)
 PLUGIN_API void
 XPluginReceiveMessage(XPLMPluginID src, int msg, void *param)
 {
-	if (plugin_conflict)
-		return;
-
 	UNUSED(src);
 	UNUSED(param);
 
