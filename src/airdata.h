@@ -26,6 +26,7 @@
 #ifndef	_XRAAS_AIRDATA_H_
 #define	_XRAAS_AIRDATA_H_
 
+#include <stdlib.h>
 #include <XPLMDataAccess.h>
 
 #include "types.h"
@@ -91,6 +92,7 @@ typedef struct {
 	XPLMDataRef num_engines;
 	XPLMDataRef mtow;
 	XPLMDataRef ICAO;
+	XPLMDataRef author;
 	XPLMDataRef gpws_prio;
 	XPLMDataRef gpws_inop;
 	XPLMDataRef replay_mode;
@@ -102,6 +104,14 @@ extern const drs_t *drs;
 bool_t adc_init(void);
 void adc_fini(void);
 bool_t adc_collect(void);
+
+bool_t ff_a320_is_loaded(void);
+bool_t ff_a320_powered(void);
+bool_t ff_a320_suppressed(void);
+bool_t ff_a320_alerting(void);
+bool_t ff_a320_inhibit(void);
+bool_t ff_a320_inhibit_ex(void);
+bool_t ff_a320_inhibit_flaps(void);
 
 #ifdef	__cplusplus
 }

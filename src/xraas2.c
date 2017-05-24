@@ -353,23 +353,34 @@ GPWS_is_inop(void)
 
 /*
  * Returns true if the GPWS has requested priority for its annunciations.
- * Our output is supressed.
+ * Our output is suppressed.
  */
 bool_t
 GPWS_has_priority(void)
 {
 	if (overrides[OVRD_GPWS_PRIO].value_i != 0)
 		return (overrides[OVRD_GPWS_PRIO_ACT].value_i != 0);
+	if (ff_a320_is_loaded())
+		return (ff_a320_suppressed() || ff_a320_alerting());
 	return (drs->gpws_prio ? XPLMGetDatai(drs->gpws_prio) != 0 : B_FALSE);
 }
 
 static bool_t
-chk_acf_dr(const char **icaos, const char *drname)
+chk_acf_dr(const char **icaos, const char *author, const char *drname)
 {
 	char icao[8];
 
 	memset(icao, 0, sizeof (icao));
 	XPLMGetDatab(drs->ICAO, icao, 0, sizeof (icao) - 1);
+
+	if (author != NULL) {
+		char acf_author[64];
+		memset(acf_author, 0, sizeof (acf_author));
+		XPLMGetDatab(drs->author, acf_author, 0,
+		    sizeof (acf_author) - 1);
+		if (strcmp(acf_author, author) != 0)
+			return (B_FALSE);
+	}
 
 	for (const char **icaos_i = icaos; *icaos_i != NULL; icaos_i++) {
 		if (strcmp(icao, *icaos_i) == 0)
@@ -388,19 +399,22 @@ gpws_terr_ovrd(void)
 {
 	if (overrides[OVRD_GPWS_TERR_OVRD].value_i != 0) {
 		return (overrides[OVRD_GPWS_TERR_OVRD_ACT].value_i != 0);
-	} else if (chk_acf_dr(FF757, "anim/75/button")) {
+	} else if (chk_acf_dr(FF757, NULL, "anim/75/button")) {
 		return (XPLMGetDatai(XPLMFindDataRef("anim/75/button")) == 1);
-	} else if (chk_acf_dr(FF777, "anim/51/button")) {
+	} else if (chk_acf_dr(FF777, NULL, "anim/51/button")) {
 		return (XPLMGetDatai(XPLMFindDataRef("anim/51/button")) == 1);
-	} else if (chk_acf_dr(IXEG737, "ixeg/733/misc/egpws_gear_act")) {
+	} else if (chk_acf_dr(IXEG737, NULL, "ixeg/733/misc/egpws_gear_act")) {
 		return (XPLMGetDatai(XPLMFindDataRef(
 		    "ixeg/733/misc/egpws_gear_act")) == 1);
-	} else if (chk_acf_dr(FJS737, "FJS/732/Annun/GPWS_InhibitSwitch")) {
+	} else if (chk_acf_dr(FJS737, "FlyJsim",
+	    "FJS/732/Annun/GPWS_InhibitSwitch")) {
 		return (XPLMGetDatai(XPLMFindDataRef(
 		    "FJS/732/Annun/GPWS_InhibitSwitch")) == 1);
-	} else if (chk_acf_dr(JAR, "sim/custom/xap/gpws_terr")) {
+	} else if (chk_acf_dr(JAR, NULL, "sim/custom/xap/gpws_terr")) {
 		return (XPLMGetDatai(XPLMFindDataRef(
 		    "sim/custom/xap/gpws_terr")) == 1);
+	} else if (ff_a320_is_loaded()) {
+		return (ff_a320_inhibit() || ff_a320_inhibit_ex());
 	}
 	return (B_FALSE);
 }
@@ -416,16 +430,18 @@ gpws_flaps_ovrd(void)
 {
 	if (overrides[OVRD_GPWS_FLAPS_OVRD].value_i != 0) {
 		return (overrides[OVRD_GPWS_FLAPS_OVRD_ACT].value_i != 0);
-	} else if (chk_acf_dr(FF757, "anim/72/button")) {
+	} else if (chk_acf_dr(FF757, NULL, "anim/72/button")) {
 		return (XPLMGetDatai(XPLMFindDataRef("anim/72/button")) == 1);
-	} else if (chk_acf_dr(FF777, "anim/79/button")) {
+	} else if (chk_acf_dr(FF777, NULL, "anim/79/button")) {
 		return (XPLMGetDatai(XPLMFindDataRef("anim/79/button")) == 1);
-	} else if (chk_acf_dr(IXEG737, "ixeg/733/misc/egpws_flap_act")) {
+	} else if (chk_acf_dr(IXEG737, NULL, "ixeg/733/misc/egpws_flap_act")) {
 		return (XPLMGetDatai(XPLMFindDataRef(
 		    "ixeg/733/misc/egpws_flap_act")) == 1);
-	} else if (chk_acf_dr(JAR, "sim/custom/xap/gpws_flap")) {
+	} else if (chk_acf_dr(JAR, NULL, "sim/custom/xap/gpws_flap")) {
 		return (XPLMGetDatai(XPLMFindDataRef(
 		    "sim/custom/xap/gpws_flap")) != 0);
+	} else if (ff_a320_is_loaded()) {
+		return (ff_a320_inhibit() || ff_a320_inhibit_flaps());
 	}
 	return (gpws_terr_ovrd());
 }
@@ -1457,14 +1473,14 @@ get_land_spd(bool_t *vref)
 	}
 
 	/* FlightFactor 777 */
-	if (chk_acf_dr(FF777, "T7Avionics/fms/vref")) {
+	if (chk_acf_dr(FF777, NULL, "T7Avionics/fms/vref")) {
 		val = XPLMGetDatai(XPLMFindDataRef("T7Avionics/fms/vref"));
 		if (val < MIN_APPCH_SPD)
 			return (NAN);
 		*vref = B_FALSE;
 		return (val);
 	/* JARDesigns A320 & A330 */
-	} else if (chk_acf_dr(JAR, "sim/custom/xap/pfd/vappr_knots")) {
+	} else if (chk_acf_dr(JAR, NULL, "sim/custom/xap/pfd/vappr_knots")) {
 		/* First try the Vapp, otherwise fall back to Vref */
 		val = XPLMGetDatai(XPLMFindDataRef(
 		    "sim/custom/xap/pfd/vappr_knots"));
@@ -2052,6 +2068,9 @@ xraas_is_on(void)
 {
 	float bus_volts[2];
 	bool_t turned_on;
+
+	if (ff_a320_is_loaded())
+		return (ff_a320_powered());
 
 	XPLMGetDatavf(drs->bus_volt, bus_volts, 0, 2);
 

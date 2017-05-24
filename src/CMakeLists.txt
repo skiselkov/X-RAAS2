@@ -51,7 +51,7 @@ if(APPLE)
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mmacosx-version-min=10.7")
 endif()
 include_directories(plugin PUBLIC "../SDK/CHeaders/XPLM/"
-    "../SDK/CHeaders/Widgets" "../OpenAL/include")
+    "../SDK/CHeaders/Widgets" "../OpenAL/include" "../SDK")
 
 if (APPLE)
 	include_directories(plugin PUBLIC
