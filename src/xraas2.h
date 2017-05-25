@@ -167,8 +167,6 @@ typedef struct xraas_state {
 	bool_t		departed;
 	bool_t		arriving;
 	bool_t		landing;
-	int		TA;
-	int		TL;
 	int		TATL_field_elev;
 	TATL_state_t	TATL_state;
 	int64_t		TATL_transition;

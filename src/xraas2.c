@@ -1948,29 +1948,23 @@ find_nearest_curarpt(void)
 }
 
 static void
-altimeter_setting(void)
+guess_TATL_from_airport(int *TA, int *TL, bool_t *field_changed)
 {
-	if (adc->rad_alt < RADALT_GRD_THRESH)
-		return;
-
 	const airport_t *cur_arpt = find_nearest_curarpt();
-	bool_t field_changed = B_FALSE;
-	double elev = MET2FEET(adc->elev);
-	int64_t now = microclock();
 
 	if (cur_arpt != NULL) {
 		const char *arpt_id = cur_arpt->icao;
 		dbg_log(altimeter, 2, "find_nearest_curarpt() = %s", arpt_id);
-		state.TA = cur_arpt->TA;
-		state.TL = cur_arpt->TL;
+		*TA = cur_arpt->TA;
+		*TL = cur_arpt->TL;
 		state.TATL_field_elev = cur_arpt->refpt.elev;
 		if (strcmp(arpt_id, state.TATL_source) != 0) {
 			my_strlcpy(state.TATL_source, arpt_id,
 			    sizeof (state.TATL_source));
-			field_changed = B_TRUE;
+			*field_changed = B_TRUE;
 			dbg_log(altimeter, 1, "TATL_source: %s "
 			    "TA: %d TL: %d field_elev: %d", arpt_id,
-			    state.TA, state.TL, state.TATL_field_elev);
+			    *TA, *TL, state.TATL_field_elev);
 		}
 	} else {
 		float lat = adc->lat, lon = adc->lon;
@@ -2006,59 +2000,103 @@ altimeter_setting(void)
 		}
 
 		if (cur_arpt != NULL) {
-			state.TA = cur_arpt->TA;
-			state.TL = cur_arpt->TL;
+			*TA = cur_arpt->TA;
+			*TL = cur_arpt->TL;
 			state.TATL_field_elev = cur_arpt->refpt.elev;
 			my_strlcpy(state.TATL_source, cur_arpt->icao,
 			    sizeof (state.TATL_source));
-			field_changed = B_TRUE;
+			*field_changed = B_TRUE;
 			dbg_log(altimeter, 1, "TATL_source: %s "
 			    "TA: %d TA: %d field_elev: %d", cur_arpt->icao,
-			    state.TA, state.TL, state.TATL_field_elev);
+			    *TA, *TL, state.TATL_field_elev);
 		}
 	}
 
-	if (state.TL == 0) {
-		if (field_changed)
-			dbg_log(altimeter, 1, "TL = 0");
-		if (state.TA != 0) {
-			if (adc->baro_sl > STD_BARO_REF) {
-				state.TL = state.TA;
-			} else {
-				double qnh = adc->baro_sl * 33.85;
-				state.TL = state.TA + 28 * (1013 - qnh);
-			}
-			if (field_changed)
-				dbg_log(altimeter, 1, "TL(auto) = %d",
-				    state.TL);
-		}
-	}
-	if (state.TA == 0) {
-		if (field_changed)
-			dbg_log(altimeter, 1, "TA(auto) = %d", state.TA);
-		state.TA = state.TL;
+}
+
+/*
+ * Altimeter setting check processing. We establish the current TA & TL
+ * values and compare it with our barometric altimeter reading, GPS elevation
+ * and try to determine if the aircraft should be in the ALT or FL regime.
+ * Depending on the regime in effect, we call "ALTIMETER SETTING" either
+ * when the baro subscale setting isn't 1013 (FL regime) or when the actual
+ * altimeter reading differs from true GPS elevation by a certain margin
+ * (ALT regime).
+ */
+static void
+altimeter_setting(void)
+{
+	int TA = 0, TL = 0;
+	int elev = MET2FEET(adc->elev), baro_alt = adc->baro_alt;
+	int64_t now;
+	bool_t field_changed = B_FALSE;
+
+	/* Don't do anything if radalt indicates we're on the ground */
+	if (adc->rad_alt < RADALT_GRD_THRESH)
+		return;
+
+	now = microclock();
+
+	/*
+	 * We use two approaches for guessing at the TA & TL:
+	 * 1) We can receive the values directly from the FMS via the ADC
+	 *	bridge. This is the preferred method.
+	 * 2) We can pull the values from the navdb. Since we do not know
+	 *	the exact departure & destination aerodromes, this approach
+	 *	takes a bit more guessing.
+	 */
+	if (adc->trans_alt != 0 || adc->trans_lvl != 0) {
+		TA = adc->trans_alt;
+		TL = adc->trans_lvl;
+	} else {
+		guess_TATL_from_airport(&TA, &TL, &field_changed);
 	}
 
-	if (state.TA != 0 && elev > state.TA &&
-	    state.TATL_state == TATL_STATE_ALT) {
+	/*
+	 * In the above case when TA & TL were auto-determined from the
+	 * navdb, sometimes the TA or TL aren't published. Provided we
+	 * have at least one value, we can synthesize the other parameter.
+	 * 1) If we have TA but not TL, we compute a TL that is equal in
+	 *	absolute vertical position to the TA value at the current
+	 *	sea-level pressure (from adc->baro_sl). Obviously this is
+	 *	a bit of a cheat that we could only do in a simulator.
+	 * 2) If we have TL but not TA, we can't really tell where the
+	 *	actual TA is supposed to go. Therefore we simply set it
+	 *	to the same value as the published TL to avoid excessive
+	 *	TATL state transitions.
+	 */
+	if (TL == 0 && TA != 0) {
+		if (adc->baro_sl > STD_BARO_REF) {
+			TL = TA;
+		} else {
+			double qnh = adc->baro_sl * 33.85;
+			TL = TA + 28 * (1013 - qnh);
+		}
+		if (field_changed)
+			dbg_log(altimeter, 1, "TL(auto) = %d", TL);
+	}
+	if (TA == 0) {
+		if (field_changed)
+			dbg_log(altimeter, 1, "TA(auto) = %d", TA);
+		TA = TL;
+	}
+
+	/*
+	 * If we have a TA and our present baro altitude is above it,
+	 * and we were transition.
+	 */
+	if (TA != 0 && baro_alt > TA && state.TATL_state == TATL_STATE_ALT) {
 		state.TATL_transition = microclock();
 		state.TATL_state = TATL_STATE_FL;
-		dbg_log(altimeter, 1, "elev > TA (%d) transitioning "
-		    "state.TATL_state = fl", state.TA);
+		dbg_log(altimeter, 1, "baro_alt (%d) > TA (%d) transitioning "
+		    "state.TATL_state = fl", baro_alt, TA);
 	}
 
-	if (state.TL != 0 && elev < state.TA &&
-	    adc->baro_alt < state.TL &&
-	    /*
-	     * If there's a gap between the altitudes and flight levels,
-	     * don't transition until we're below the state.TA
-	     */
-	    (state.TA == 0 || elev < state.TA) &&
-	    state.TATL_state == TATL_STATE_FL) {
+	if (TL != 0 && baro_alt < TL && state.TATL_state == TATL_STATE_FL) {
 		state.TATL_transition = microclock();
 		state.TATL_state = TATL_STATE_ALT;
-		dbg_log(altimeter, 1, "baro_alt < TL (%d) "
-		    "transitioning state.TATL_state = alt", state.TL);
+		dbg_log(altimeter, 1, "baro_alt (%d) < TL (%d) "
+		    "transitioning state.TATL_state = alt", baro_alt, TL);
 	}
 
 	if (state.TATL_transition != -1) {

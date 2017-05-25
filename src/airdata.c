@@ -121,6 +121,9 @@ static struct {
 		int rwy_width;			/* meters */
 		int rwy_track;			/* degrees true -180..+180 */
 		int rwy_elev;			/* meters */
+
+		int trans_alt;			/* meters */
+		int trans_lvl;			/* meters */
 	} ids;
 
 	ff_a320_rwy_info_t rwy_info;
@@ -491,6 +494,11 @@ ff_a320_update(double step, void *tag)
 		    ff_a320_val_id("Aircraft.Navigation.GPWC.RunwayTrack");
 		ff_a320.ids.rwy_elev =
 		    ff_a320_val_id("Aircraft.Navigation.GPWC.RunwayElevation");
+
+		ff_a320.ids.rwy_track = ff_a320_val_id(
+		    "Aircraft.Navigation.GPWC.TransitionAltitude");
+		ff_a320.ids.rwy_elev =
+		    ff_a320_val_id("Aircraft.Navigation.GPWC.TransitionLevel");
 	}
 
 	ff_a320.status.powered = ff_a320_gets32(ff_a320.ids.powered);
@@ -536,16 +544,32 @@ ff_a320_update(double step, void *tag)
 	ff_a320.adc.cas = MPS2KT(ff_a320_getf32(ff_a320.ids.cas));
 	ff_a320.adc.gs = ff_a320_getf32(ff_a320.ids.gs);
 
+	ff_a320.adc.trans_alt = ff_a320_getf32(ff_a320.ids.trans_alt);
+	ff_a320.adc.trans_lvl = ff_a320_getf32(ff_a320.ids.trans_lvl);
+
 	if (ff_a320.rwy_info.changed) {
 		if (ff_a320.rwy_info.present) {
-			
+			double trk = ff_a320.rwy_info.track;
+			if (trk > 180.0)
+				trk -= 360.0;
+			ff_a320_setf64(ff_a320.ids.rwy_lat,
+			    DEG2RAD(ff_a320.rwy_info.thr_pos.lat));
+			ff_a320_setf64(ff_a320.ids.rwy_lon,
+			    DEG2RAD(ff_a320.rwy_info.thr_pos.lon));
+			ff_a320_setf32(ff_a320.ids.rwy_len,
+			    ff_a320.rwy_info.length);
+			ff_a320_setf32(ff_a320.ids.rwy_width,
+			    ff_a320.rwy_info.width);
+			ff_a320_setf32(ff_a320.ids.rwy_track, trk);
+			ff_a320_setf32(ff_a320.ids.rwy_elev,
+			    ff_a320.rwy_info.thr_pos.lon);
 		} else {
 			ff_a320_setf64(ff_a320.ids.rwy_lat, 4 * M_PI);
 			ff_a320_setf64(ff_a320.ids.rwy_lon, 4 * M_PI);
-			ff_a320_setf32(ff_a320.ids.rwy_len, -1);
-			ff_a320_setf32(ff_a320.ids.rwy_width, -1);
-			ff_a320_setf32(ff_a320.ids.rwy_track, -1);
-			ff_a320_setf32(ff_a320.ids.rwy_elev, -1);
+			ff_a320_setf32(ff_a320.ids.rwy_len, -1.0);
+			ff_a320_setf32(ff_a320.ids.rwy_width, -1.0);
+			ff_a320_setf32(ff_a320.ids.rwy_track, -1.0);
+			ff_a320_setf32(ff_a320.ids.rwy_elev, -1000.0);
 		}
 		ff_a320.rwy_info.changed = B_FALSE;
 	}
