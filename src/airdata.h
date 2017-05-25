@@ -104,6 +104,7 @@ bool_t adc_init(void);
 void adc_fini(void);
 bool_t adc_collect(void);
 
+void ff_a320_find_nearest_rwy(void);
 bool_t ff_a320_is_loaded(void);
 bool_t ff_a320_powered(void);
 bool_t ff_a320_suppressed(void);

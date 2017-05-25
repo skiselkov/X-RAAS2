@@ -581,6 +581,11 @@ load_nearest_airports(void)
 	 */
 	rwy_key_tbl_remove_distant(&state.apch_rwy_ann, state.cur_arpts);
 	rwy_key_tbl_remove_distant(&state.air_apch_rwy_ann, state.cur_arpts);
+
+#ifdef	XRAAS_IS_EMBEDDED
+	if (ff_a320_is_loaded())
+		ff_a320_find_nearest_rwy();
+#endif	/* XRAAS_IS_EMBEDDED */
 }
 
 /*
@@ -2137,6 +2142,16 @@ xraas_is_on(void)
 static void
 raas_exec(void)
 {
+	/* This needs to be */
+	load_nearest_airports();
+
+#ifdef	XRAAS_IS_EMBEDDED
+	if (!state.config.enabled)
+		return;
+#else	/* !XRAAS_IS_EMBEDDED */
+	VERIFY(state.config.enabled);
+#endif	/* !XRAAS_IS_EMBEDDED */
+
 	if (!xraas_is_on()) {
 		dbg_log(pwr_state, 1, "is_on = false");
 		return;
@@ -2147,8 +2162,6 @@ raas_exec(void)
 		dbg_log(pwr_state, 1, "input_fault = true");
 		return;
 	}
-
-	load_nearest_airports();
 
 	if (adc->rad_alt > RADALT_FLARE_THRESH) {
 		if (!state.departed) {
@@ -2287,7 +2300,16 @@ xraas_init(void)
 
 	if (!state.config.enabled) {
 		logMsg("X-RAAS: DISABLED");
+		/*
+		 * When running in embedded mode, we never really get disabled.
+		 * Instead, we keep on running the flight loop, but only the
+		 * nearest airport fetch. This allows us to provide the host
+		 * avionics with the nearest runway location information (e.g.
+		 * the FF A320 needs this).
+		 */
+#ifndef	XRAAS_IS_EMBEDDED
 		return;
+#endif
 	}
 
 	dbg_log(startup, 1, "xraas_init");
@@ -2369,8 +2391,10 @@ xraas_fini(void)
 	if (!xraas_inited)
 		return;
 
+#ifndef	XRAAS_IS_EMBEDDED
 	if (!state.config.enabled)
 		return;
+#endif	/* XRAAS_IS_EMBEDDED */
 
 	dbg_log(startup, 1, "xraas_fini");
 
