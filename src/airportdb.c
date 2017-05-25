@@ -1896,7 +1896,7 @@ recreate_cache(airportdb_t *db)
 		goto out;
 	}
 
-	logMsg("Creating airport data cache for %ld airports",
+	dbg_log(tile, 0, "Creating airport data cache for %ld airports",
 	    avl_numnodes(&db->apt_dat));
 
 	for (airport_t *arpt = avl_first(&db->apt_dat); arpt != NULL;

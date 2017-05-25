@@ -30,6 +30,9 @@
 
 #include "airdata.h"
 #include "assert.h"
+#include "geom.h"
+#include "log.h"
+#include "perf.h"
 
 /* A320 interface */
 #include <FF_A320/SharedValue.h>
@@ -59,12 +62,13 @@ static bool_t xp_get_spd(double *cas, double *gs);
 
 static bool_t ff_a320_intf_init(void);
 static void ff_a320_intf_fini(void);
-static void ff_a320_intf_update(double step, void *tag);
+static void ff_a320_update(double step, void *tag);
 static bool_t ff_a320_get_alt(double *baro_alt, double *baro_set,
     double *rad_alt);
 static bool_t ff_a320_get_pos(double *lat, double *lon, double *elev);
 static bool_t ff_a320_get_att(double *hdg, double *pitch);
 static bool_t ff_a320_get_spd(double *cas, double *gs);
+static const char *ff_a320_type2str(unsigned int t);
 
 
 static int intf_type = INVALID_INTERFACE;
@@ -83,30 +87,30 @@ static SharedValuesInterface ff_a320_intf = {
 	NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 };
 static struct {
-	int powered_id;
-	int fault_id;
-	int fault_ex_id;
-	int inhibit_id;
-	int inhibit_ex_id;
-	int inhibit_flaps_id;
-	int alert_id;
+	int powered_id;			/* flag 0/1 */
+	int fault_id;			/* flag 0/1 */
+	int fault_ex_id;		/* flag 0/1 */
+	int inhibit_id;			/* flag 0/1 */
+	int inhibit_ex_id;		/* flag 0/1 */
+	int inhibit_flaps_id;		/* flag 0/1 */
+	int alert_id;			/* flag 0/1 */
 
-	int baro_alt_id;
-	int baro_set_id;
-	int rad_alt_id;
+	int baro_alt_id;		/* meters */
+	int baro_raw_id;		/* meters */
+	int rad_alt_id;			/* meters */
 
-	int lat_id;
-	int lon_id;
-	int elev_id;
+	int lat_id;			/* radians from equator */
+	int lon_id;			/* radians from 0th meridian */
+	int elev_id;			/* meters AMSL */
 
-	int hdg_id;
+	int hdg_id;			/* degrees true -180..+180 */
 
-	int fpa_id;
-	int aoa_value_id;
-	int aoa_valid_id;
+	int fpa_id;			/* degrees nose up */
+	int aoa_value_id;		/* degrees down */
+	int aoa_valid_id;		/* flag 0/1 */
 
-	int cas_id;
-	int gs_id;
+	int cas_id;			/* meters/second */
+	int gs_id;			/* meters/second */
 } ff_a320_ids;
 
 static struct {
@@ -132,6 +136,8 @@ dr_get(const char *drname)
 bool_t
 adc_init(void)
 {
+	dbg_log(adc, 1, "init");
+
 	memset(&adc_l, 0, sizeof (adc_l));
 	memset(&drs_l, 0, sizeof (drs_l));
 
@@ -195,6 +201,8 @@ adc_init(void)
 void
 adc_fini(void)
 {
+	dbg_log(adc, 1, "fini");
+
 	memset(&adc_l, 0, sizeof (adc_l));
 	memset(&drs_l, 0, sizeof (drs_l));
 
@@ -211,8 +219,10 @@ adc_collect(void)
 	    &adc_l.rad_alt) ||
 	    !adc_ops.get_pos(&adc_l.lat, &adc_l.lon, &adc_l.elev) ||
 	    !adc_ops.get_att(&adc_l.hdg, &adc_l.pitch) ||
-	    !adc_ops.get_spd(&adc_l.cas, &adc_l.gs))
+	    !adc_ops.get_spd(&adc_l.cas, &adc_l.gs)) {
+		dbg_log(adc, 1, "input fault");
 		return (B_FALSE);
+	}
 
 	adc_l.baro_sl = XPLMGetDataf(drs_l.baro_sl);
 
@@ -223,6 +233,12 @@ adc_collect(void)
 	VERIFY(adc_l.n_gear <= NUM_GEAR);
 	XPLMGetDatavi(drs_l.gear_type, adc_l.gear_type, 0, adc_l.n_gear);
 
+	dbg_log(adc, 2, "collect: A:%05.0f/%02.2f/%04.0f  "
+	    "P:%02.04f/%03.04f/%05.0f  T:%03.0f/%02.1f  S:%03.0f/%03.0f",
+	    adc_l.baro_alt, adc_l.baro_set, adc_l.rad_alt,
+	    adc_l.lat, adc_l.lon, adc_l.elev,
+	    adc_l.hdg, adc_l.pitch, adc_l.cas, adc_l.gs);
+
 	return (B_TRUE);
 }
 
@@ -232,6 +248,8 @@ xp_get_alt(double *baro_alt, double *baro_set, double *rad_alt)
 	*baro_alt = XPLMGetDataf(drs_l.baro_alt);
 	*baro_set = XPLMGetDataf(drs_l.baro_set);
 	*rad_alt = XPLMGetDataf(drs_l.rad_alt);
+	dbg_log(adc, 2, "xp alt: %.0f set: %.02f rad: %.0f", *baro_alt,
+	    *baro_set, *rad_alt);
 	return (B_TRUE);
 }
 
@@ -271,7 +289,7 @@ ff_a320_intf_init(void)
 	memset(author, 0, sizeof (author));
 	XPLMGetDatab(drs->author, author, 0, sizeof (author) - 1);
 	if (strcmp(author, "FlightFactor") != 0) {
-		logMsg("ff_a320_intf init fail: not FF");
+		dbg_log(ff_a320, 1, "init fail: not FF");
 		return (B_FALSE);
 	}
 
@@ -279,42 +297,165 @@ ff_a320_intf_init(void)
 
 	plugin = XPLMFindPluginBySignature(XPLM_FF_SIGNATURE);
 	if (plugin == XPLM_NO_PLUGIN_ID) {
-		logMsg("ff_a320_intf init fail: plugin not found");
+		dbg_log(ff_a320, 1, "init fail: plugin not found");
 		return (B_FALSE);
 	}
 	XPLMSendMessageToPlugin(plugin, XPLM_FF_MSG_GET_SHARED_INTERFACE,
 	    &ff_a320_intf);
 	if (ff_a320_intf.DataAddUpdate == NULL) {
-		logMsg("ff_a320_intf init fail: func vector empty");
+		dbg_log(ff_a320, 1, "init fail: func vector empty");
 		return (B_FALSE);
 	}
 
-	ff_a320_intf.DataAddUpdate(ff_a320_intf_update, NULL);
+	ff_a320_intf.DataAddUpdate(ff_a320_update, NULL);
 
 	memset(&ff_a320_ids, 0xff, sizeof (ff_a320_ids));
+
+	dbg_log(ff_a320, 1, "init successful");
 
 	return (B_TRUE);
 }
 
-static inline int
-ff_a320_geti(int id)
+static inline int32_t
+ff_a320_gets32(int id)
 {
 	int val;
+	unsigned int type = ff_a320_intf.ValueType(id);
+
+	if (type < Value_Type_sint8 || type > Value_Type_uint32) {
+		dbg_log(ff_a320, 0, "get error: %s is of type %s",
+		    ff_a320_intf.ValueName(id), ff_a320_type2str(type));
+		return (-1);
+	}
 	ff_a320_intf.ValueGet(id, &val);
+
+	return (val);
+}
+
+static inline float
+ff_a320_getf32(int id)
+{
+	float val;
+	unsigned int type = ff_a320_intf.ValueType(id);
+
+	if (type != Value_Type_float32) {
+		dbg_log(ff_a320, 0, "get error: %s is of type %s",
+		    ff_a320_intf.ValueName(id), ff_a320_type2str(type));
+		return (NAN);
+	}
+	ff_a320_intf.ValueGet(id, &val);
+
 	return (val);
 }
 
 static inline double
-ff_a320_getd(int id)
+ff_a320_getf64(int id)
 {
 	double val;
+	unsigned int type = ff_a320_intf.ValueType(id);
+
+	if (type != Value_Type_float64) {
+		dbg_log(ff_a320, 0, "get error: %s is of type %s",
+		    ff_a320_intf.ValueName(id), ff_a320_type2str(type));
+		return (NAN);
+	}
 	ff_a320_intf.ValueGet(id, &val);
+
 	return (val);
 }
 
-static void
-ff_a320_intf_update(double step, void *tag)
+static const char *
+ff_a320_type2str(unsigned int t)
 {
+	switch (t) {
+	case Value_Type_Deleted:
+		return "deleted";
+	case Value_Type_Object:
+		return "object";
+	case Value_Type_sint8:
+		return "sint8";
+	case Value_Type_uint8:
+		return "uint8";
+	case Value_Type_sint16:
+		return "sint16";
+	case Value_Type_uint16:
+		return "uint16";
+	case Value_Type_sint32:
+		return "sint32";
+	case Value_Type_uint32:
+		return "uint32";
+	case Value_Type_float32:
+		return "float32";
+	case Value_Type_float64:
+		return "float64";
+	case Value_Type_String:
+		return "string";
+	case Value_Type_Time:
+		return "time";
+	default:
+		return "unknown";
+	}
+}
+
+static void
+ff_a320_units2str(unsigned int units, char buf[32])
+{
+	snprintf(buf, 32, "%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s"
+	    "%s%s%s%s%s%s%s%s%s%s%s%s",
+	    (units & Value_Unit_Object) ? "O" : "",
+	    (units & Value_Unit_Failure) ? "F" : "",
+	    (units & Value_Unit_Button) ? "B" : "",
+	    (units & Value_Unit_Ratio) ? "R" : "",
+	    (units & Value_Unit_State) ? "s" : "",
+	    (units & Value_Unit_Flags) ? "f" : "",
+	    (units & Value_Unit_Ident) ? "I" : "",
+	    (units & Value_Unit_Length) ? "M" : "",
+	    (units & Value_Unit_Speed) ? "S" : "",
+	    (units & Value_Unit_Accel) ? "^" : "",
+	    (units & Value_Unit_Force) ? "N" : "",
+	    (units & Value_Unit_Weight) ? "K" : "",
+	    (units & Value_Unit_Angle) ? "D" : "",
+	    (units & Value_Unit_AngularSpeed) ? "@" : "",
+	    (units & Value_Unit_AngularAccel) ? "c" : "",
+	    (units & Value_Unit_Temperature) ? "t" : "",
+	    (units & Value_Unit_Pressure) ? "P" : "",
+	    (units & Value_Unit_Flow) ? "L" : "",
+	    (units & Value_Unit_Voltage) ? "V" : "",
+	    (units & Value_Unit_Frequency) ? "H" : "",
+	    (units & Value_Unit_Current) ? "A" : "",
+	    (units & Value_Unit_Power) ? "W": "",
+	    (units & Value_Unit_Density) ? "d" : "",
+	    (units & Value_Unit_Volume) ? "v" : "",
+	    (units & Value_Unit_Conduction) ? "S" : "",
+	    (units & Value_Unit_Capacity) ? "C" : "",
+	    (units & Value_Unit_Heat) ? "T" : "",
+	    (units & Value_Unit_Position) ? "r" : "",
+	    (units & Value_Unit_TimeDelta) ? "'" : "",
+	    (units & Value_Unit_TimeStart) ? "`" : "",
+	    (units & Value_Unit_Label) ? "9" : "");
+}
+
+static int
+ff_a320_val_id(const char *name)
+{
+	int id = ff_a320_intf.ValueIdByName(name);
+	char units[32];
+
+	ff_a320_units2str(id, units);
+	dbg_log(ff_a320, 3, "%-44s  %-8s  %02x  %-10s  %s", name,
+	    ff_a320_type2str(ff_a320_intf.ValueType(id)),
+	    ff_a320_intf.ValueFlags(id),
+	    ff_a320_intf.ValueDesc(id),
+	    units);
+
+	return (id);
+}
+
+static void
+ff_a320_update(double step, void *tag)
+{
+	double alt_uncorr;
+
 	UNUSED(step);
 	UNUSED(tag);
 
@@ -322,80 +463,91 @@ ff_a320_intf_update(double step, void *tag)
 	VERIFY(ff_a320_intf.ValueGet != NULL);
 
 	if (ff_a320_ids.baro_alt_id == -1) {
-		ff_a320_ids.powered_id = ff_a320_intf.ValueIdByName(
+		ff_a320_ids.powered_id = ff_a320_val_id(
 		    "Aircraft.Navigation.GPWC.Powered");
-		ff_a320_ids.fault_id = ff_a320_intf.ValueIdByName(
+		ff_a320_ids.fault_id = ff_a320_val_id(
 		    "Aircraft.Navigation.GPWC.Fault");
-		ff_a320_ids.fault_ex_id = ff_a320_intf.ValueIdByName(
+		ff_a320_ids.fault_ex_id = ff_a320_val_id(
 		    "Aircraft.Navigation.GPWC.FaultEx");
-		ff_a320_ids.inhibit_id = ff_a320_intf.ValueIdByName(
+		ff_a320_ids.inhibit_id = ff_a320_val_id(
 		    "Aircraft.Navigation.GPWC.Inhibit");
-		ff_a320_ids.inhibit_ex_id = ff_a320_intf.ValueIdByName(
+		ff_a320_ids.inhibit_ex_id = ff_a320_val_id(
 		    "Aircraft.Navigation.GPWC.InhibitEx");
-		ff_a320_ids.inhibit_flaps_id = ff_a320_intf.ValueIdByName(
+		ff_a320_ids.inhibit_flaps_id = ff_a320_val_id(
 		    "Aircraft.Navigation.GPWC.InhibitFlaps");
-		ff_a320_ids.alert_id = ff_a320_intf.ValueIdByName(
+		ff_a320_ids.alert_id = ff_a320_val_id(
 		    "Aircraft.Navigation.GPWC.Alert");
 
-		ff_a320_ids.baro_alt_id = ff_a320_intf.ValueIdByName(
+		ff_a320_ids.baro_alt_id = ff_a320_val_id(
 		    "Aircraft.Navigation.GPWC.AltitudeBaro");
-		ff_a320_ids.baro_set_id = ff_a320_intf.ValueIdByName(
+		ff_a320_ids.baro_raw_id = ff_a320_val_id(
 		    "Aircraft.Navigation.GPWC.Altitude");
-		ff_a320_ids.rad_alt_id = ff_a320_intf.ValueIdByName(
+		ff_a320_ids.rad_alt_id = ff_a320_val_id(
 		    "Aircraft.Navigation.GPWC.Height");
 
-		ff_a320_ids.lat_id = ff_a320_intf.ValueIdByName(
+		ff_a320_ids.lat_id = ff_a320_val_id(
 		    "Aircraft.Navigation.GPWC.PositionLat");
-		ff_a320_ids.lon_id = ff_a320_intf.ValueIdByName(
+		ff_a320_ids.lon_id = ff_a320_val_id(
 		    "Aircraft.Navigation.GPWC.PositionLon");
-		ff_a320_ids.elev_id = ff_a320_intf.ValueIdByName(
+		ff_a320_ids.elev_id = ff_a320_val_id(
 		    "Aircraft.Navigation.GPWC.Elevation");
-		ff_a320_ids.hdg_id = ff_a320_intf.ValueIdByName(
+		ff_a320_ids.hdg_id = ff_a320_val_id(
 		    "Aircraft.Navigation.GPWC.Heading");
 
-		ff_a320_ids.fpa_id = ff_a320_intf.ValueIdByName(
+		ff_a320_ids.fpa_id = ff_a320_val_id(
 		    "Aircraft.Navigation.GPWC.Path");
-		ff_a320_ids.aoa_value_id = ff_a320_intf.ValueIdByName(
+		ff_a320_ids.aoa_value_id = ff_a320_val_id(
 		    "Aircraft.Navigation.ADIRS.Sensors.AOA1.Value");
-		ff_a320_ids.aoa_valid_id = ff_a320_intf.ValueIdByName(
+		ff_a320_ids.aoa_valid_id = ff_a320_val_id(
 		    "Aircraft.Navigation.ADIRS.Sensors.AOA1.Valid");
 
-		ff_a320_ids.cas_id = ff_a320_intf.ValueIdByName(
+		ff_a320_ids.cas_id = ff_a320_val_id(
 		    "Aircraft.Navigation.GPWC.AirSpeed");
-		ff_a320_ids.gs_id = ff_a320_intf.ValueIdByName(
+		ff_a320_ids.gs_id = ff_a320_val_id(
 		    "Aircraft.Navigation.GPWC.Speed");
 	}
 
-	if (ff_a320_geti(ff_a320_ids.fault_id) != 0 ||
-	    ff_a320_geti(ff_a320_ids.fault_ex_id) != 0) {
+	ff_a320_status.powered = ff_a320_gets32(ff_a320_ids.powered_id);
+
+	if (ff_a320_gets32(ff_a320_ids.fault_id) != 0 ||
+	    ff_a320_gets32(ff_a320_ids.fault_ex_id) != 0) {
 		ff_a320_sys_ok = B_FALSE;
 		return;
 	}
 
-	ff_a320_status.powered = ff_a320_geti(ff_a320_ids.powered_id);
-	ff_a320_status.inhibit = ff_a320_geti(ff_a320_ids.inhibit_id);
-	ff_a320_status.inhibit_ex = ff_a320_geti(ff_a320_ids.inhibit_ex_id);
-	ff_a320_status.inhibit_flaps = ff_a320_geti(
-	    ff_a320_ids.inhibit_flaps_id);
-	ff_a320_status.alerting = ff_a320_geti(ff_a320_ids.alert_id);
+	ff_a320_status.inhibit = ff_a320_gets32(ff_a320_ids.inhibit_id);
+	ff_a320_status.inhibit_ex = ff_a320_gets32(ff_a320_ids.inhibit_ex_id);
+	ff_a320_status.inhibit_flaps =
+	    ff_a320_gets32(ff_a320_ids.inhibit_flaps_id);
+	ff_a320_status.alerting = ff_a320_gets32(ff_a320_ids.alert_id);
 
+	adc_l.baro_alt = MET2FEET(ff_a320_getf32(ff_a320_ids.baro_alt_id));
+	alt_uncorr = MET2FEET(ff_a320_getf32(ff_a320_ids.baro_raw_id));
+	/*
+	 * Since we don't get access to the raw baro setting on the altimeter,
+	 * we work it out from the baro-corrected and baro-uncorrected
+	 * altimeter readings. 0.01 inHg equals to approximately 10 ft of
+	 * difference, or about 3.047m. No need to be super accurate with
+	 * this, we only need it to check that the altimeter setting is QNE
+	 * when doing the alt->FL transition.
+	 */
+	adc_l.baro_set = 29.92 + ((adc_l.baro_alt - alt_uncorr) / 1000.0);
+	adc_l.rad_alt = MET2FEET(ff_a320_getf32(ff_a320_ids.rad_alt_id));
 
-	adc_l.baro_alt = ff_a320_geti(ff_a320_ids.baro_alt_id);
-	adc_l.baro_set = 1013.25;
-//	adc_l.baro_set = ff_a320_getd(ff_a320_ids.baro_set_id);
-	adc_l.rad_alt = ff_a320_geti(ff_a320_ids.rad_alt_id);
+	adc_l.lat = RAD2DEG(ff_a320_getf64(ff_a320_ids.lat_id));
+	adc_l.lon = RAD2DEG(ff_a320_getf64(ff_a320_ids.lon_id));
+	adc_l.elev = ff_a320_getf32(ff_a320_ids.elev_id);
 
-	adc_l.lat = ff_a320_geti(ff_a320_ids.lat_id);
-	adc_l.lon = ff_a320_geti(ff_a320_ids.lon_id);
-	adc_l.elev = ff_a320_geti(ff_a320_ids.elev_id);
-
-	adc_l.hdg = ff_a320_getd(ff_a320_ids.hdg_id);
+	/*
+	adc_l.hdg = ff_a320_getf32(ff_a320_ids.hdg_id);
+	if (adc_l.hdg < 0)
+		adc_l.hdg += 360.0;
+	*/
+	adc_l.hdg = XPLMGetDataf(drs_l.hdg);
 	adc_l.pitch = XPLMGetDataf(drs_l.pitch);
 
-	// ff_a320_intf.ValueGet(ff_a320_ids.pitch_id, &adc_l.pitch);
-
-	adc_l.cas = ff_a320_getd(ff_a320_ids.cas_id);
-	adc_l.gs = ff_a320_getd(ff_a320_ids.gs_id);
+	adc_l.cas = MPS2KT(ff_a320_getf32(ff_a320_ids.cas_id));
+	adc_l.gs = ff_a320_getf32(ff_a320_ids.gs_id);
 
 	ff_a320_sys_ok = B_TRUE;
 }
@@ -404,8 +556,9 @@ static void
 ff_a320_intf_fini(void)
 {
 	if (ff_a320_intf.DataDelUpdate != NULL)
-		ff_a320_intf.DataDelUpdate(ff_a320_intf_update, NULL);
+		ff_a320_intf.DataDelUpdate(ff_a320_update, NULL);
 	memset(&ff_a320_intf, 0, sizeof (ff_a320_intf));
+	dbg_log(ff_a320, 1, "fini");
 }
 
 static bool_t
@@ -455,6 +608,8 @@ ff_a320_is_loaded(void)
 bool_t
 ff_a320_powered(void)
 {
+	dbg_log(ff_a320, 1, "powered: %s",
+	    ff_a320_status.powered ? "true" : "false");
 	return (ff_a320_status.powered);
 }
 

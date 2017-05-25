@@ -47,18 +47,20 @@ extern "C" {
 #define	NUM_GEAR	10
 
 typedef struct {
-	double	rad_alt;
+	double	baro_alt;	/* feet */
+	double	baro_set;	/* in.Hg */
+	double	baro_sl;	/* in.Hg */
+	double	rad_alt;	/* feet */
 
-	double	baro_alt;
-	double	cas;
-	double	gs;
+	double	lat;		/* degrees */
+	double	lon;		/* degrees */
+	double	elev;		/* meters */
 
-	double	lat;
-	double	lon;
-	double	elev;
-	double	hdg;
+	double	hdg;		/* degrees true */
+	double	pitch;		/* degrees nose up */
 
-	double	pitch;
+	double	cas;		/* knots */
+	double	gs;		/* meters/second */
 
 	float	nw_offset;
 	double	flaprqst;
@@ -66,9 +68,6 @@ typedef struct {
 	size_t	n_gear;
 	float	gear[NUM_GEAR];
 	int	gear_type[NUM_GEAR];
-
-	double	baro_set;
-	double	baro_sl;
 } adc_t;
 
 typedef struct {

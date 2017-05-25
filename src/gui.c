@@ -355,6 +355,7 @@ config_target2filename(conf_target_t target)
 	case CONFIG_TARGET_LIVERY:
 		return (mkpathname(xraas_acf_livpath, "X-RAAS.cfg", NULL));
 	case CONFIG_TARGET_AIRCRAFT:
+		logMsg("xraas_acf_dirpath: %s", xraas_acf_dirpath);
 		return (mkpathname(xraas_acf_dirpath, "X-RAAS.cfg", NULL));
 	case CONFIG_TARGET_GLOBAL:
 		return (mkpathname(xraas_prefsdir, "X-RAAS.cfg", NULL));

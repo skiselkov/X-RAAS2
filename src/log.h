@@ -43,6 +43,8 @@ typedef struct {
 	int startup;
 	int tile;
 	int wav;
+	int ff_a320;
+	int adc;
 } debug_config_t;
 
 extern debug_config_t xraas_debug_config;

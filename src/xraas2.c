@@ -62,11 +62,13 @@
 					"Awareness and Advisory System " \
 					"(embedded version)"
 #define	XRAAS2_PLUGIN_SIG		XRAAS2_STANDALONE_PLUGIN_SIG "_embedded"
+#define	XRAAS2_DR_PREFIX		"xraas_embed"
 #else	/* !XRAAS_IS_EMBEDDED */
 #define	XRAAS2_PLUGIN_NAME		"X-RAAS " XRAAS2_VERSION
 #define	XRAAS2_PLUGIN_DESC		"A simulation of the Runway " \
 					"Awareness and Advisory System"
 #define	XRAAS2_PLUGIN_SIG		XRAAS2_STANDALONE_PLUGIN_SIG
+#define	XRAAS2_DR_PREFIX		"xraas"
 #endif	/* !XRAAS_IS_EMBEDDED */
 
 #define	EXEC_INTVAL			0.5		/* seconds */
@@ -193,22 +195,70 @@ static struct {
 	const XPLMDataTypeID	type;
 	const char		*name;
 } overrides[NUM_OVERRIDES] = {
-    { .type = xplmType_Int,	.name =  "xraas/override/GPWS_prio" },
-    { .type = xplmType_Int,	.name =  "xraas/override/GPWS_prio_act" },
-    { .type = xplmType_Int,	.name =  "xraas/override/GPWS_inop" },
-    { .type = xplmType_Int,	.name =  "xraas/override/GPWS_inop_act" },
-    { .type = xplmType_Int,	.name =  "xraas/override/GPWS_flaps_ovrd" },
-    { .type = xplmType_Int,	.name =  "xraas/override/GPWS_flaps_ovrd_act" },
-    { .type = xplmType_Int,	.name =  "xraas/override/GPWS_terr_ovrd" },
-    { .type = xplmType_Int,	.name =  "xraas/override/GPWS_terr_ovrd_act" },
-    { .type = xplmType_Int,	.name =  "xraas/override/Vapp" },
-    { .type = xplmType_Int,	.name =  "xraas/override/Vapp_act" },
-    { .type = xplmType_Int,	.name =  "xraas/override/Vref" },
-    { .type = xplmType_Int,	.name =  "xraas/override/Vref_act" },
-    { .type = xplmType_Int,	.name =  "xraas/override/takeoff_flaps" },
-    { .type = xplmType_Float,	.name =  "xraas/override/takeoff_flaps_act" },
-    { .type = xplmType_Int,	.name =  "xraas/override/landing_flaps" },
-    { .type = xplmType_Float,	.name =  "xraas/override/landing_flaps_act" }
+	{
+		.type = xplmType_Int,
+		.name = XRAAS2_DR_PREFIX "/override/GPWS_prio"
+	},
+	{
+		.type = xplmType_Int,
+		.name = XRAAS2_DR_PREFIX "/override/GPWS_prio_act"
+	},
+	{
+		.type = xplmType_Int,
+		.name = XRAAS2_DR_PREFIX "/override/GPWS_inop"
+	},
+	{
+		.type = xplmType_Int,
+		.name = XRAAS2_DR_PREFIX "/override/GPWS_inop_act"
+	},
+	{
+		.type = xplmType_Int,
+		.name = XRAAS2_DR_PREFIX "/override/GPWS_flaps_ovrd"
+	},
+	{
+		.type = xplmType_Int,
+		.name = XRAAS2_DR_PREFIX "/override/GPWS_flaps_ovrd_act"
+	},
+	{
+		.type = xplmType_Int,
+		.name = XRAAS2_DR_PREFIX "/override/GPWS_terr_ovrd"
+	},
+	{
+		.type = xplmType_Int,
+		.name = XRAAS2_DR_PREFIX "/override/GPWS_terr_ovrd_act"
+	},
+	{
+		.type = xplmType_Int,
+		.name = XRAAS2_DR_PREFIX "/override/Vapp"
+	},
+	{
+		.type = xplmType_Int,
+		.name = XRAAS2_DR_PREFIX "/override/Vapp_act"
+	},
+	{
+		.type = xplmType_Int,
+		.name = XRAAS2_DR_PREFIX "/override/Vref"
+	},
+	{
+		.type = xplmType_Int,
+		.name = XRAAS2_DR_PREFIX "/override/Vref_act"
+	},
+	{
+		.type = xplmType_Int,
+		.name = XRAAS2_DR_PREFIX "/override/takeoff_flaps"
+	},
+	{
+		.type = xplmType_Float,
+		.name = XRAAS2_DR_PREFIX "/override/takeoff_flaps_act"
+	},
+	{
+		.type = xplmType_Int,
+		.name = XRAAS2_DR_PREFIX "/override/landing_flaps"
+	},
+	{
+		.type = xplmType_Float,
+		.name = XRAAS2_DR_PREFIX "/override/landing_flaps_act"
+	}
 };
 
 static XPLMDataRef	input_faulted_dr = NULL;
@@ -2207,12 +2257,14 @@ xraas_init(void)
 	if (strlen(acf_filename) == 0)
 		/* no aircraft loaded yet */
 		return;
+#if	IBM
+	fix_pathsep(acf_filename);
+	fix_pathsep(acf_path);
+#endif
 	if ((sep = strrchr(acf_path, DIRSEP)) != NULL) {
 		memset(acf_dirpath, 0, sizeof (acf_dirpath));
 		memcpy(acf_dirpath, acf_path, sep - acf_path);
-#if	IBM
-		fix_pathsep(acf_dirpath);
-#endif
+		logMsg("acf_dirpath: %s", acf_dirpath);
 	} else {
 		/* aircraft's dirpath is unknown */
 		logMsg("WARNING: can't determine your aircraft's directory "
@@ -2229,7 +2281,6 @@ xraas_init(void)
 #endif
 	snprintf(acf_livpath, sizeof (acf_livpath), "%s%c%s", xpdir,
 	    DIRSEP, livpath);
-	logMsg("acf_livpath: \"%s\"", acf_livpath);
 
 	if (!load_configs(&state))
 		return;
@@ -2405,13 +2456,30 @@ XPluginStart(char *outName, char *outSig, char *outDesc)
 	}
 
 	if (plugin_conflict) {
+#ifdef	XRAAS_IS_EMBEDDED
 		/*
-		 * We can't simply return 0 here, as that emits a rather
-		 * nasty-looking error message into the X-Plane Log.txt.
-		 * Instead, we simply report success and internally inhibit
-		 * all operations.
+		 * There appears to be a stand-alone version of the plugin
+		 * installed. The FF A320 version is pretty tightly bound
+		 * to the aircraft model, so we want to disable a global
+		 * stand-alone version in this case.
 		 */
-		return (1);
+		XPLMDataRef dr_inop = XPLMFindDataRef(
+		    "xraas/override/GPWS_inop");
+		XPLMDataRef dr_inop_act = XPLMFindDataRef(
+		    "xraas/override/GPWS_inop_act");
+		if (dr_inop != NULL && dr_inop_act != NULL) {
+			XPLMSetDatai(dr_inop, 1);
+			XPLMSetDatai(dr_inop_act, 1);
+		} else {
+			logMsg("CAUTION: there appears to be a global X-RAAS "
+			    "installation in this simulator, but I can't seem "
+			    "to override it. Please disable the global X-RAAS "
+			    "plugin or else the RAAS functionality won't work "
+			    "reliably.");
+		}
+#else	/* !XRAAS_IS_EMBEDDED */
+		return (0);
+#endif	/* !XRAAS_IS_EMBEDDED */
 	}
 
 	if (strlen(xpdir) > 0 && xpdir[strlen(xpdir) - 1] == DIRSEP) {
