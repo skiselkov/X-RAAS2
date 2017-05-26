@@ -298,7 +298,9 @@ ff_a320_gets32(int id)
 {
 	int val;
 	unsigned int type = ff_a320.svi.ValueType(id);
-	ASSERT(type >= Value_Type_sint8 && type <= Value_Type_uint32);
+	ASSERT_MSG(type >= Value_Type_sint8 && type <= Value_Type_uint32,
+	    "%s isn't an integer type, instead it is %s",
+	    ff_a320.svi.ValueName(id), ff_a320_type2str(type));
 	ff_a320.svi.ValueGet(id, &val);
 	return (val);
 }
@@ -307,7 +309,10 @@ static inline float
 ff_a320_getf32(int id)
 {
 	float val;
-	ASSERT(ff_a320.svi.ValueType(id) == Value_Type_float32);
+	unsigned int type = ff_a320.svi.ValueType(id);
+	ASSERT_MSG(type == Value_Type_float32,
+	    "%s isn't a float32 type, instead it is %s",
+	    ff_a320.svi.ValueName(id), ff_a320_type2str(type));
 	ff_a320.svi.ValueGet(id, &val);
 	return (val);
 }
@@ -315,7 +320,10 @@ ff_a320_getf32(int id)
 static inline void
 ff_a320_setf32(int id, float val)
 {
-	ASSERT(ff_a320.svi.ValueType(id) == Value_Type_float32);
+	unsigned int type = ff_a320.svi.ValueType(id);
+	ASSERT_MSG(type == Value_Type_float32,
+	    "%s isn't a float32 type, instead it is %s",
+	    ff_a320.svi.ValueName(id), ff_a320_type2str(type));
 	ff_a320.svi.ValueSet(id, &val);
 }
 
@@ -323,7 +331,10 @@ static inline double
 ff_a320_getf64(int id)
 {
 	double val;
-	ASSERT(ff_a320.svi.ValueType(id) == Value_Type_float64);
+	unsigned int type = ff_a320.svi.ValueType(id);
+	ASSERT_MSG(type == Value_Type_float64,
+	    "%s isn't a float64 type, instead it is %s",
+	    ff_a320.svi.ValueName(id), ff_a320_type2str(type));
 	ff_a320.svi.ValueGet(id, &val);
 	return (val);
 }
@@ -331,7 +342,10 @@ ff_a320_getf64(int id)
 static inline void
 ff_a320_setf64(int id, double val)
 {
-	ASSERT(ff_a320.svi.ValueType(id) == Value_Type_float64);
+	unsigned int type = ff_a320.svi.ValueType(id);
+	ASSERT_MSG(type == Value_Type_float64,
+	    "%s isn't a float64 type, instead it is %s",
+	    ff_a320.svi.ValueName(id), ff_a320_type2str(type));
 	ff_a320.svi.ValueSet(id, &val);
 }
 
@@ -495,9 +509,9 @@ ff_a320_update(double step, void *tag)
 		ff_a320.ids.rwy_elev =
 		    ff_a320_val_id("Aircraft.Navigation.GPWC.RunwayElevation");
 
-		ff_a320.ids.rwy_track = ff_a320_val_id(
+		ff_a320.ids.trans_alt = ff_a320_val_id(
 		    "Aircraft.Navigation.GPWC.TransitionAltitude");
-		ff_a320.ids.rwy_elev =
+		ff_a320.ids.trans_lvl =
 		    ff_a320_val_id("Aircraft.Navigation.GPWC.TransitionLevel");
 	}
 
