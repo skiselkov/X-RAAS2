@@ -33,15 +33,15 @@ function build_freetype() {
 		return
 	fi
 	(
-		cd "$FREETYPE_BUILDDIR"
-		make distclean || exit 1
-		rm -rf "$(pwd)/../freetype-$PLATFORM"
+		rm -rf "freetype-$PLATFORM"
+		mkdir "freetype-$PLATFORM"
+		cd "freetype-$PLATFORM"
 		# Linux: for some reason, we need to specify an optimization
 		# level or we won't get lstat/fstat correctly defined. WTF...
 		CFLAGS="${CFLAGS} -fvisibility=hidden -O2" \
 		LDFLAGS="${LDFLAGS} -fvisibility=hidden" \
-		    ./configure \
-		    --prefix="$(pwd)/../freetype-$PLATFORM" $CONFOPTS \
+		    ../"$FREETYPE_BUILDDIR"/configure \
+		    --prefix="$(pwd)" $CONFOPTS \
 		    --disable-shared --enable-static --with-zlib=no \
 		    --with-bzip2=no --with-png=no --with-harfbuzz=no \
 		    --with-old-mac-fonts=no --with-fsspec=no \
@@ -56,16 +56,16 @@ case `uname` in
 	Linux)
 		NCPUS=$(( $(grep 'processor[[:space:]]\+:' /proc/cpuinfo \
 		    | wc -l) + 1 ))
-		build_freetype "linux-64" "" "-fPIC" "-fPIC"
+		build_freetype "linux-64" "" "-fPIC" "-fPIC" && \
 		build_freetype "linux-32" "" "-m32 -fPIC -fno-stack-protector" \
-		    "-m32 -fPIC"
-		build_freetype "win-64" "--host=x86_64-w64-mingw32"
+		    "-m32 -fPIC" && \
+		build_freetype "win-64" "--host=x86_64-w64-mingw32" && \
 		build_freetype "win-32" "--host=i686-w64-mingw32"
 		;;
 	Darwin)
 		NCPUS=$(( $(sysctl -n hw.ncpu) + 1 ))
 		build_freetype "mac-64" "" "-mmacosx-version-min=10.6" \
-		    "-mmacosx-version-min=10.6"
+		    "-mmacosx-version-min=10.6" && \
 		build_freetype "mac-32" "" "-mmacosx-version-min=10.6 -m32" \
 		    "-mmacosx-version-min=10.6 -m32"
 		;;
