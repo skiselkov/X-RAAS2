@@ -41,6 +41,14 @@
 #include "xraas2.h"
 
 #define	HDG_ALIGN_THRESH	20	/* degrees */
+#define	GPWC_ARPT_ELEV_THRESH	609	/* meters, 2000 feet */
+#define	ADC_PRINTF_FMT \
+	"ALT:%05.0fft/%02.2finHg/%04.0fm  POS:%02.04fdeg/%03.04fdeg/%05.0fm  " \
+	"ATT:%03.0fdeg/%02.1fdeg  SPD:%03.0fkt/%03.0fmps"
+#define	ADC_PRINTF_ARGS(adc) \
+	(adc)->baro_alt, (adc)->baro_set, (adc)->rad_alt, (adc)->lat, \
+	(adc)->lon, (adc)->elev, (adc)->hdg, (adc)->pitch, (adc)->cas, \
+	(adc)->gs
 
 enum {
 	XP_DEFAULT_INTERFACE,
@@ -230,11 +238,7 @@ adc_collect(void)
 	VERIFY(adc_l.n_gear <= NUM_GEAR);
 	XPLMGetDatavi(drs_l.gear_type, adc_l.gear_type, 0, adc_l.n_gear);
 
-	dbg_log(adc, 2, "collect: A:%05.0f/%02.2f/%04.0f  "
-	    "P:%02.04f/%03.04f/%05.0f  T:%03.0f/%02.1f  S:%03.0f/%03.0f",
-	    adc_l.baro_alt, adc_l.baro_set, adc_l.rad_alt,
-	    adc_l.lat, adc_l.lon, adc_l.elev,
-	    adc_l.hdg, adc_l.pitch, adc_l.cas, adc_l.gs);
+	dbg_log(adc, 2, "collect; " ADC_PRINTF_FMT, ADC_PRINTF_ARGS(&adc_l));
 
 	return (B_TRUE);
 }
@@ -440,8 +444,7 @@ static void
 ff_a320_update(double step, void *tag)
 {
 	double alt_uncorr;
-
-	mutex_enter(&ff_a320.lock);
+	adc_t ff_adc;
 
 	UNUSED(step);
 	UNUSED(tag);
@@ -450,6 +453,8 @@ ff_a320_update(double step, void *tag)
 	VERIFY(ff_a320.svi.ValueGet != NULL);
 	VERIFY(ff_a320.svi.ValueType != NULL);
 	VERIFY(ff_a320.svi.ValueName != NULL);
+
+	memset(&ff_adc, 0, sizeof (ff_adc));
 
 	if (ff_a320.ids.baro_alt == -1) {
 		ff_a320.ids.powered =
@@ -520,7 +525,6 @@ ff_a320_update(double step, void *tag)
 	if (ff_a320_gets32(ff_a320.ids.fault) != 0 ||
 	    ff_a320_gets32(ff_a320.ids.fault_ex) != 0) {
 		ff_a320.sys_ok = B_FALSE;
-		mutex_exit(&ff_a320.lock);
 		return;
 	}
 
@@ -530,7 +534,7 @@ ff_a320_update(double step, void *tag)
 	    ff_a320_gets32(ff_a320.ids.inhibit_flaps);
 	ff_a320.status.alerting = ff_a320_gets32(ff_a320.ids.alert);
 
-	ff_a320.adc.baro_alt = MET2FEET(ff_a320_getf32(ff_a320.ids.baro_alt));
+	ff_adc.baro_alt = MET2FEET(ff_a320_getf32(ff_a320.ids.baro_alt));
 	alt_uncorr = MET2FEET(ff_a320_getf32(ff_a320.ids.baro_raw));
 	/*
 	 * Since we don't get access to the raw baro setting on the altimeter,
@@ -540,26 +544,30 @@ ff_a320_update(double step, void *tag)
 	 * this, we only need it to check that the altimeter setting is QNE
 	 * when doing the alt->FL transition.
 	 */
-	ff_a320.adc.baro_set = 29.92 + ((adc_l.baro_alt - alt_uncorr) / 1000.0);
-	ff_a320.adc.rad_alt = MET2FEET(ff_a320_getf32(ff_a320.ids.rad_alt));
+	ff_adc.baro_set = 29.92 + ((adc_l.baro_alt - alt_uncorr) / 1000.0);
+	ff_adc.rad_alt = MET2FEET(ff_a320_getf32(ff_a320.ids.rad_alt));
 
-	ff_a320.adc.lat = RAD2DEG(ff_a320_getf64(ff_a320.ids.lat));
-	ff_a320.adc.lon = RAD2DEG(ff_a320_getf64(ff_a320.ids.lon));
-	ff_a320.adc.elev = ff_a320_getf32(ff_a320.ids.elev);
+	ff_adc.lat = RAD2DEG(ff_a320_getf64(ff_a320.ids.lat));
+	ff_adc.lon = RAD2DEG(ff_a320_getf64(ff_a320.ids.lon));
+	ff_adc.elev = ff_a320_getf32(ff_a320.ids.elev);
 
-	/*
-	ff_a320.adc.hdg = ff_a320_getf32(ff_a320.ids.hdg);
-	if (ff_a320.adc.hdg < 0)
-		ff_a320.adc.hdg += 360.0;
-	*/
-	ff_a320.adc.hdg = XPLMGetDataf(drs_l.hdg);
-	ff_a320.adc.pitch = XPLMGetDataf(drs_l.pitch);
+#if 0
+	/* currently broken */
+	ff_adc.hdg = ff_a320_getf32(ff_a320.ids.hdg);
+	if (ff_adc.hdg < 0)
+		ff_adc.hdg += 360.0;
+#endif
+	ff_adc.hdg = XPLMGetDataf(drs_l.hdg);
+	ff_adc.pitch = XPLMGetDataf(drs_l.pitch);
 
-	ff_a320.adc.cas = MPS2KT(ff_a320_getf32(ff_a320.ids.cas));
-	ff_a320.adc.gs = ff_a320_getf32(ff_a320.ids.gs);
+	ff_adc.cas = MPS2KT(ff_a320_getf32(ff_a320.ids.cas));
+	ff_adc.gs = ff_a320_getf32(ff_a320.ids.gs);
 
-	ff_a320.adc.trans_alt = ff_a320_getf32(ff_a320.ids.trans_alt);
-	ff_a320.adc.trans_lvl = ff_a320_getf32(ff_a320.ids.trans_lvl);
+	ff_adc.trans_alt = MET2FEET(ff_a320_getf32(ff_a320.ids.trans_alt));
+	ff_adc.trans_lvl = MET2FEET(ff_a320_getf32(ff_a320.ids.trans_lvl));
+
+	dbg_log(ff_a320, 4, "update; " ADC_PRINTF_FMT,
+	    ADC_PRINTF_ARGS(&ff_adc));
 
 	if (ff_a320.rwy_info.changed) {
 		if (ff_a320.rwy_info.present) {
@@ -588,6 +596,8 @@ ff_a320_update(double step, void *tag)
 		ff_a320.rwy_info.changed = B_FALSE;
 	}
 
+	mutex_enter(&ff_a320.lock);
+	memcpy(&ff_a320.adc, &ff_adc, sizeof (ff_a320.adc));
 	ff_a320.sys_ok = B_TRUE;
 	mutex_exit(&ff_a320.lock);
 }
@@ -596,7 +606,7 @@ static bool_t
 ff_a320_adc_get(adc_t *adc)
 {
 	mutex_enter(&ff_a320.lock);
-	memcpy(&ff_a320.adc, adc, sizeof (*adc));
+	memcpy(adc, &ff_a320.adc, sizeof (*adc));
 	mutex_exit(&ff_a320.lock);
 
 	return (ff_a320.sys_ok);
@@ -628,6 +638,9 @@ ff_a320_rwy_info_set(bool_t present, geo_pos3_t thr, double length,
 	    ff_a320.rwy_info.length != length ||
 	    ff_a320.rwy_info.width != width ||
 	    ff_a320.rwy_info.track != track)) {
+		dbg_log(ff_a320, 1, "rwy_info_set: p:%03.02f/%03.02f/%04.0f "
+		    "len:%04.0f w:%02.0f t:%03f", thr.lat, thr.lon, thr.elev,
+		    length, width, track);
 		ff_a320.rwy_info.changed = B_TRUE;
 		ff_a320.rwy_info.present = B_TRUE;
 		ff_a320.rwy_info.thr_pos = thr;
@@ -635,6 +648,7 @@ ff_a320_rwy_info_set(bool_t present, geo_pos3_t thr, double length,
 		ff_a320.rwy_info.width = width;
 		ff_a320.rwy_info.track = track;
 	} else if (!present && ff_a320.rwy_info.present) {
+		dbg_log(ff_a320, 1, "rwy_info_set: nil");
 		memset(&ff_a320.rwy_info, 0, sizeof (ff_a320.rwy_info));
 		ff_a320.rwy_info.changed = B_TRUE;
 		ff_a320.rwy_info.present = B_FALSE;
@@ -650,36 +664,34 @@ ff_a320_find_nearest_rwy(void)
 
 	memset(&info, 0, sizeof (info));
 
-	if (list_head(xraas_state->cur_arpts) == NULL) {
-		/* No runways nearby */
-		ff_a320_rwy_info_set(B_FALSE, NULL_GEO_POS3, 0, 0, 0);
-		return;
-	}
-
 	/*
-	 * We search using two methods. First we attempt to look for any
-	 * runway in who's approach sector we are located and with which
-	 * we are aligned (heading within 20 degrees of runway heading).
-	 * If that fails, we look for the nearest runway.
+	 * We search using three methods. First we attempt to look for any
+	 * runway in who's approach bbox we are located and aligned (heading
+	 * within 20 degrees of runway heading). Alternatively, if that
+	 * won't find anything, we also check a runway's rwy_bbox and
+	 * alignment. And if that fails, we look for the nearest runway.
 	 */
 
 	for (airport_t *arpt = list_head(xraas_state->cur_arpts); arpt != NULL;
 	    arpt = list_next(xraas_state->cur_arpts, arpt)) {
 		vect2_t p = geo2fpp(GEO_POS2(adc->lat, adc->lon), &arpt->fpp);
 		ASSERT(arpt->load_complete);
+
+		if (fabs(arpt->refpt.elev - adc->elev) > GPWC_ARPT_ELEV_THRESH)
+			continue;
 		for (runway_t *rwy = avl_first(&arpt->rwys); rwy != NULL;
 		    rwy = AVL_NEXT(&arpt->rwys, rwy)) {
 			for (int i = 0; i < 2; i++) {
 				runway_end_t *re = &rwy->ends[i];
 				double dist = vect2_abs(vect2_sub(re->thr_v,
 				    p));
-				if (vect2_in_poly(p, re->apch_bbox) &&
-				    fabs(rel_hdg(adc->hdg, re->hdg)) <
-				    HDG_ALIGN_THRESH) {
-					/* return immediately on a bbox match */
+				if (fabs(rel_hdg(adc->hdg, re->hdg)) <
+				    HDG_ALIGN_THRESH &&
+				    (vect2_in_poly(p, re->apch_bbox) ||
+				    vect2_in_poly(p, rwy->rwy_bbox))) {
+					/* succeed on a bbox match */
 					ff_a320_rwy_info_set(B_TRUE, re->thr,
-					    rwy->length, rwy->width,
-					    re->hdg);
+					    rwy->length, rwy->width, re->hdg);
 					return;
 				} else if (dist < min_dist) {
 					min_dist = dist;
@@ -693,9 +705,8 @@ ff_a320_find_nearest_rwy(void)
 		}
 	}
 
-	VERIFY(info.present);
-	ff_a320_rwy_info_set(B_TRUE, info.thr_pos, info.length, info.width,
-	    info.track);
+	ff_a320_rwy_info_set(info.present, info.thr_pos, info.length,
+	    info.width, info.track);
 }
 
 bool_t

@@ -62,8 +62,8 @@ typedef struct {
 	double	cas;		/* knots */
 	double	gs;		/* meters/second */
 
-	double	trans_alt;	/* feet */
-	double	trans_lvl;	/* feet */
+	int	trans_alt;	/* feet */
+	int	trans_lvl;	/* feet */
 
 	float	nw_offset;
 	double	flaprqst;
