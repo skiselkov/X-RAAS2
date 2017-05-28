@@ -551,13 +551,9 @@ ff_a320_update(double step, void *tag)
 	ff_adc.lon = RAD2DEG(ff_a320_getf64(ff_a320.ids.lon));
 	ff_adc.elev = ff_a320_getf32(ff_a320.ids.elev);
 
-#if 0
-	/* currently broken */
 	ff_adc.hdg = ff_a320_getf32(ff_a320.ids.hdg);
 	if (ff_adc.hdg < 0)
 		ff_adc.hdg += 360.0;
-#endif
-	ff_adc.hdg = XPLMGetDataf(drs_l.hdg);
 	ff_adc.pitch = XPLMGetDataf(drs_l.pitch);
 
 	ff_adc.cas = MPS2KT(ff_a320_getf32(ff_a320.ids.cas));
