@@ -28,15 +28,6 @@
 
 #include "snd_sys.h"
 
-/*
- * This is a negative gap applied between messages. Many of the messages have
- * a slight pause recorded at their start & end. Rather than redoing all the
- * messages and cutting them individually to a shorter length (plus there are
- * custom message sets available, which cannot be redone), we apply a small
- * 0.1 second reduction of the message lengths to keep the cadence up.
- */
-#define	INTERMSG_NEG_GAP	40000	/* microseconds */
-
 typedef struct {
 	msg_type_t	*msgs;
 	int		num_msgs;
@@ -277,7 +268,7 @@ snd_sched_cb(float elapsed_since_last_call, float elapsed_since_last_floop,
 	now = microclock();
 
 	ASSERT(ann->cur_msg < ann->num_msgs);
-	if (ann->cur_msg == -1 || now - ann->started + INTERMSG_NEG_GAP >
+	if (ann->cur_msg == -1 || now - ann->started >
 	    SEC2USEC(voice_msgs[ann->msgs[ann->cur_msg]].wav->duration)) {
 		if (ann->cur_msg >= 0)
 			wav_stop(voice_msgs[ann->msgs[ann->cur_msg]].wav);
