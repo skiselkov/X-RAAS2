@@ -21,7 +21,7 @@
 # On Linux also do "apt install libopenal-dev:x86_64 libopenal-dev:i386".
 
 embed=no
-acf_type=''
+acf_type=0
 while getopts "et:" opt; do
 	case "$opt" in
 	e)

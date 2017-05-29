@@ -65,7 +65,11 @@ reset_config(xraas_state_t *state)
 	 * No need to set B_FALSE/zero values here, since the config has
 	 * already been bzero'ed.
 	 */
+#if	ACF_TYPE == NO_ACF_TYPE
 	state->config.enabled = B_TRUE;
+#else	/* ACF_TYPE != NO_ACF_TYPE */
+	state->config.enabled = B_FALSE;
+#endif	/* ACF_TYPE != NO_ACF_TYPE */
 	state->config.min_engines = 2;
 	state->config.min_mtow = 5700;
 	state->config.auto_disable_notify = B_TRUE;
@@ -116,6 +120,14 @@ reset_config(xraas_state_t *state)
 	my_strlcpy(state->config.GPWS_inop_dataref,
 	    "sim/cockpit/warnings/annunciators/GPWS",
 	    sizeof (state->config.GPWS_inop_dataref));
+
+
+#if	ACF_TYPE == FF_A320_ACF_TYPE
+	/* Tuned defaults for the A320 */
+	state->config.min_landing_dist = 1100;
+	state->config.min_takeoff_dist = 1500;
+#endif	/* FF_A320_ACF_TYPE */
+
 }
 
 static void
@@ -224,6 +236,7 @@ process_conf(xraas_state_t *state, conf_t *conf)
 	CONF_GET_DEBUG(startup);
 	CONF_GET_DEBUG(tile);
 	CONF_GET_DEBUG(wav);
+	CONF_GET_DEBUG(adc);
 #undef	CONF_GET_DEBUG
 }
 

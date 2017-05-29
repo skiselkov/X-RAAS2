@@ -53,7 +53,6 @@
 #include "xraas2.h"
 #include "xraas_cfg.h"
 
-#define	XRAAS2_VERSION			"2.1"
 #define	XRAAS2_STANDALONE_PLUGIN_SIG	"skiselkov.xraas2"
 
 #ifdef	XRAAS_IS_EMBEDDED
@@ -964,6 +963,8 @@ ground_runway_approach(void)
 static bool_t
 flaps_set4takeoff(void)
 {
+	if (!isnan(adc->takeoff_flaps))
+		return (fabs(adc->flaprqst - adc->takeoff_flaps) < 0.01);
 	if (overrides[TAKEOFF_FLAPS].value_i != 0)
 		return (fabs(adc->flaprqst -
 		    overrides[TAKEOFF_FLAPS_ACT].value_f) < 0.01);
@@ -979,6 +980,8 @@ flaps_set4takeoff(void)
 static bool_t
 flaps_set4landing(void)
 {
+	if (!isnan(adc->takeoff_flaps))
+		return (fabs(adc->landing_flaps) < 0.01);
 	if (overrides[LANDING_FLAPS].value_i != 0)
 		return (fabs(adc->flaprqst -
 		    overrides[LANDING_FLAPS_ACT].value_f) < 0.01);
@@ -1027,6 +1030,10 @@ perform_on_rwy_ann(const char *rwy_id, vect2_t pos_v, vect2_t thr_v,
 
 	if (!flaps_set4takeoff() && !state.landing &&
 	    !gpws_flaps_ovrd() && flap_check) {
+		dbg_log(apch_cfg_chk, 1, "FLAPS: flaprqst = %g "
+		    "min_flap = %g (adc: %g ovrd: %g)", adc->flaprqst,
+		    state.config.min_landing_flap, adc->landing_flaps,
+		    overrides[LANDING_FLAPS_ACT].value_f);
 		append_msglist(&msg, &msg_len, FLAPS_MSG);
 		append_msglist(&msg, &msg_len, FLAPS_MSG);
 		allow_on_rwy_ND_alert = B_FALSE;
@@ -1513,16 +1520,25 @@ get_land_spd(bool_t *vref)
 	*vref = B_FALSE;
 
 	/* first try the overrides */
+	if (!isnan(adc->vapp) && adc->vapp > MIN_APPCH_SPD) {
+		*vref = B_FALSE;
+		return (adc->vapp);
+	}
+	if (!isnan(adc->vref) && adc->vref > MIN_APPCH_SPD) {
+		*vref = B_TRUE;
+		return (adc->vref);
+	}
 	if (overrides[OVRD_VAPP].value_i != 0) {
-		if (overrides[OVRD_VAPP_ACT].value_i != 0)
+		*vref = B_FALSE;
+		if (overrides[OVRD_VAPP_ACT].value_i > MIN_APPCH_SPD)
 			return (overrides[OVRD_VAPP_ACT].value_i);
 		else
 			return (NAN);
 	}
 	if (overrides[OVRD_VREF].value_i != 0) {
 		*vref = B_TRUE;
-		if (overrides[OVRD_VREF_ACT].value_i != 0)
-			return (overrides[OVRD_VREF_ACT].value_i);
+		if (overrides[OVRD_VREF_ACT].value_i > MIN_APPCH_SPD)
+			return (overrides[OVRD_VREF].value_i);
 		else
 			return (NAN);
 	}
@@ -1699,8 +1715,8 @@ apch_cfg_chk(const char *arpt_id, const char *rwy_id, double height_abv_thr,
 		    !flaps_set4landing() && !gpws_flaps_ovrd() &&
 		    state.config.monitors[flaps_mon]) {
 			dbg_log(apch_cfg_chk, 1, "FLAPS: flaprqst = %g "
-			    "min_flap = %g (ovrd: %g)", adc->flaprqst,
-			    state.config.min_landing_flap,
+			    "min_flap = %g (adc: %g ovrd: %g)", adc->flaprqst,
+			    state.config.min_landing_flap, adc->landing_flaps,
 			    overrides[LANDING_FLAPS_ACT].value_f);
 			if (!critical)
 				ann_apch_cfg(msg, msg_len, add_pause,
@@ -2184,6 +2200,32 @@ raas_exec(void)
 	load_nearest_airports();
 
 #ifdef	XRAAS_IS_EMBEDDED
+	if (plugin_conflict) {
+		/*
+		 * There appears to be a stand-alone version of the plugin
+		 * installed. The embedded versions tend to be more tightly
+		 * bound to their aircraft model, so we want to disable a
+		 * global stand-alone version in this case.
+		 */
+		XPLMDataRef dr_inop = XPLMFindDataRef(
+		    "xraas/override/GPWS_inop");
+		XPLMDataRef dr_inop_act = XPLMFindDataRef(
+		    "xraas/override/GPWS_inop_act");
+		if (dr_inop != NULL && dr_inop_act != NULL) {
+			XPLMSetDatai(dr_inop, 1);
+			XPLMSetDatai(dr_inop_act, 1);
+		} else {
+			logMsg("CAUTION: there appears to be a global X-RAAS "
+			    "installation in this simulator, but I seem to be "
+			    "unable to override it. Please disable the global "
+			    "X-RAAS plugin or else the RAAS functionality "
+			    "won't work reliably.");
+			return;
+		}
+	}
+#endif	/* XRAAS_IS_EMBEDDED */
+
+#ifdef	XRAAS_IS_EMBEDDED
 	if (!state.config.enabled)
 		return;
 #else	/* !XRAAS_IS_EMBEDDED */
@@ -2405,8 +2447,6 @@ xraas_init(void)
 	rwy_key_tbl_create(&state.air_apch_spd3_ann, "air_apch_spd3_ann");
 
 	XPLMRegisterFlightLoopCallback(raas_exec_cb, EXEC_INTVAL, NULL);
-
-	overrides_init();
 	input_faulted_dr = dr_intf_add_i("xraas/state/input_faulted",
 	    (int *)&state.input_faulted, B_FALSE);
 
@@ -2467,7 +2507,6 @@ xraas_fini(void)
 	if (state.config.debug_graphical)
 		dbg_gui_fini();
 
-	overrides_fini();
 	dr_intf_remove(input_faulted_dr);
 
 	xraas_inited = B_FALSE;
@@ -2513,33 +2552,6 @@ XPluginStart(char *outName, char *outSig, char *outDesc)
 		logMsg("CAUTION: it seems your simulator is loading X-RAAS "
 		    "twice. Please check your installation to make sure "
 		    "there aren't any duplicate copies of the plugin!");
-		return (0);
-#endif	/* !XRAAS_IS_EMBEDDED */
-	}
-
-	if (plugin_conflict) {
-#ifdef	XRAAS_IS_EMBEDDED
-		/*
-		 * There appears to be a stand-alone version of the plugin
-		 * installed. The FF A320 version is pretty tightly bound
-		 * to the aircraft model, so we want to disable a global
-		 * stand-alone version in this case.
-		 */
-		XPLMDataRef dr_inop = XPLMFindDataRef(
-		    "xraas/override/GPWS_inop");
-		XPLMDataRef dr_inop_act = XPLMFindDataRef(
-		    "xraas/override/GPWS_inop_act");
-		if (dr_inop != NULL && dr_inop_act != NULL) {
-			XPLMSetDatai(dr_inop, 1);
-			XPLMSetDatai(dr_inop_act, 1);
-		} else {
-			logMsg("CAUTION: there appears to be a global X-RAAS "
-			    "installation in this simulator, but I can't seem "
-			    "to override it. Please disable the global X-RAAS "
-			    "plugin or else the RAAS functionality won't work "
-			    "reliably.");
-		}
-#else	/* !XRAAS_IS_EMBEDDED */
 		return (0);
 #endif	/* !XRAAS_IS_EMBEDDED */
 	}
@@ -2595,12 +2607,18 @@ XPluginStart(char *outName, char *outSig, char *outDesc)
 		    "If you are an aircraft developer, please move the "
 		    "X-RAAS plugin into your aircraft's \"plugins\" folder.",
 		    XRAAS2_VERSION);
-		plugin_conflict = B_TRUE;
+		return (0);
 	}
 #endif	/* XRAAS_IS_EMBEDDED */
 
 	acf_livpath_dr = XPLMFindDataRef("sim/aircraft/view/acf_livery_path");
 	VERIFY(acf_livpath_dr != NULL);
+
+	/*
+	 * Override initialization has to happen during startup to allow an
+	 * aircraft-specific plugin to override us in its load routine.
+	 */
+	overrides_init();
 
 	return (1);
 }
@@ -2609,19 +2627,13 @@ PLUGIN_API void
 XPluginStop(void)
 {
 	close_private_log();
-
-	if (plugin_conflict)
-		return;
-
+	overrides_fini();
 	init_msg_sys_fini();
 }
 
 PLUGIN_API int
 XPluginEnable(void)
 {
-	if (plugin_conflict)
-		return (1);
-
 	xraas_init();
 	gui_init();
 	return (1);
@@ -2630,9 +2642,6 @@ XPluginEnable(void)
 PLUGIN_API void
 XPluginDisable(void)
 {
-	if (plugin_conflict)
-		return;
-
 	gui_fini();
 	xraas_fini();
 }
@@ -2640,9 +2649,6 @@ XPluginDisable(void)
 PLUGIN_API void
 XPluginReceiveMessage(XPLMPluginID src, int msg, void *param)
 {
-	if (plugin_conflict)
-		return;
-
 	UNUSED(src);
 	UNUSED(param);
 

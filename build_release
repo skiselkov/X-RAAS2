@@ -154,7 +154,7 @@ function install_xtra_files() {
 embed=''
 embed_suffix=''
 nodoc=no
-acf_type=''
+acf_type=0
 
 while getopts "edht:" opt; do
 	case "$opt" in
@@ -167,6 +167,9 @@ while getopts "edht:" opt; do
 		;;
 	t)
 		case "$OPTARG" in
+			FF_A320)
+				acf_type=1
+				;;
 			*)
 				echo "Invalid aircraft type." \
 				    "Try \"$0 -h\" for help" >&2
@@ -187,7 +190,9 @@ Options:
        duplicated annunciations. Embeddable versions also relocate their config
        files and data cache so that they don't interfere with a global version.
   -t <acf_type>: Build an embeddable version specifically geared towards a
-       particular aircraft model. This implies "-e".
+       particular aircraft model. This implies "-e". Currently supported
+       aircraft models are:
+       *) FF_A320 : The FlightFactor Airbus A320-200
   -h : Show this help screen.
 EOF
 		exit

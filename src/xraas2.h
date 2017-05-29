@@ -29,6 +29,7 @@
 extern "C" {
 #endif
 
+#define	XRAAS2_VERSION			"2.1"
 #define	TATL_FIELD_ELEV_UNSET		-1000000
 #define	RWY_PROXIMITY_TIME_FACT		2		/* seconds */
 

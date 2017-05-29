@@ -71,6 +71,11 @@ typedef struct {
 	size_t	n_gear;
 	float	gear[NUM_GEAR];
 	int	gear_type[NUM_GEAR];
+
+	float	takeoff_flaps;	/* flaprqst value from FMS, NAN if N/A */
+	float	landing_flaps;	/* flaprqst value from FMS, NAN if N/A */
+	float	vref;		/* knots from FMS, NAN if N/A */
+	float	vapp;		/* knots from FMS, NAN if N/A */
 } adc_t;
 
 typedef struct {

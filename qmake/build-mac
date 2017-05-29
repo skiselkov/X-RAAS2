@@ -20,7 +20,7 @@
 # have `qmake' available in your $PATH.
 
 embed=no
-acf_type=''
+acf_type=0
 while getopts "et:" opt; do
 	case "$opt" in
 	e)

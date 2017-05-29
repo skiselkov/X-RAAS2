@@ -310,6 +310,7 @@ static const char *voice_female_tooltip[] = {
 	"OFF: the voice of aural annunciations is male.",
 	NULL
 };
+#if	ACF_TYPE == NO_ACF_TYPE
 static const char *min_engines_tooltip[] = {
 	"Minimum number of engines the aircraft must have for it to be "
 	"considered an 'airliner' and permit X-RAAS startup.",
@@ -322,6 +323,7 @@ static const char *min_mtow_tooltip[] = {
 	MAN_REF("3"),
 	NULL
 };
+#endif	/* ACF_TYPE == NO_ACF_TYPE */
 static const char *voice_volume_tooltip[] = {
 	"The relative audio volume for aural annunciations",
 	NULL
@@ -439,6 +441,7 @@ static const char *nd_alert_timeout_tooltip[] = {
 	"Number of seconds for which visual alerts are displayed on the ND.",
 	NULL
 };
+#if	ACF_TYPE == NO_ACF_TYPE
 static const char *min_landing_flap_tooltip[] = {
 	"Minimum relative flap handle position, including and above which the",
 	"flaps setting is considered a valid flaps setting for landing.",
@@ -457,6 +460,7 @@ static const char *max_takeoff_flap_tooltip[] = {
 	MAN_REF("4.2"),
 	NULL
 };
+#endif	/* ACF_TYPE == NO_ACF_TYPE */
 static const char *nd_alert_filter_tooltip[] = {
 	"A filter which controls what visual alerts are displayed on the ND:",
 	"ALL: all visual alerts are displayed (routine, non-routine, caution).",

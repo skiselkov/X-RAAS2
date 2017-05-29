@@ -132,6 +132,10 @@ static struct {
 
 		int trans_alt;			/* meters */
 		int trans_lvl;			/* meters */
+
+		int takeoff_flaps;		/* int, 2-4 */
+		int landing_flaps;		/* int, 3-5 */
+		int vapp;			/* meters */
 	} ids;
 
 	ff_a320_rwy_info_t rwy_info;
@@ -256,6 +260,10 @@ xp_adc_get(adc_t *adc)
 	adc->pitch = XPLMGetDataf(drs_l.pitch);
 	adc->cas = XPLMGetDataf(drs_l.cas);
 	adc->gs = XPLMGetDataf(drs_l.gs);
+	adc->takeoff_flaps = NAN;
+	adc->landing_flaps = NAN;
+	adc->vref = NAN;
+	adc->vapp = NAN;
 }
 
 
@@ -440,6 +448,30 @@ ff_a320_val_id(const char *name)
 	return (id);
 }
 
+/*
+ * Translates the flaps configuration parameter values from the FF A320
+ * model into flap handle positions we get from X-Plane.
+ */
+static double
+ff_a320_flaps2flaprqst(int config)
+{
+	switch (config) {
+	case 0:
+		return (0.0);
+	case 1:
+	case 2:
+		return (0.25);
+	case 3:
+		return (0.5);
+	case 4:
+		return (0.75);
+	case 5:
+		return (1.0);
+	default:
+		return (NAN);
+	}
+}
+
 static void
 ff_a320_update(double step, void *tag)
 {
@@ -518,6 +550,13 @@ ff_a320_update(double step, void *tag)
 		    "Aircraft.Navigation.GPWC.TransitionAltitude");
 		ff_a320.ids.trans_lvl =
 		    ff_a320_val_id("Aircraft.Navigation.GPWC.TransitionLevel");
+
+		ff_a320.ids.takeoff_flaps =
+		    ff_a320_val_id("Aircraft.TakeoffConfig");
+		ff_a320.ids.landing_flaps =
+		    ff_a320_val_id("Aircraft.LandingConfig");
+		ff_a320.ids.vapp =
+		    ff_a320_val_id("Aircraft.Navigation.GPWC.ApproachSpeed");
 	}
 
 	ff_a320.status.powered = ff_a320_gets32(ff_a320.ids.powered);
@@ -561,6 +600,14 @@ ff_a320_update(double step, void *tag)
 
 	ff_adc.trans_alt = MET2FEET(ff_a320_getf32(ff_a320.ids.trans_alt));
 	ff_adc.trans_lvl = MET2FEET(ff_a320_getf32(ff_a320.ids.trans_lvl));
+
+
+	ff_adc.takeoff_flaps = ff_a320_flaps2flaprqst(ff_a320_gets32(
+	    ff_a320.ids.takeoff_flaps));
+	ff_adc.landing_flaps = ff_a320_flaps2flaprqst(ff_a320_gets32(
+	    ff_a320.ids.landing_flaps));
+	ff_adc.vref = NAN;
+	ff_adc.vapp = MPS2KT(ff_a320_getf32(ff_a320.ids.vapp));
 
 	dbg_log(ff_a320, 4, "update; " ADC_PRINTF_FMT,
 	    ADC_PRINTF_ARGS(&ff_adc));
