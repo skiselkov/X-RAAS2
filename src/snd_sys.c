@@ -35,7 +35,7 @@
  * custom message sets available, which cannot be redone), we apply a small
  * 0.1 second reduction of the message lengths to keep the cadence up.
  */
-#define	INTERMSG_NEG_GAP	100000	/* microseconds */
+#define	INTERMSG_NEG_GAP	40000	/* microseconds */
 
 typedef struct {
 	msg_type_t	*msgs;

@@ -46,11 +46,16 @@
 #include "gui.h"
 #include "gui_tooltips.h"
 
-#define	XRAAS_MENU_NAME		"X-RAAS"
-#define	CONFIG_GUI_CMD_NAME	"X-RAAS configuration..."
-#define	DBG_GUI_TOGGLE_CMD_NAME	"Toggle debug overlay"
-#define	RAAS_RESET_CMD_NAME	"Reset"
-#define	RECREATE_CACHE_CMD_NAME	"Recreate data cache"
+#ifdef	XRAAS_IS_EMBEDDED
+#define	XRAAS_MENU_NAME_STANDALONE	"X-RAAS (embedded)"
+#define	XRAAS_MENU_NAME			"X-RAAS (embedded)"
+#else	/* !XRAAS_IS_EMBEDDED */
+#define	XRAAS_MENU_NAME			"X-RAAS"
+#endif	/* !XRAAS_IS_EMBEDDED */
+#define	CONFIG_GUI_CMD_NAME		"X-RAAS configuration..."
+#define	DBG_GUI_TOGGLE_CMD_NAME		"Toggle debug overlay"
+#define	RAAS_RESET_CMD_NAME		"Reset"
+#define	RECREATE_CACHE_CMD_NAME		"Recreate data cache"
 #if	IBM
 #define	NEWLINE "\r\n"
 #else	/* !IBM */

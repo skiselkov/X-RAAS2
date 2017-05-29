@@ -21,10 +21,14 @@
 # On Linux also do "apt install libopenal-dev:x86_64 libopenal-dev:i386".
 
 embed=no
-while getopts "e" opt; do
+acf_type=''
+while getopts "et:" opt; do
 	case "$opt" in
 	e)
 		embed=yes
+		;;
+	t)
+		acf_type="$OPTARG"
 		;;
 	*)
 		echo "Bad option $opt. Use ./build_release to build X-RAAS2" >&2
@@ -43,6 +47,7 @@ mkdir -p output/32 output/64
 make distclean > /dev/null
 qmake -set CROSS_COMPILE x86_64-w64-mingw32- && \
     qmake -set XRAAS_EMBED $embed && \
+    qmake -set ACF_TYPE "$acf_type" && \
     qmake -spec win32-g++ && \
     make -j $NCPUS && \
     mv release/win.xpl1.dll output/64/win.xpl
@@ -53,6 +58,7 @@ fi
 make distclean > /dev/null
 qmake -set CROSS_COMPILE i686-w64-mingw32- && \
     qmake -set XRAAS_EMBED $embed && \
+    qmake -set ACF_TYPE "$acf_type" && \
     qmake -spec win32-g++ && \
     make -j $NCPUS && \
     mv release/win.xpl1.dll output/32/win.xpl
@@ -63,6 +69,7 @@ fi
 make distclean > /dev/null
 
 qmake -set XRAAS_EMBED $embed && \
+    qmake -set ACF_TYPE "$acf_type" && \
     qmake -spec linux-g++-64 && \
     make -j $NCPUS && \
     mv liblin.xpl.so output/64/lin.xpl
@@ -72,6 +79,7 @@ fi
 
 make distclean > /dev/null
 qmake -set XRAAS_EMBED $embed && \
+    qmake -set ACF_TYPE "$acf_type" && \
     qmake -spec linux-g++-32 && \
     make -j $NCPUS && \
     mv liblin.xpl.so output/32/lin.xpl
