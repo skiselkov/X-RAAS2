@@ -2178,7 +2178,7 @@ xraas_is_on(void)
 	float bus_volts[2];
 	bool_t turned_on;
 
-	if (ff_a320_is_loaded())
+	if (ff_a320_is_loaded() && !GPWS_is_inop())
 		return (ff_a320_powered());
 
 	XPLMGetDatavf(drs->bus_volt, bus_volts, 0, 2);
