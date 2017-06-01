@@ -956,36 +956,42 @@ ground_runway_approach(void)
 }
 
 /*
- * Returns true if the current flaps setting is valid for takeoff.
+ * Returns true if the current flaps setting is valid for takeoff or landing
+ * (depending on the takeoff parameter).
  * If the FMS provides an override, we check the flaps setting exactly.
- * Otherwise we use the {min,max}_takeoff_flap limits.
+ * Otherwise we use the min_takeoff_flap/max_takeoff_flap or min_landing_flap
+ * limits.
  */
 static bool_t
-flaps_set4takeoff(void)
+flaps_chk(bool_t takeoff)
 {
-	if (!isnan(adc->takeoff_flaps))
-		return (fabs(adc->flaprqst - adc->takeoff_flaps) < 0.01);
-	if (overrides[TAKEOFF_FLAPS].value_i != 0)
-		return (fabs(adc->flaprqst -
-		    overrides[TAKEOFF_FLAPS_ACT].value_f) < 0.01);
-	return (adc->flaprqst >= state.config.min_takeoff_flap &&
-	    adc->flaprqst <= state.config.max_takeoff_flap);
-}
+	double lower_gate, upper_gate;
 
-/*
- * Returns true if the current flaps setting is valid for landing.
- * If the FMS provides an override, we check the flaps setting exactly.
- * Otherwise we use the min_landing_flap limit.
- */
-static bool_t
-flaps_set4landing(void)
-{
-	if (!isnan(adc->takeoff_flaps))
-		return (fabs(adc->landing_flaps) < 0.01);
-	if (overrides[LANDING_FLAPS].value_i != 0)
-		return (fabs(adc->flaprqst -
-		    overrides[LANDING_FLAPS_ACT].value_f) < 0.01);
-	return (adc->flaprqst >= state.config.min_landing_flap);
+	if (takeoff) {
+		if (!isnan(adc->takeoff_flaps)) {
+			lower_gate = upper_gate = adc->takeoff_flaps;
+		} else if (overrides[TAKEOFF_FLAPS].value_i != 0) {
+			lower_gate = upper_gate =
+			    overrides[TAKEOFF_FLAPS_ACT].value_f;
+		} else {
+			lower_gate = state.config.min_takeoff_flap;
+			upper_gate = state.config.max_takeoff_flap;
+		}
+	} else {
+		if (!isnan(adc->landing_flaps)) {
+			lower_gate = upper_gate = adc->landing_flaps;
+		} else if (overrides[LANDING_FLAPS].value_i != 0) {
+			lower_gate = upper_gate =
+			    overrides[LANDING_FLAPS_ACT].value_f;
+		} else {
+			lower_gate = state.config.min_landing_flap;
+			upper_gate = 1.0;
+		}
+	}
+	dbg_log(config, 2, "flaps_chk (%s) %.02f <= %.02f <= %.02f",
+	    takeoff ? "takeoff" : "landing", lower_gate, adc->flaprqst,
+	    upper_gate);
+	return (lower_gate <= adc->flaprqst && adc->flaprqst <= upper_gate);
 }
 
 static void
@@ -1028,7 +1034,7 @@ perform_on_rwy_ann(const char *rwy_id, vect2_t pos_v, vect2_t thr_v,
 		monitor_override = B_TRUE;
 	}
 
-	if (!flaps_set4takeoff() && !state.landing &&
+	if (!flaps_chk(B_TRUE) && !state.landing &&
 	    !gpws_flaps_ovrd() && flap_check) {
 		dbg_log(apch_cfg_chk, 1, "FLAPS: flaprqst = %g "
 		    "min_flap = %g (adc: %g ovrd: %g)", adc->flaprqst,
@@ -1712,7 +1718,7 @@ apch_cfg_chk(const char *arpt_id, const char *rwy_id, double height_abv_thr,
 		dbg_log(apch_cfg_chk, 2, "gpa_act = %.02f rwy_gpa = %.02f",
 		    gpa_act, rwy_gpa);
 		if (rwy_key_tbl_get(flap_ann_table, arpt_id, rwy_id) == 0 &&
-		    !flaps_set4landing() && !gpws_flaps_ovrd() &&
+		    !flaps_chk(B_FALSE) && !gpws_flaps_ovrd() &&
 		    state.config.monitors[flaps_mon]) {
 			dbg_log(apch_cfg_chk, 1, "FLAPS: flaprqst = %g "
 			    "min_flap = %g (adc: %g ovrd: %g)", adc->flaprqst,
@@ -1905,7 +1911,7 @@ air_runway_approach(void)
 	 * likely trying to land onto something that's not a runway.
 	 */
 	if (in_apch_bbox == 0 && clb_rate < 0 && !gear_is_up() &&
-	    flaps_set4landing()) {
+	    flaps_chk(B_FALSE)) {
 		if (adc->rad_alt <= OFF_RWY_HEIGHT_MAX) {
 			/* only annunciate if we're above the minimum height */
 			if (adc->rad_alt >= OFF_RWY_HEIGHT_MIN &&
@@ -2154,7 +2160,7 @@ altimeter_setting(void)
 		    now - state.TATL_transition >
 		    SEC2USEC(ALTM_SETTING_TIMEOUT)) {
 			double d_ref = fabs(adc->baro_set - STD_BARO_REF);
-			dbg_log(altimeter, 1, "fl check; d_ref: %.1f", d_ref);
+			dbg_log(altimeter, 1, "fl check; d_ref: %.03f", d_ref);
 			if (d_ref > ALTM_SETTING_BARO_ERR_LIMIT &&
 			    state.config.monitors[ALTM_QNE_MON]) {
 				msg_type_t *msg = NULL;
