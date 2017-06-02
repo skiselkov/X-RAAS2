@@ -56,12 +56,22 @@
 #define	XRAAS2_STANDALONE_PLUGIN_SIG	"skiselkov.xraas2"
 
 #ifdef	XRAAS_IS_EMBEDDED
+#if	ACF_TYPE == FF_A320_ACF_TYPE
+#define	XRAAS2_PLUGIN_NAME		"X-RAAS " XRAAS2_VERSION \
+					" (FlightFactor Airbus A320)"
+#define	XRAAS2_PLUGIN_DESC		"A simulation of the Runway " \
+					"Awareness and Advisory System " \
+					"(FlightFactor Airbus A320 version)"
+#define	XRAAS2_PLUGIN_SIG		XRAAS2_STANDALONE_PLUGIN_SIG "_ff_a320"
+#define	XRAAS2_DR_PREFIX		"xraas_ff_a320"
+#else	/* ACF_TYPE == NO_ACF_TYPE */
 #define	XRAAS2_PLUGIN_NAME		"X-RAAS " XRAAS2_VERSION " (embed)"
 #define	XRAAS2_PLUGIN_DESC		"A simulation of the Runway " \
 					"Awareness and Advisory System " \
 					"(embedded version)"
 #define	XRAAS2_PLUGIN_SIG		XRAAS2_STANDALONE_PLUGIN_SIG "_embedded"
 #define	XRAAS2_DR_PREFIX		"xraas_embed"
+#endif	/* ACF_TYPE == NO_ACF_TYPE */
 #else	/* !XRAAS_IS_EMBEDDED */
 #define	XRAAS2_PLUGIN_NAME		"X-RAAS " XRAAS2_VERSION
 #define	XRAAS2_PLUGIN_DESC		"A simulation of the Runway " \
@@ -85,7 +95,6 @@
 #define	STARTUP_DELAY			3		/* seconds */
 #define	STARTUP_MSG_TIMEOUT		4		/* seconds */
 #define	ARPT_RELOAD_INTVAL		10		/* seconds */
-#define	ARPT_LOAD_LIMIT			(8 * 1852)	/* meters, 8nm */
 #define	ACCEL_STOP_SPD_THRESH		2.6		/* m/s, 5 knots */
 #define	STOP_INIT_DELAY			300		/* meters */
 #define	BOGUS_THR_ELEV_LIMIT		500		/* feet */
@@ -396,8 +405,8 @@ GPWS_is_inop(void)
 {
 	if (overrides[OVRD_GPWS_INOP].value_i != 0)
 		return (overrides[OVRD_GPWS_INOP_ACT].value_i != 0);
-	else
-		return (XPLMGetDatai(drs->gpws_inop) != 0);
+	return (drs->gpws_inop != NULL ?XPLMGetDatai(drs->gpws_inop) != 0 :
+	    B_FALSE);
 }
 
 /*
@@ -411,7 +420,8 @@ GPWS_has_priority(void)
 		return (overrides[OVRD_GPWS_PRIO_ACT].value_i != 0);
 	if (ff_a320_is_loaded())
 		return (ff_a320_suppressed() || ff_a320_alerting());
-	return (drs->gpws_prio ? XPLMGetDatai(drs->gpws_prio) != 0 : B_FALSE);
+	return (drs->gpws_prio != NULL ? XPLMGetDatai(drs->gpws_prio) != 0 :
+	    B_FALSE);
 }
 
 static bool_t
@@ -2202,7 +2212,17 @@ xraas_is_on(void)
 static void
 raas_exec(void)
 {
-	/* This needs to be */
+	dbg_log(pwr_state, 3, "raas_exec");
+
+	/*
+	 * Ahead of the enabling check so that we can provide sensible runway
+	 * info in the embedded FF A320 case.
+	 */
+	state.input_faulted = !adc_collect();
+	if (state.input_faulted) {
+		dbg_log(pwr_state, 1, "input_fault = true");
+		return;
+	}
 	load_nearest_airports();
 
 #ifdef	XRAAS_IS_EMBEDDED
@@ -2231,6 +2251,7 @@ raas_exec(void)
 	}
 #endif	/* XRAAS_IS_EMBEDDED */
 
+
 #ifdef	XRAAS_IS_EMBEDDED
 	if (!state.config.enabled)
 		return;
@@ -2240,12 +2261,6 @@ raas_exec(void)
 
 	if (!xraas_is_on()) {
 		dbg_log(pwr_state, 1, "is_on = false");
-		return;
-	}
-
-	state.input_faulted = !adc_collect();
-	if (state.input_faulted) {
-		dbg_log(pwr_state, 1, "input_fault = true");
 		return;
 	}
 
@@ -2306,8 +2321,11 @@ raas_exec_cb(float elapsed_since_last_call, float elapsed_since_last_floop,
 	return (EXEC_INTVAL);
 }
 
+#if	ACF_TYPE == NO_ACF_TYPE
 /*
  * Check if the aircraft is a helicopter (or at least says it flies like one).
+ * This isn't used on embedded type-specific builds, because there we *know*
+ * about aircraft compatibility for certain.
  */
 static bool_t
 chk_acf_is_helo(void)
@@ -2331,6 +2349,7 @@ chk_acf_is_helo(void)
 	free(line);
 	return (result);
 }
+#endif	/* ACF_TYPE == NO_ACF_TYPE */
 
 static void
 startup_complete(void)
@@ -2351,6 +2370,8 @@ xraas_init(void)
 
 	ASSERT(!xraas_inited);
 
+	dbg_log(startup, 1, "xraas_init");
+
 	/* these must go ahead of config parsing */
 	XPLMGetNthAircraftModel(0, acf_filename, acf_path);
 	if (strlen(acf_filename) == 0)
@@ -2363,7 +2384,6 @@ xraas_init(void)
 	if ((sep = strrchr(acf_path, DIRSEP)) != NULL) {
 		memset(acf_dirpath, 0, sizeof (acf_dirpath));
 		memcpy(acf_dirpath, acf_path, sep - acf_path);
-		logMsg("acf_dirpath: %s", acf_dirpath);
 	} else {
 		/* aircraft's dirpath is unknown */
 		logMsg("WARNING: can't determine your aircraft's directory "
@@ -2398,8 +2418,6 @@ xraas_init(void)
 #endif
 	}
 
-	dbg_log(startup, 1, "xraas_init");
-
 	if (!snd_sys_init(plugindir) || !ND_alerts_init() || !adc_init())
 		goto errout;
 
@@ -2412,6 +2430,9 @@ xraas_init(void)
 	if (!recreate_cache(&state.airportdb))
 		goto errout;
 
+#if	ACF_TYPE == NO_ACF_TYPE
+	/* Type-specific builds aren't bound by these */
+
 	if (chk_acf_is_helo() && !state.config.allow_helos) {
 		log_init_msg(state.config.auto_disable_notify,
 		    INIT_ERR_MSG_TIMEOUT,
@@ -2419,7 +2440,6 @@ xraas_init(void)
 		    "X-RAAS: auto-disabled: aircraft is a helicopter.");
 		goto errout;
 	}
-
 	if (XPLMGetDatai(drs->num_engines) < state.config.min_engines ||
 	    XPLMGetDataf(drs->mtow) < state.config.min_mtow) {
 		char icao[8];
@@ -2437,6 +2457,7 @@ xraas_init(void)
 		    XPLMGetDataf(drs->mtow));
 		goto errout;
 	}
+#endif	/* ACF_TYPE == NO_ACF_TYPE */
 
 	rwy_key_tbl_create(&state.accel_stop_max_spd, "accel_stop_max_spd");
 	rwy_key_tbl_create(&state.on_rwy_ann, "on_rwy_ann");

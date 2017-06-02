@@ -66,6 +66,12 @@ if [ $? != 0 ] ; then
   exit
 fi
 
+if [[ "$acf_type" == 1 ]]; then
+	# The FlightFactor A320 currently only supports Windows, so don't
+	# even bother building any other version of the plugin.
+	exit
+fi
+
 make distclean > /dev/null
 
 qmake -set XRAAS_EMBED $embed && \

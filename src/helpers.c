@@ -484,7 +484,8 @@ file2str(const char *comp, ...)
 		return (NULL);
 	}
 	fseek(fp, 0, SEEK_SET);
-	contents = malloc(len);
+	contents = malloc(len + 1);
+	contents[len] = 0;
 	if (fread(contents, 1, len, fp) != (size_t)len) {
 		fclose(fp);
 		free(contents);

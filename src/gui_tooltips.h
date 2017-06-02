@@ -328,6 +328,36 @@ static const char *voice_volume_tooltip[] = {
 	"The relative audio volume for aural annunciations",
 	NULL
 };
+static const char *save_liv_tooltip[] = {
+	"Save the current airline configuration. This configuration will then",
+	"only be applied if the current livery is loaded into the aircraft.",
+	"Otherwise the aircraft configuration will be loaded.",
+	MAN_REF("5"),
+	NULL
+};
+static const char *reset_liv_tooltip[] = {
+	"Reset the airline configuration. If there is an aircraft ",
+	"configuration, it will be applied. Otherwise, the default",
+	"configuration will be applied.",
+	MAN_REF("5"),
+	NULL
+};
+#ifdef	XRAAS_IS_EMBEDDED
+static const char *save_acf_tooltip[] = {
+	"Save the current aircraft configuration. This configuration",
+	"will then only be applied if no airline configuration exists",
+	"for the currently loaded livery.",
+	MAN_REF("5"),
+	NULL
+};
+static const char *reset_acf_tooltip[] = {
+	"Reset the aircraft configuration to its default values.",
+	"If there is an airline configuration, it will be applied.",
+	"Otherwise, the default configuration will be applied.",
+	MAN_REF("5"),
+	NULL
+};
+#else	/* !XRAAS_IS_EMBEDDED */
 static const char *save_acf_tooltip[] = {
 	"Save the current configuration into the currently loaded aircraft.",
 	"The configuration will then only be applied to that specific "
@@ -342,7 +372,6 @@ static const char *reset_acf_tooltip[] = {
 	MAN_REF("5"),
 	NULL
 };
-#ifndef	XRAAS_IS_EMBEDDED
 static const char *save_glob_tooltip[] = {
 	"Save the current configuration as the global configuration. The",
 	"configuration will be applied to any aircraft which doesn't have",
@@ -359,7 +388,7 @@ static const char *reset_glob_tooltip[] = {
 	MAN_REF("5"),
 	NULL
 };
-#endif	/* XRAAS_IS_EMBEDDED */
+#endif	/* !XRAAS_IS_EMBEDDED */
 static const char *min_takeoff_dist_tooltip[] = {
 	"The minimum runway length remaining that is considered to be safe",
 	"for conducting a takeoff. If the runway length remaining is less",

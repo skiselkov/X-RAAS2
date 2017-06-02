@@ -75,6 +75,8 @@
 #define	TOOLTIP_HINT	"Hint: hover your mouse cursor over any knob to " \
 			"show a short description of what it does."
 
+static bool_t gui_inited = B_FALSE;
+
 typedef enum {
 	CONFIG_TARGET_LIVERY,
 	CONFIG_TARGET_AIRCRAFT,
@@ -1058,10 +1060,10 @@ create_main_window(void)
 
 	LAYOUT_PUSH_BUTTON(save_liv_conf, WINDOW_MARGIN, MAIN_WINDOW_HEIGHT -
 	    70, BUTTON_WIDTH, 18, "SAVE airline configuration",
-	    save_acf_tooltip);
+	    save_liv_tooltip);
 	LAYOUT_PUSH_BUTTON(reset_liv_conf, MAIN_WINDOW_WIDTH - BUTTON_WIDTH -
 	    WINDOW_MARGIN, MAIN_WINDOW_HEIGHT - 70, BUTTON_WIDTH, 18,
-	    "RESET airline configuration", reset_acf_tooltip);
+	    "RESET airline configuration", reset_liv_tooltip);
 
 #ifdef	XRAAS_IS_EMBEDDED
 	LAYOUT_PUSH_BUTTON(save_acf_conf, WINDOW_MARGIN, MAIN_WINDOW_HEIGHT -
@@ -1256,24 +1258,32 @@ unregister_commands(void)
 void
 gui_init(void)
 {
+	if (gui_inited)
+		return;
 	tooltip_init();
 	create_menu();
 	create_main_window();
 	register_commands();
+	gui_inited = B_TRUE;
 }
 
 void
 gui_fini(void)
 {
+	if (!gui_inited)
+		return;
 	destroy_menu();
 	destroy_main_window();
 	tooltip_fini();
 	unregister_commands();
+	gui_inited = B_FALSE;
 }
 
 void
 gui_update(void)
 {
+	if (!gui_inited)
+		return;
 	XPLMEnableMenuItem(root_menu, dbg_gui_menu_item, xraas_inited);
 	XPLMCheckMenuItem(root_menu, dbg_gui_menu_item,
 	    xraas_state->config.debug_graphical ? xplm_Menu_Checked :

@@ -65,11 +65,7 @@ reset_config(xraas_state_t *state)
 	 * No need to set B_FALSE/zero values here, since the config has
 	 * already been bzero'ed.
 	 */
-#if	ACF_TYPE == NO_ACF_TYPE
 	state->config.enabled = B_TRUE;
-#else	/* ACF_TYPE != NO_ACF_TYPE */
-	state->config.enabled = B_FALSE;
-#endif	/* ACF_TYPE != NO_ACF_TYPE */
 	state->config.min_engines = 2;
 	state->config.min_mtow = 5700;
 	state->config.auto_disable_notify = B_TRUE;
@@ -124,10 +120,11 @@ reset_config(xraas_state_t *state)
 
 #if	ACF_TYPE == FF_A320_ACF_TYPE
 	/* Tuned defaults for the A320 */
+	state->config.enabled = B_FALSE;
 	state->config.min_landing_dist = 1100;
 	state->config.min_takeoff_dist = 1500;
+	state->config.nd_alert_overlay_enabled = B_FALSE;
 #endif	/* FF_A320_ACF_TYPE */
-
 }
 
 static void
@@ -237,6 +234,7 @@ process_conf(xraas_state_t *state, conf_t *conf)
 	CONF_GET_DEBUG(tile);
 	CONF_GET_DEBUG(wav);
 	CONF_GET_DEBUG(adc);
+	CONF_GET_DEBUG(ff_a320);
 #undef	CONF_GET_DEBUG
 }
 

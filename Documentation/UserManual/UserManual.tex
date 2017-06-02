@@ -1143,7 +1143,9 @@ detected to be a helicopter.\newline
 \textbf{OFF:} inhibit startup if the current aircraft is a helicopter.\newline
 This setting doesn't affect other compatibility checks, such as the
 minimum number of engines allowed or the minimum MTOW limit. Refer to
-section \ref{subsec:AircraftTypes} for more information. & \textbf{OFF} &
+section \ref{subsec:AircraftTypes} for more information.\newline
+NOTE: this option is omitted when X-RAAS is distributed as part of an
+aircraft package. & \textbf{OFF} &
 \confopt{allow\_helos} \\
 
 \hline
@@ -1158,7 +1160,9 @@ measure are used for distance callouts, e.g:
 \end{itemize}
 \textbf{ON:} display of the startup message is enabled.\newline
 \textbf{OFF:} display of the startup message is inhibited.\newline
-This setting doesn't control startup of X-RAAS itself. & \textbf{ON} &
+This setting doesn't control startup of X-RAAS itself.\newline
+NOTE: this option is omitted when X-RAAS is distributed as part of an
+aircraft package. & \textbf{ON} &
 \confopt{startup\_notify} \\
 
 \hline
@@ -1169,7 +1173,9 @@ for X-RAAS to activate, X-RAAS displays a short message at the bottom of
 the screen to point out that it is auto-inhibited. This option controls
 whether this auto-inhibition message isdisplayed.\newline
 \textbf{ON:} the display of the auto-inhibition message is enabled.\newline
-\textbf{OFF:} the display of the auto-inhibition message is disabled. &
+\textbf{OFF:} the display of the auto-inhibition message is disabled.\newline
+NOTE: this option is omitted when X-RAAS is distributed as part of an
+aircraft package. &
 \textbf{ON} & \confopt{auto\_disable\_notify} \\
 
 \hline
@@ -1497,15 +1503,20 @@ Refer to section \ref{subsec:LateRotationMon} for more information. &
 
 \guiconfbtn{44} &
 Minimum number of engines the aircraft must have for it to be considered
-an ``airliner'' and permit X-RAAS startup. & \textbf{2} &
+an ``airliner'' and permit X-RAAS startup.\newline
+NOTE: this option is omitted when X-RAAS is distributed as part of an
+aircraft package. &
+\textbf{2} &
 \confopt{min\_engines} \\
 
 \hline
 
 \guiconfbtn{45} &
 Lowest value of the aircraft's Maximum TakeOff Weight (MTOW) for it to be
-considered an ``airliner'' and permit X-RAAS startup. & \textbf{5700} &
-\confopt{min\_takeoff\_dist} \\
+considered an ``airliner'' and permit X-RAAS startup.\newline
+NOTE: this option is omitted when X-RAAS is distributed as part of an
+aircraft package. &
+\textbf{5700} & \confopt{min\_takeoff\_dist} \\
 
 \hline
 
@@ -1613,7 +1624,9 @@ Refer to section \ref{subsec:LongLandingMon} for more information. &
 \guiconfbtn{58} &
 Minimum relative flap handle position, including and above which the
 flaps setting is considered a valid flaps setting for landing.\newline
-Refer to section \ref{subsec:ApchFlapsMon} for more information. &
+Refer to section \ref{subsec:ApchFlapsMon} for more information.\newline
+NOTE: this option is omitted when X-RAAS is distributed as part of an
+aircraft package. &
 \textbf{0.5} & \confopt{min\_landing\_flap} \\
 
 \hline
@@ -1621,7 +1634,9 @@ Refer to section \ref{subsec:ApchFlapsMon} for more information. &
 \guiconfbtn{59} &
 Minimum relative flap handle position, including and above which the
 flaps setting is considered a valid flaps setting for takeoff.\newline
-Refer to section \ref{subsec:OnRwyMon} for more information. &
+Refer to section \ref{subsec:OnRwyMon} for more information.\newline
+NOTE: this option is omitted when X-RAAS is distributed as part of an
+aircraft package. &
 \textbf{0.1} & \confopt{min\_takeoff\_flap} \\
 
 \hline
@@ -1629,7 +1644,9 @@ Refer to section \ref{subsec:OnRwyMon} for more information. &
 \guiconfbtn{60} &
 Maximum relative flap handle position, including and below which the
 flaps setting is considered a valid flaps setting for takeoff.\newline
-Refer to section \ref{subsec:OnRwyMon} for more information. &
+Refer to section \ref{subsec:OnRwyMon} for more information.\newline
+NOTE: this option is omitted when X-RAAS is distributed as part of an
+aircraft package. &
 \textbf{0.75} & \confopt{max\_takeoff\_flap} \\
 
 \hline
@@ -1682,7 +1699,9 @@ location. See section \ref{subsec:ConfigStorage} for more information. &
 
 \guiconfbtn{67} &
 Saves the current configuration as the global configuration location.
-See section \ref{subsec:ConfigStorage} for more information. &
+See section \ref{subsec:ConfigStorage} for more information.\newline
+NOTE: this option is omitted when X-RAAS is distributed as part of an
+aircraft package. &
 \emph{N/A} & \multicolumn{1}{|c|}{\emph{N/A}} \\
 
 \hline
@@ -1703,7 +1722,9 @@ Removes the aircraft-specific configuration (if it exists). See section
 
 \guiconfbtn{70} &
 Removes the global configuration (if it exists). See section
-\ref{subsec:ConfigStorage} for more information. &
+\ref{subsec:ConfigStorage} for more information.\newline
+NOTE: this option is omitted when X-RAAS is distributed as part of an
+aircraft package. &
 \emph{N/A} & \multicolumn{1}{|c|}{\emph{N/A}} \\
 
 \end{supertabular}
@@ -1822,6 +1843,11 @@ all aircraft.
 \rowcolor{tablehdrcolor}
 \textbf{Aircraft Model Name} & \textbf{GTO} & \textbf{GFO} & \textbf{VAND} &
 \textbf{VAO} & \textbf{EASM} \\
+
+\hline
+
+FlightFactor Airbus A320 & $\surd$ & $\surd$ & $\times$ & $\surd$ &
+$\surd$ \\
 
 \hline
 

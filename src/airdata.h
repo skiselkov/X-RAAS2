@@ -29,6 +29,7 @@
 #include <stdlib.h>
 #include <XPLMDataAccess.h>
 
+#include "geom.h"
 #include "types.h"
 
 #ifdef	__cplusplus
@@ -72,10 +73,10 @@ typedef struct {
 	float	gear[NUM_GEAR];
 	int	gear_type[NUM_GEAR];
 
-	float	takeoff_flaps;	/* flaprqst value from FMS, NAN if N/A */
-	float	landing_flaps;	/* flaprqst value from FMS, NAN if N/A */
-	float	vref;		/* knots from FMS, NAN if N/A */
-	float	vapp;		/* knots from FMS, NAN if N/A */
+	double	takeoff_flaps;	/* flaprqst value from FMS, NAN if N/A */
+	double	landing_flaps;	/* flaprqst value from FMS, NAN if N/A */
+	double	vref;		/* knots from FMS, NAN if N/A */
+	double	vapp;		/* knots from FMS, NAN if N/A */
 } adc_t;
 
 typedef struct {
@@ -111,6 +112,9 @@ extern const drs_t *drs;
 bool_t adc_init(void);
 void adc_fini(void);
 bool_t adc_collect(void);
+
+bool_t adc_gpwc_rwy_data(geo_pos3_t *thr_pos, double *len, double *width,
+    double *trk);
 
 void ff_a320_find_nearest_rwy(void);
 bool_t ff_a320_is_loaded(void);

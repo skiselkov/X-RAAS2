@@ -32,6 +32,7 @@ extern "C" {
 #define	XRAAS2_VERSION			"2.1"
 #define	TATL_FIELD_ELEV_UNSET		-1000000
 #define	RWY_PROXIMITY_TIME_FACT		2		/* seconds */
+#define	ARPT_LOAD_LIMIT			NM2MET(8)	/* meters */
 
 typedef enum TATL_state_e {
 	TATL_STATE_ALT,

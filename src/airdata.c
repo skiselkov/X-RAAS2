@@ -44,11 +44,13 @@
 #define	GPWC_ARPT_ELEV_THRESH	609	/* meters, 2000 feet */
 #define	ADC_PRINTF_FMT \
 	"ALT:%05.0fft/%02.2finHg/%04.0fm  POS:%02.04fdeg/%03.04fdeg/%05.0fm  " \
-	"ATT:%03.0fdeg/%02.1fdeg  SPD:%03.0fkt/%03.0fmps"
+	"ATT:%03.0fdeg/%02.1fdeg  SPD:%03.0fkt/%03.0fmps TR:%05dft/%05dft " \
+	"FL:%0.02f/%0.02f VR:%03.0fkt/%03.0fkt"
 #define	ADC_PRINTF_ARGS(adc) \
 	(adc)->baro_alt, (adc)->baro_set, (adc)->rad_alt, (adc)->lat, \
 	(adc)->lon, (adc)->elev, (adc)->hdg, (adc)->pitch, (adc)->cas, \
-	(adc)->gs
+	(adc)->gs, (adc)->trans_alt, (adc)->trans_lvl, (adc)->takeoff_flaps, \
+	(adc)->landing_flaps, (adc)->vref, (adc)->vapp
 
 enum {
 	XP_DEFAULT_INTERFACE,
@@ -135,7 +137,7 @@ static struct {
 
 		int takeoff_flaps;		/* int, 2-4 */
 		int landing_flaps;		/* int, 3-5 */
-		int vapp;			/* meters */
+		int vapp;			/* knots */
 	} ids;
 
 	ff_a320_rwy_info_t rwy_info;
@@ -146,7 +148,7 @@ static XPLMDataRef
 dr_get(const char *drname)
 {
 	XPLMDataRef dr = XPLMFindDataRef(drname);
-	VERIFY(dr != NULL);
+	VERIFY_MSG(dr != NULL, "dataref \"%s\" not found", drname);
 	return (dr);
 }
 
@@ -194,8 +196,13 @@ adc_init(void)
 	drs_l.ICAO = dr_get("sim/aircraft/view/acf_ICAO");
 	drs_l.author = dr_get("sim/aircraft/view/acf_author");
 
-	drs_l.gpws_prio = dr_get(xraas_state->config.GPWS_priority_dataref);
-	drs_l.gpws_inop = dr_get(xraas_state->config.GPWS_inop_dataref);
+	if (*xraas_state->config.GPWS_priority_dataref != 0) {
+		drs_l.gpws_prio =
+		    dr_get(xraas_state->config.GPWS_priority_dataref);
+	}
+	if (*xraas_state->config.GPWS_inop_dataref != 0) {
+		drs_l.gpws_inop = dr_get(xraas_state->config.GPWS_inop_dataref);
+	}
 
 	drs_l.replay_mode = dr_get("sim/operation/prefs/replay_mode");
 
@@ -243,6 +250,25 @@ adc_collect(void)
 	XPLMGetDatavi(drs_l.gear_type, adc_l.gear_type, 0, adc_l.n_gear);
 
 	dbg_log(adc, 2, "collect; " ADC_PRINTF_FMT, ADC_PRINTF_ARGS(&adc_l));
+
+	return (B_TRUE);
+}
+
+/*
+ * If the airdata interface supplies external runway selection data, this
+ * function returns the data sent to the GPWC. This is used in the FF A320
+ * to feed exact runway scenery information to the aircraft's GPWC.
+ */
+bool_t
+adc_gpwc_rwy_data(geo_pos3_t *thr_pos, double *len, double *width, double *trk)
+{
+	if (intf_type != FF_A320_INTERFACE || !ff_a320.rwy_info.present)
+		return (B_FALSE);
+
+	*thr_pos = ff_a320.rwy_info.thr_pos;
+	*len = ff_a320.rwy_info.length;
+	*width = ff_a320.rwy_info.width;
+	*trk = ff_a320.rwy_info.track;
 
 	return (B_TRUE);
 }
@@ -607,7 +633,7 @@ ff_a320_update(double step, void *tag)
 	ff_adc.landing_flaps = ff_a320_flaps2flaprqst(ff_a320_gets32(
 	    ff_a320.ids.landing_flaps));
 	ff_adc.vref = NAN;
-	ff_adc.vapp = MPS2KT(ff_a320_getf32(ff_a320.ids.vapp));
+	ff_adc.vapp = ff_a320_getf32(ff_a320.ids.vapp);
 
 	dbg_log(ff_a320, 4, "update; " ADC_PRINTF_FMT,
 	    ADC_PRINTF_ARGS(&ff_adc));
@@ -748,6 +774,7 @@ ff_a320_find_nearest_rwy(void)
 		}
 	}
 
+	dbg_log(ff_a320, 2, "rwy_info %s", info.present ? "present" : "absent");
 	ff_a320_rwy_info_set(info.present, info.thr_pos, info.length,
 	    info.width, info.track);
 }

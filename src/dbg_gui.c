@@ -32,6 +32,7 @@
 #include "geom.h"
 #include "helpers.h"
 #include "log.h"
+#include "perf.h"
 #include "xraas2.h"
 
 #include "dbg_gui.h"
@@ -53,9 +54,12 @@ draw_line(double x1, double y1, double x2, double y2)
 }
 
 static void
-draw_bbox(const vect2_t *bbox)
+draw_bbox(const vect2_t *bbox, bool_t filled)
 {
-	glBegin(GL_LINES);
+	if (filled)
+		glBegin(GL_POLYGON);
+	else
+		glBegin(GL_LINES);
 	for (int i = 0; !IS_NULL_VECT(bbox[i]); i++) {
 		glVertex2f(DBG_X(bbox[i].x), DBG_Y(bbox[i].y));
 		if (!IS_NULL_VECT(bbox[i + 1]))
@@ -71,6 +75,8 @@ draw_cb(XPLMDrawingPhase phase, int before, void *refcon)
 {
 	vect2_t pos_v, vel_v, tgt_v;
 	const airport_t *arpt;
+	geo_pos3_t rwy_pos;
+	double rwy_len, rwy_width, rwy_trk;
 
 	UNUSED(phase);
 	UNUSED(before);
@@ -86,7 +92,7 @@ draw_cb(XPLMDrawingPhase phase, int before, void *refcon)
 	tgt_v = vect2_add(pos_v, vel_v);
 
 	XPLMGetScreenSize(&screen_x, &screen_y);
-	scale = MIN(screen_y / (2.0 * vect2_abs(pos_v)), 1.0);
+	scale = MIN((screen_y - 20) / (2.0 * vect2_abs(pos_v)), 1.0);
 
 	/*
 	 * Graphics state for drawing the debug overlay:
@@ -97,8 +103,57 @@ draw_cb(XPLMDrawingPhase phase, int before, void *refcon)
 	 * 5) enable per-pixel alpha blending
 	 * 6) disable per-pixel bit depth testing
 	 * 7) disable writeback of depth info to the depth buffer
+	 *
+	 * Drawing is from back-to-front, so later drawn stuff draws over
+	 * previous stuff.
 	 */
 	XPLMSetGraphicsState(0, 0, 0, 1, 1, 0, 0);
+
+	if (adc_gpwc_rwy_data(&rwy_pos, &rwy_len, &rwy_width, &rwy_trk)) {
+		vect2_t bbox[5];
+		vect2_t tmp;
+		vect2_t thr_fpp = geo2fpp(GEO3_TO_GEO2(rwy_pos), &arpt->fpp);
+		vect2_t dir_v = hdg2dir(rwy_trk);
+		glColor4f(1, 0, 1, 0.5);
+
+		bbox[0] = vect2_add(thr_fpp, vect2_set_abs(dir_v,
+		    rwy_width * 10));
+		bbox[1] = vect2_add(thr_fpp, vect2_set_abs(vect2_norm(dir_v,
+		    B_TRUE), rwy_width / 2));
+		bbox[2] = vect2_add(thr_fpp, vect2_set_abs(vect2_norm(dir_v,
+		    B_FALSE), rwy_width / 2));
+		bbox[3] = NULL_VECT2;
+		draw_bbox(bbox, B_TRUE);
+
+		tmp = vect2_add(thr_fpp, vect2_set_abs(vect2_neg(dir_v),
+		    rwy_width / 5));
+		bbox[0] = vect2_add(tmp, vect2_norm(vect2_set_abs(dir_v,
+		    rwy_width / 2 + rwy_width / 5), B_TRUE));
+		bbox[1] = vect2_add(tmp, vect2_norm(vect2_set_abs(dir_v,
+		    rwy_width / 2 + rwy_width / 5), B_FALSE));
+		bbox[2] = vect2_add(bbox[1], vect2_set_abs(dir_v, rwy_len +
+		    2 * (rwy_width / 5)));
+		bbox[3] = vect2_add(bbox[0], vect2_set_abs(dir_v, rwy_len +
+		    2 * (rwy_width / 5)));
+		bbox[4] = NULL_VECT2;
+		draw_bbox(bbox, B_FALSE);
+	}
+
+	/* draw runways */
+	for (runway_t *rwy = avl_first(&arpt->rwys); rwy != NULL;
+	    rwy = AVL_NEXT(&arpt->rwys, rwy)) {
+		glColor4f(1, 1, 1, 0.5);
+		draw_bbox(rwy->ends[0].apch_bbox, B_FALSE);
+		draw_bbox(rwy->ends[1].apch_bbox, B_FALSE);
+		glColor4f(0, 0, 1, 0.67);
+		draw_bbox(rwy->prox_bbox, B_FALSE);
+		glColor4f(1, 0, 0, 1);
+		draw_bbox(rwy->asda_bbox, B_FALSE);
+		glColor4f(1, 1, 0, 1);
+		draw_bbox(rwy->tora_bbox, B_FALSE);
+		glColor4f(0, 1, 0, 1);
+		draw_bbox(rwy->rwy_bbox, B_FALSE);
+	}
 
 	/* draw center crosshair - this is the airport reference point */
 	glColor4f(1, 0, 0, 1);
@@ -106,21 +161,7 @@ draw_cb(XPLMDrawingPhase phase, int before, void *refcon)
 	draw_line(DBG_X(0) - 5, DBG_Y(0), DBG_X(0) + 5, DBG_Y(0));
 	draw_line(DBG_X(0), DBG_Y(0) - 5, DBG_X(0), DBG_Y(0) + 5);
 
-	for (runway_t *rwy = avl_first(&arpt->rwys); rwy != NULL;
-	    rwy = AVL_NEXT(&arpt->rwys, rwy)) {
-		glColor4f(1, 1, 1, 0.5);
-		draw_bbox(rwy->ends[0].apch_bbox);
-		draw_bbox(rwy->ends[1].apch_bbox);
-		glColor4f(0, 0, 1, 0.67);
-		draw_bbox(rwy->prox_bbox);
-		glColor4f(1, 0, 0, 1);
-		draw_bbox(rwy->asda_bbox);
-		glColor4f(1, 1, 0, 1);
-		draw_bbox(rwy->tora_bbox);
-		glColor4f(0, 1, 0, 1);
-		draw_bbox(rwy->rwy_bbox);
-	}
-
+	/* aircraft icon goes on top */
 	glColor4f(1, 1, 1, 1);
 	draw_line(DBG_X(pos_v.x) - 5, DBG_Y(pos_v.y),
 	    DBG_X(pos_v.x) + 5, DBG_Y(pos_v.y));
