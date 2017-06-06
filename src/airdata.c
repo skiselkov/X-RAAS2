@@ -45,12 +45,13 @@
 #define	ADC_PRINTF_FMT \
 	"ALT:%05.0fft/%02.2finHg/%04.0fm  POS:%02.04fdeg/%03.04fdeg/%05.0fm  " \
 	"ATT:%03.0fdeg/%02.1fdeg  SPD:%03.0fkt/%03.0fmps TR:%05dft/%05dft " \
-	"FL:%0.02f/%0.02f VR:%03.0fkt/%03.0fkt"
+	"FL:%0.02f/%0.02f VR:%03.0fkt/%03.0fkt ILS:%03.02f/%4s/%.01f/%.01f"
 #define	ADC_PRINTF_ARGS(adc) \
 	(adc)->baro_alt, (adc)->baro_set, (adc)->rad_alt, (adc)->lat, \
 	(adc)->lon, (adc)->elev, (adc)->hdg, (adc)->pitch, (adc)->cas, \
 	(adc)->gs, (adc)->trans_alt, (adc)->trans_lvl, (adc)->takeoff_flaps, \
-	(adc)->landing_flaps, (adc)->vref, (adc)->vapp
+	(adc)->landing_flaps, (adc)->vref, (adc)->vapp, (adc)->ils_info.freq, \
+	(adc)->ils_info.id, (adc)->ils_info.hdef, (adc)->ils_info.vdef
 
 enum {
 	XP_DEFAULT_INTERFACE,
@@ -138,6 +139,11 @@ static struct {
 		int takeoff_flaps;		/* int, 2-4 */
 		int landing_flaps;		/* int, 3-5 */
 		int vapp;			/* knots */
+
+		int glideslope;			/* dots */
+		int glideslope_valid;		/* bool */
+		int localizer;			/* dots */
+		int localizer_valid;		/* bool */
 	} ids;
 
 	ff_a320_rwy_info_t rwy_info;
@@ -205,6 +211,30 @@ adc_init(void)
 	}
 
 	drs_l.replay_mode = dr_get("sim/operation/prefs/replay_mode");
+
+	drs_l.nav1_frequency = dr_get("sim/cockpit/radios/nav1_freq_hz");
+	drs_l.nav1_flag_glideslope =
+	    dr_get("sim/cockpit2/radios/indicators/nav1_flag_glideslope");
+	drs_l.nav1_nav_id =
+	    dr_get("sim/cockpit2/radios/indicators/nav1_nav_id");
+	drs_l.nav1_hdef_dots_pilot =
+	    dr_get("sim/cockpit2/radios/indicators/nav1_hdef_dots_pilot");
+	drs_l.nav1_vdef_dots_pilot =
+	    dr_get("sim/cockpit2/radios/indicators/nav1_vdef_dots_pilot");
+	drs_l.nav1_power =
+	    dr_get("sim/cockpit2/radios/actuators/nav1_power");
+
+	drs_l.nav2_frequency = dr_get("sim/cockpit/radios/nav2_freq_hz");
+	drs_l.nav2_flag_glideslope =
+	    dr_get("sim/cockpit2/radios/indicators/nav2_flag_glideslope");
+	drs_l.nav2_nav_id =
+	    dr_get("sim/cockpit2/radios/indicators/nav2_nav_id");
+	drs_l.nav2_hdef_dots_pilot =
+	    dr_get("sim/cockpit2/radios/indicators/nav2_hdef_dots_pilot");
+	drs_l.nav2_vdef_dots_pilot =
+	    dr_get("sim/cockpit2/radios/indicators/nav2_vdef_dots_pilot");
+	drs_l.nav2_power =
+	    dr_get("sim/cockpit2/radios/actuators/nav2_power");
 
 	if (ff_a320_intf_init())
 		intf_type = FF_A320_INTERFACE;
@@ -290,6 +320,32 @@ xp_adc_get(adc_t *adc)
 	adc->landing_flaps = NAN;
 	adc->vref = NAN;
 	adc->vapp = NAN;
+
+	if (XPLMGetDatai(drs_l.nav1_power) == 1 &&
+	    XPLMGetDatai(drs_l.nav1_flag_glideslope) == 0) {
+		adc->ils_info.active = B_TRUE;
+		adc->ils_info.freq = XPLMGetDatai(drs_l.nav1_frequency) / 100.0;
+		XPLMGetDatab(drs_l.nav1_nav_id, adc->ils_info.id, 0,
+		    sizeof (adc->ils_info.id) - 1);
+		adc->ils_info.id[sizeof (adc->ils_info.id) - 1] = 0;
+		adc->ils_info.hdef = XPLMGetDataf(drs_l.nav1_hdef_dots_pilot);
+		adc->ils_info.vdef = XPLMGetDataf(drs_l.nav1_vdef_dots_pilot);
+	} else if (XPLMGetDatai(drs_l.nav2_power) == 1 &&
+	    XPLMGetDatai(drs_l.nav2_flag_glideslope) == 0) {
+		adc->ils_info.active = B_TRUE;
+		adc->ils_info.freq = XPLMGetDatai(drs_l.nav2_frequency) / 100.0;
+		XPLMGetDatab(drs_l.nav1_nav_id, adc->ils_info.id, 0,
+		    sizeof (adc->ils_info.id) - 1);
+		adc->ils_info.id[sizeof (adc->ils_info.id) - 1] = 0;
+		adc->ils_info.hdef = XPLMGetDataf(drs_l.nav2_hdef_dots_pilot);
+		adc->ils_info.vdef = XPLMGetDataf(drs_l.nav2_vdef_dots_pilot);
+	} else {
+		adc->ils_info.active = B_FALSE;
+		adc->ils_info.freq = NAN;
+		adc->ils_info.id[0] = 0;
+		adc->ils_info.hdef = NAN;
+		adc->ils_info.vdef = NAN;
+	}
 }
 
 
@@ -583,6 +639,15 @@ ff_a320_update(double step, void *tag)
 		    ff_a320_val_id("Aircraft.LandingConfig");
 		ff_a320.ids.vapp =
 		    ff_a320_val_id("Aircraft.Navigation.GPWC.ApproachSpeed");
+
+		ff_a320.ids.glideslope =
+		    ff_a320_val_id("Aircraft.Navigation.GPWC.GlideSlope");
+		ff_a320.ids.glideslope_valid =
+		    ff_a320_val_id("Aircraft.Navigation.GPWC.GlideSlopeValid");
+		ff_a320.ids.localizer =
+		    ff_a320_val_id("Aircraft.Navigation.GPWC.Localizer");
+		ff_a320.ids.localizer_valid =
+		    ff_a320_val_id("Aircraft.Navigation.GPWC.LocalizerValid");
 	}
 
 	ff_a320.status.powered = ff_a320_gets32(ff_a320.ids.powered);
@@ -663,6 +728,21 @@ ff_a320_update(double step, void *tag)
 			ff_a320_setf32(ff_a320.ids.rwy_elev, -1000.0);
 		}
 		ff_a320.rwy_info.changed = B_FALSE;
+	}
+
+	if (ff_a320_gets32(ff_a320.ids.localizer_valid) == 1 &&
+	    ff_a320_gets32(ff_a320.ids.glideslope_valid) == 1) {
+		ff_adc.ils_info.active = B_TRUE;
+		ff_adc.ils_info.freq = 0;
+		ff_adc.ils_info.id[0] = 0;
+		ff_adc.ils_info.hdef = ff_a320_getf32(ff_a320.ids.localizer);
+		ff_adc.ils_info.vdef = ff_a320_getf32(ff_a320.ids.glideslope);
+	} else {
+		ff_adc.ils_info.active = B_FALSE;
+		ff_adc.ils_info.freq = NAN;
+		ff_adc.ils_info.id[0] = 0;
+		ff_adc.ils_info.hdef = NAN;
+		ff_adc.ils_info.vdef = NAN;
 	}
 
 	mutex_enter(&ff_a320.lock);

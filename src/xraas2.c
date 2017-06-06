@@ -108,6 +108,8 @@
 #define	GOAROUND_CLB_RATE_THRESH	400		/* feet per minute */
 #define	OFF_RWY_HEIGHT_MAX		250		/* feet */
 #define	OFF_RWY_HEIGHT_MIN		100		/* feet */
+#define	ILS_HDEF_LIMIT			1.0		/* dots */
+#define	ILS_VDEF_LIMIT			2.0		/* dots */
 
 #define	RWY_APCH_FLAP1_THRESH		950	/* feet */
 #define	RWY_APCH_FLAP2_THRESH		600	/* feet */
@@ -1742,9 +1744,25 @@ apch_cfg_chk(const char *arpt_id, const char *rwy_id, double height_abv_thr,
 			rwy_key_tbl_set(flap_ann_table, arpt_id, rwy_id,
 			    B_TRUE);
 			return (B_TRUE);
-		} else if (rwy_key_tbl_get(gpa_ann_table, arpt_id, rwy_id) ==
-		    0 && rwy_gpa != 0 && !gpws_terr_ovrd() &&
+		/*
+		 * To annunciate TOO HIGH, all of the following conditions
+		 * must be met:
+		 * 1) we have NOT yet annunciated for this runway
+		 * 2) we are NOT approaching mutliple runways
+		 * 3) we know the GPA for this runway
+		 * 4) GPWS terrain override is NOT active
+		 * 5) actual GPA is above computed GPA limit for this runway
+		 * 6) IF we have an ILS tuned & receiving, either:
+		 *	6a) horizontal deflection is above limit (1 dot), OR
+		 *	6b) vertical deflection is above limit (2 dots)
+		 * 7) the too high approach monitor is enabled
+		 */
+		} else if (!rwy_key_tbl_get(gpa_ann_table, arpt_id, rwy_id) &&
+		    !state.apch_rwys_ann && rwy_gpa != 0 && !gpws_terr_ovrd() &&
 		    gpa_act > gpa_limit(rwy_gpa, dist_from_thr) &&
+		    (!adc->ils_info.active ||
+		    fabs(adc->ils_info.hdef) > ILS_HDEF_LIMIT ||
+		    adc->ils_info.vdef > ILS_VDEF_LIMIT) &&
 		    state.config.monitors[too_high_mon]) {
 			dbg_log(apch_cfg_chk, 1, "TOO HIGH: "
 			    "gpa_act = %.02f gpa_limit = %.02f",

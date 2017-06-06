@@ -77,6 +77,14 @@ typedef struct {
 	double	landing_flaps;	/* flaprqst value from FMS, NAN if N/A */
 	double	vref;		/* knots from FMS, NAN if N/A */
 	double	vapp;		/* knots from FMS, NAN if N/A */
+
+	struct {
+		bool_t	active;	/* flag indicating if the info is reliable */
+		double	freq;	/* MHz, NAN if N/A */
+		char	id[8];	/* string, "" if N/A */
+		double	hdef;	/* -2.5..2.5, NAN if N/A */
+		double	vdef;	/* -2.5..2.5, NAN if N/A */
+	} ils_info;
 } adc_t;
 
 typedef struct {
@@ -104,6 +112,20 @@ typedef struct {
 	XPLMDataRef gpws_prio;
 	XPLMDataRef gpws_inop;
 	XPLMDataRef replay_mode;
+
+	XPLMDataRef nav1_frequency;
+	XPLMDataRef nav1_flag_glideslope;
+	XPLMDataRef nav1_nav_id;
+	XPLMDataRef nav1_hdef_dots_pilot;
+	XPLMDataRef nav1_vdef_dots_pilot;
+	XPLMDataRef nav1_power;
+
+	XPLMDataRef nav2_frequency;
+	XPLMDataRef nav2_flag_glideslope;
+	XPLMDataRef nav2_nav_id;
+	XPLMDataRef nav2_hdef_dots_pilot;
+	XPLMDataRef nav2_vdef_dots_pilot;
+	XPLMDataRef nav2_power;
 } drs_t;
 
 extern const adc_t *adc;
