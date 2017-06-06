@@ -43,15 +43,19 @@
 #define	HDG_ALIGN_THRESH	20	/* degrees */
 #define	GPWC_ARPT_ELEV_THRESH	609	/* meters, 2000 feet */
 #define	ADC_PRINTF_FMT \
-	"ALT:%05.0fft/%02.2finHg/%04.0fm  POS:%02.04fdeg/%03.04fdeg/%05.0fm  " \
-	"ATT:%03.0fdeg/%02.1fdeg  SPD:%03.0fkt/%03.0fmps TR:%05dft/%05dft " \
-	"FL:%0.02f/%0.02f VR:%03.0fkt/%03.0fkt ILS:%03.02f/%4s/%.01f/%.01f"
+	"ALT:%05.0fft/%02.2finHg/%04.0fm POS:%02.04fdeg/%03.04fdeg/%05.0fm " \
+	"ATT:%03.0fdeg/%02.1fdeg SPD:%03.0fkt/%03.0fmps TR:%05dft/%05dft " \
+	"FL:%0.02f/%0.02f VR:%03.0fkt/%03.0fkt ILS:%d/%.2f/%s/%.01f/%.01f"
 #define	ADC_PRINTF_ARGS(adc) \
 	(adc)->baro_alt, (adc)->baro_set, (adc)->rad_alt, (adc)->lat, \
 	(adc)->lon, (adc)->elev, (adc)->hdg, (adc)->pitch, (adc)->cas, \
 	(adc)->gs, (adc)->trans_alt, (adc)->trans_lvl, (adc)->takeoff_flaps, \
-	(adc)->landing_flaps, (adc)->vref, (adc)->vapp, (adc)->ils_info.freq, \
-	(adc)->ils_info.id, (adc)->ils_info.hdef, (adc)->ils_info.vdef
+	(adc)->landing_flaps, (adc)->vref, (adc)->vapp, \
+	(adc)->ils_info.active, \
+	(adc)->ils_info.active ? (adc)->ils_info.freq : 0.0, \
+	(adc)->ils_info.active ? (adc)->ils_info.id : "", \
+	(adc)->ils_info.active ? (adc)->ils_info.hdef : 0.0, \
+	(adc)->ils_info.active ? (adc)->ils_info.vdef : 0.0
 
 enum {
 	XP_DEFAULT_INTERFACE,
@@ -140,10 +144,10 @@ static struct {
 		int landing_flaps;		/* int, 3-5 */
 		int vapp;			/* knots */
 
-		int glideslope;			/* dots */
-		int glideslope_valid;		/* bool */
-		int localizer;			/* dots */
+		int localizer;			/* dots, .0875 per dot */
 		int localizer_valid;		/* bool */
+		int glideslope;			/* dots, .0875 per dot */
+		int glideslope_valid;		/* bool */
 	} ids;
 
 	ff_a320_rwy_info_t rwy_info;
@@ -735,8 +739,10 @@ ff_a320_update(double step, void *tag)
 		ff_adc.ils_info.active = B_TRUE;
 		ff_adc.ils_info.freq = 0;
 		ff_adc.ils_info.id[0] = 0;
-		ff_adc.ils_info.hdef = ff_a320_getf32(ff_a320.ids.localizer);
-		ff_adc.ils_info.vdef = ff_a320_getf32(ff_a320.ids.glideslope);
+		ff_adc.ils_info.hdef = ff_a320_getf32(ff_a320.ids.localizer) /
+		    0.0875;
+		ff_adc.ils_info.vdef = ff_a320_getf32(ff_a320.ids.glideslope) /
+		    0.0875;
 	} else {
 		ff_adc.ils_info.active = B_FALSE;
 		ff_adc.ils_info.freq = NAN;
