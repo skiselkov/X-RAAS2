@@ -120,10 +120,8 @@ reset_config(xraas_state_t *state)
 
 #if	ACF_TYPE == FF_A320_ACF_TYPE
 	/* Tuned defaults for the A320 */
-	state->config.enabled = B_FALSE;
 	state->config.min_landing_dist = 1100;
 	state->config.min_takeoff_dist = 1500;
-	state->config.nd_alert_overlay_enabled = B_FALSE;
 #endif	/* FF_A320_ACF_TYPE */
 }
 
