@@ -264,6 +264,9 @@ ND_integ_debug_init(void)
 	    NUM_DEBUG_PANEL_COLS, NUM_DEBUG_PANEL_ROWS, DEBUG_PANEL_SIZE,
 	    DEBUG_PANEL_SIZE);
 
+	ASSERT(debug_textures == NULL);
+	ASSERT(debug_panels == NULL);
+
 	get_text_block_size("0000", overlay.face, DEBUG_PANEL_FONT_SIZE,
 	    &w, &h);
 	debug_textures = calloc(NUM_DEBUG_PANELS, sizeof (*debug_textures));
@@ -279,7 +282,6 @@ ND_integ_debug_init(void)
 		    debug_panels[i].tex, DEBUG_PANEL_SIZE, DEBUG_PANEL_SIZE));
 	}
 	glGenTextures(NUM_DEBUG_PANELS, debug_textures);
-	VERIFY(glGetError() == GL_NO_ERROR);
 	for (int i = 0; i < NUM_DEBUG_PANELS; i++) {
 		glBindTexture(GL_TEXTURE_2D, debug_textures[i]);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
@@ -289,7 +291,6 @@ ND_integ_debug_init(void)
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, DEBUG_PANEL_SIZE,
 		    DEBUG_PANEL_SIZE, 0, GL_RGBA, GL_UNSIGNED_BYTE,
 		    debug_panels[i].tex);
-		VERIFY(glGetError() == GL_NO_ERROR);
 	}
 
 	XPLMRegisterDrawCallback(debug_panel_draw_cb, DEBUG_PANEL_PHASE,
