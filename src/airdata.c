@@ -144,9 +144,9 @@ static struct {
 		int landing_flaps;		/* int, 3-5 */
 		int vapp;			/* knots */
 
-		int localizer;			/* dots, .0875 per dot */
+		int localizer;			/* dots = 2 * (loc / 0.155) */
 		int localizer_valid;		/* bool */
-		int glideslope;			/* dots, .0875 per dot */
+		int glideslope;			/* dots = 2 * (gs / 0.175) */
 		int glideslope_valid;		/* bool */
 	} ids;
 
@@ -739,10 +739,10 @@ ff_a320_update(double step, void *tag)
 		ff_adc.ils_info.active = B_TRUE;
 		ff_adc.ils_info.freq = 0;
 		ff_adc.ils_info.id[0] = 0;
-		ff_adc.ils_info.hdef = ff_a320_getf32(ff_a320.ids.localizer) /
-		    0.0875;
-		ff_adc.ils_info.vdef = ff_a320_getf32(ff_a320.ids.glideslope) /
-		    0.0875;
+		ff_adc.ils_info.hdef =
+		    2 * (ff_a320_getf32(ff_a320.ids.localizer) / 0.155);
+		ff_adc.ils_info.vdef =
+		    2 * (ff_a320_getf32(ff_a320.ids.glideslope) / 0.175);
 	} else {
 		ff_adc.ils_info.active = B_FALSE;
 		ff_adc.ils_info.freq = NAN;

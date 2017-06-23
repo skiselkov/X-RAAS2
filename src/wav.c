@@ -31,7 +31,6 @@
 #include <alc.h>
 
 #include "assert.h"
-#include "list.h"
 #include "log.h"
 #include "riff.h"
 #include "types.h"
