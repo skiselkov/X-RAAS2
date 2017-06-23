@@ -379,7 +379,7 @@ ND_integ_init(void)
 	fp = fopen(acf_path, "r");
 	if (fp == NULL)
 		return;
-	while (getline(&line, &line_len, fp) != 0) {
+	while (getline(&line, &line_len, fp) > 0) {
 		if (strstr(line, "P acf/_studio ") == line) {
 			strip_space(line);
 			my_strlcpy(my_studio, &line[14], sizeof (my_studio));
