@@ -46,21 +46,19 @@
 #define	AMBER_FLAG		0x40
 #define	ND_SCHED_INTVAL		1.0
 
-#ifdef	DEBUG_PANEL
-#define	NUM_DEBUG_PANEL_ROWS	16
-#define	NUM_DEBUG_PANEL_COLS	16
+#define	NUM_DEBUG_PANEL_ROWS	32
+#define	NUM_DEBUG_PANEL_COLS	32
 #define	NUM_DEBUG_PANELS	(NUM_DEBUG_PANEL_ROWS * NUM_DEBUG_PANEL_COLS)
 #define	DEBUG_PANEL_SIZE	64
 #define	DEBUG_PANEL_OFF		4
 #define	DEBUG_PANEL_PHASE	xplm_Phase_Gauges
 #define	DEBUG_PANEL_PHASE_FLAG	0
-#define	DEBUG_PANEL_FONT_SIZE	32
+#define	DEBUG_PANEL_FONT_SIZE	24
 typedef struct {
 	uint8_t	tex[DEBUG_PANEL_SIZE * DEBUG_PANEL_SIZE * 4];
 } debug_panel_t;
 static GLuint		*debug_textures = NULL;
 static debug_panel_t	*debug_panels = NULL;
-#endif	/* DEBUG_PANEL */
 
 const char *ND_alert_overlay_default_font = "ShareTechMono" DIRSEP_S
 	"ShareTechMono-Regular.ttf";
@@ -88,68 +86,31 @@ static struct {
 typedef struct {
 	unsigned	x, y;
 	unsigned	w, h;
-	double		v_offset;
+	double		hoff, voff;
+	list_node_t	node;
 } ND_coords_t;
 
 typedef struct {
-	const char	*ICAO;
-	const char	*acf_filename;
-	const char	*studio;
+	const char	ICAO[8];
+	const char	acf_filename[64];
+	const char	studio[64];
 	int		font_sz;
 	double		bg_alpha;
-	unsigned	num_NDs;
-	ND_coords_t	NDs[2];
+	list_t		NDs;
 } acf_ND_overlay_info_t;
 
-static acf_ND_overlay_info_t overlay_infos[] = {
-    {
-	.ICAO = "B744", .acf_filename = "747-400.acf",
-	.studio = "Laminar Research", .font_sz = 32, .bg_alpha = 0.3,
-	.num_NDs = 2, .NDs = {
-	    {
-		.x = 3, .y = 15, .w = 665, .h = 670, .v_offset = 0.5
-	    },
-	    {
-		.x = 691, .y = 15, .w = 665, .h = 670, .v_offset = 0.5
-	    }
-	}
-    },
-    {
-	.ICAO = "B738", .acf_filename = "b738.acf",
-	.studio = "Laminar Research", .font_sz = 24, .bg_alpha = 0.3,
-	.num_NDs = 2, .NDs = {
-	    {
-		.x = 527, .y = 15, .w = 490, .h = 490, .v_offset = 0.5
-	    },
-	    {
-		.x = 527, .y = 505, .w = 490, .h = 490, .v_offset = 0.5
-	    }
-	}
-    },
-    {
-	.ICAO = "MD82", .acf_filename = "MD80.acf",
-	.studio = "Laminar Research", .font_sz = 17, .bg_alpha = 0.3,
-	.num_NDs = 1, .NDs = {
-	    {
-		.x = 259, .y = 576, .w = 270, .h = 204, .v_offset = 0.5
-	    }
-	}
-    },
-    {
-	.ICAO = NULL
-    }
-};
+static acf_ND_overlay_info_t *overlay_info = NULL;
 
-static int acf_ND_info = -1;
-
-#ifdef	DEBUG_PANEL
 static int
 debug_panel_draw_cb(XPLMDrawingPhase phase, int before, void *refcon)
 {
-#define	SPACE_WIDTH	2048
-#define	SPACE_HEIGHT	2048
-#define	CELL_WIDTH	(SPACE_WIDTH / NUM_DEBUG_PANEL_COLS)
-#define	CELL_HEIGHT	(SPACE_HEIGHT / NUM_DEBUG_PANEL_ROWS)
+	enum {
+	    SPACE_WIDTH = 2048,
+	    SPACE_HEIGHT = 2048,
+	    CELL_WIDTH = (SPACE_WIDTH / NUM_DEBUG_PANEL_COLS),
+	    CELL_HEIGHT = (SPACE_HEIGHT / NUM_DEBUG_PANEL_ROWS)
+	};
+
 	UNUSED(phase);
 	UNUSED(before);
 	UNUSED(refcon);
@@ -224,25 +185,24 @@ debug_panel_draw_cb(XPLMDrawingPhase phase, int before, void *refcon)
 
 	return (0);
 }
-#endif	/* DEBUG_PANEL */
 
 static void
-nd_alert_draw_at(int x, int y, int w, int h, double v_offset)
+nd_alert_draw_at(int x, int y, int w, int h, double hoff, double voff)
 {
 	/* only disable lighting, everything else is on */
 	XPLMSetGraphicsState(1, 1, 0, 1, 1, 1, 1);
 
 	glBegin(GL_QUADS);
 	glTexCoord2f(0.0, 1.0);
-	glVertex2f(x + (w - overlay.width) / 2,
-	    y + (h * v_offset) - overlay.height);
+	glVertex2f(x + (w - overlay.width) * hoff,
+	    y + (h * voff) - overlay.height);
 	glTexCoord2f(0.0, 0.0);
-	glVertex2f(x + (w - overlay.width) / 2, y + h * v_offset);
+	glVertex2f(x + (w - overlay.width) * hoff, y + h * voff);
 	glTexCoord2f(1.0, 0.0);
-	glVertex2f(x + (w + overlay.width) / 2, y + h * v_offset);
+	glVertex2f(x + (w + overlay.width) * hoff, y + h * voff);
 	glTexCoord2f(1.0, 1.0);
-	glVertex2f(x + (w + overlay.width) / 2,
-	    y + h * v_offset - overlay.height);
+	glVertex2f(x + (w + overlay.width) * hoff,
+	    y + h * voff - overlay.height);
 	glEnd();
 }
 
@@ -258,18 +218,16 @@ nd_alert_draw_cb(XPLMDrawingPhase phase, int before, void *refcon)
 
 	glBindTexture(GL_TEXTURE_2D, overlay.texture);
 
-	if (acf_ND_info != -1) {
-		const acf_ND_overlay_info_t *info = &overlay_infos[acf_ND_info];
-		ASSERT(info->num_NDs <= 2);
-		for (unsigned i = 0; i < info->num_NDs; i++) {
-			nd_alert_draw_at(info->NDs[i].x, info->NDs[i].y,
-			    info->NDs[i].w, info->NDs[i].h,
-			    info->NDs[i].v_offset);
+	if (overlay_info != NULL) {
+		for (ND_coords_t *nd = list_head(&overlay_info->NDs);
+		    nd != NULL; nd = list_next(&overlay_info->NDs, nd)) {
+			nd_alert_draw_at(nd->x, nd->y, nd->w, nd->h,
+			    nd->hoff, nd->voff);
 		}
 	} else {
 		int screen_x, screen_y;
 		XPLMGetScreenSize(&screen_x, &screen_y);
-		nd_alert_draw_at(0, 0, screen_x, screen_y, 0.98);
+		nd_alert_draw_at(0, 0, screen_x, screen_y, 0.5, 0.98);
 	}
 
 	return (1);
@@ -298,30 +256,303 @@ alert_sched_cb(float elapsed_since_last_call, float elapsed_since_last_floop,
 }
 
 static void
-chk_acf_ND_integration(void)
+ND_integ_debug_init(void)
 {
-	XPLMDataRef ICAO_dr = XPLMFindDataRef("sim/aircraft/view/acf_ICAO");
-	XPLMDataRef studio_dr = XPLMFindDataRef("sim/aircraft/view/acf_author");
-	char ICAO[8], studio[64], acf_filename[256], acf_path[512];
+	int w, h;
 
-	ASSERT_MSG(acf_ND_info == -1, "acf_ND_info = %d", acf_ND_info);
+	dbg_log(nd_alert, 1, "ND_integ_debug_init %dx%d (%dx%d)",
+	    NUM_DEBUG_PANEL_COLS, NUM_DEBUG_PANEL_ROWS, DEBUG_PANEL_SIZE,
+	    DEBUG_PANEL_SIZE);
 
-	XPLMGetNthAircraftModel(0, acf_filename, acf_path);
-	XPLMGetDatab(ICAO_dr, ICAO, 0, sizeof (ICAO) - 1);
-	ICAO[sizeof (ICAO) - 1] = 0;
-	XPLMGetDatab(studio_dr, studio, 0, sizeof (studio) - 1);
-	studio[sizeof (studio) - 1] = 0;
+	get_text_block_size("0000", overlay.face, DEBUG_PANEL_FONT_SIZE,
+	    &w, &h);
+	debug_textures = calloc(NUM_DEBUG_PANELS, sizeof (*debug_textures));
+	debug_panels = calloc(NUM_DEBUG_PANELS, sizeof (*debug_panels));
+	for (int i = 0; i < NUM_DEBUG_PANELS; i++) {
+		char text[8];
+		snprintf(text, sizeof (text), "%02x%02x",
+		    i / NUM_DEBUG_PANEL_COLS, i % NUM_DEBUG_PANEL_COLS);
+		int x = (DEBUG_PANEL_SIZE - w) / 2;
+		int y = (DEBUG_PANEL_SIZE + h) / 2;
+		VERIFY(render_text_block(text, overlay.face,
+		    DEBUG_PANEL_FONT_SIZE,  x, y, 255, 255, 255,
+		    debug_panels[i].tex, DEBUG_PANEL_SIZE, DEBUG_PANEL_SIZE));
+	}
+	glGenTextures(NUM_DEBUG_PANELS, debug_textures);
+	VERIFY(glGetError() == GL_NO_ERROR);
+	for (int i = 0; i < NUM_DEBUG_PANELS; i++) {
+		glBindTexture(GL_TEXTURE_2D, debug_textures[i]);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
+		    GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+		    GL_NEAREST);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, DEBUG_PANEL_SIZE,
+		    DEBUG_PANEL_SIZE, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+		    debug_panels[i].tex);
+		VERIFY(glGetError() == GL_NO_ERROR);
+	}
 
-	for (int i = 0; overlay_infos[i].ICAO != NULL; i++) {
-		if (strcmp(overlay_infos[i].ICAO, ICAO) == 0 &&
-		    (overlay_infos[i].acf_filename != NULL ||
-		    strcmp(overlay_infos[i].acf_filename, acf_filename) == 0) &&
-		    (overlay_infos[i].studio != NULL ||
-		    strcmp(overlay_infos[i].studio, studio) == 0)) {
-			acf_ND_info = i;
+	XPLMRegisterDrawCallback(debug_panel_draw_cb, DEBUG_PANEL_PHASE,
+	    DEBUG_PANEL_PHASE_FLAG, NULL);
+}
+
+/*
+ * Initializes the ND alert display integration engine. On certain aircraft
+ * models, rather than drawing the ND alert overlay on the screen, we draw
+ * it into the aircraft's navigation display directly. We do so by exploting
+ * xplm_Draw_Gauges and manually figuring out where the ND's texture is
+ * located.
+ *
+ * This function attempts to match the currently loaded aircraft with our
+ * ND position configuration file in data/ND_overlays.cfg. The file is
+ * parsed here. It consists of a set of whitespace-separated keywords with
+ * optional arguments. String arguments allow for "%XY" escape sequences.
+ * See unescape_percent in helpers.c.
+ * A typical config file will consists from one or more blocks like this:
+ *	icao	ABCD
+ *	studio	Foo%20Bar%20Studios
+ *	author	Bob%20The%20Aircraft%20Builder
+ *	acf	WrightFlyer3000.acf
+ *	fontsz	25
+ *	bgalpha	0.5
+ *	nd	x 0	y 5	w 300	h 250	hoff 0.2	voff 0.6
+ * These keywords have the following meanings:
+ *	icao (required): Denotes the start of an aircraft block and must be
+ *		followed by a 4-letter ICAO aircraft type identifier (e.g.
+ *		"B752"). This must be matched by the ICAO identifier of the
+ *		currently loaded aircraft.
+ *	studio (optional): When specified, checks if the currently loaded
+ *		aircraft's studio (as defined in Plane Maker) matches the
+ *		string argument.
+ *	author (optional): When specified, checks if the currently loaded
+ *		aircraft's author (as defined in Plane Maker) matches the
+ *		string argument.
+ *	acf	(optional): When specified, checks if the currently loaded
+ *		aircraft's ACF filename matches the string argument.
+ *	fontsz (required): Specifies the pixel height of the font to be
+ *		used when rendering the ND alert.
+ *	bgalpha (optional): Specifies how opaque the black background around
+ *		the ND alert text should be (0.0 for fully transparent and
+ *		1.0 for fully opaque). The default is 0.5.
+ *	nd :	Starts an ND panel configuration block. You may provide
+ *		multiple ND blocks in case the aircraft has multiple
+ *		independent ND screens.
+ *	x, y, w, h (required): specifies X & Y pixel coordinates of the lower
+ *		left edge of the ND screen + the screen's width & height.
+ *	hoff, voff (optional): specifies the horizontal and vertical offset
+ *		of the center of the ND alert from the top left of the ND
+ *		screen as a fraction of the screen's width & height.
+ *		"hoff 0 voff 0" means the ND alert will be centered on the
+ *		top left screen edge, whereas "hoff 1 voff 1" will center
+ *		the ND alert on the bottom right edge of the screen. The
+ *		default for both parameters is 0.5, meaning, the ND alert
+ *		will appear in the center of the screen.
+ */
+static void
+ND_integ_init(void)
+{
+	char		buf[128] = { 0 };
+	bool_t		debug_on = B_FALSE;
+	FILE		*fp;
+	char		*filename;
+	ND_coords_t	*nd = NULL;
+	char		my_icao[8] = { 0 }, my_author[256] = { 0 };
+	char		my_studio[256] = { 0 }, my_acf[256] = { 0 };
+	char		acf_path[512] = { 0 };
+	char		*line = NULL;
+	size_t		line_len = 0;
+	XPLMDataRef icao_dr = XPLMFindDataRef("sim/aircraft/view/acf_ICAO");
+	XPLMDataRef auth_dr = XPLMFindDataRef("sim/aircraft/view/acf_author");
+	bool_t		skip = B_FALSE;
+
+	XPLMGetNthAircraftModel(0, my_acf, acf_path);
+	XPLMGetDatab(icao_dr, my_icao, 0, sizeof (my_icao) - 1);
+	my_icao[sizeof (my_icao) - 1] = 0;
+
+	XPLMGetDatab(auth_dr, my_author, 0, sizeof (my_author) - 1);
+	my_author[sizeof (my_author) - 1] = 0;
+
+	/*
+	 * Unfortunately the studio isn't available via datarefs, so parse
+	 * our acf file instead.
+	 */
+	fp = fopen(acf_path, "r");
+	if (fp == NULL)
+		return;
+	while (getline(&line, &line_len, fp) != 0) {
+		if (strstr(line, "P acf/_studio ") == line) {
+			strip_space(line);
+			my_strlcpy(my_studio, &line[14], sizeof (my_studio));
 			break;
 		}
 	}
+	fclose(fp);
+
+	dbg_log(nd_alert, 3, "attempting ND_overlays.cfg match, %s/%s/%s/%s",
+	    my_icao, my_acf, my_studio, my_author);
+
+	filename = mkpathname(xraas_plugindir, "data", "ND_overlays.cfg", NULL);
+	fp = fopen(filename, "r");
+	free(filename);
+	if (fp == NULL)
+		return;
+
+#define	FILTER_PARAM(param) \
+	do { \
+		char param[256]; \
+		int res; \
+		if (overlay_info == NULL) \
+			continue; \
+		if (fscanf(fp, "%255s", param) != 1) { \
+			logMsg("Error parsing ND_overlays.cfg: expected " \
+			    "string following \"" #param "\"."); \
+			goto errout; \
+		} \
+		unescape_percent(param); \
+		res = strcmp(param, my_ ## param); \
+		dbg_log(nd_alert, 3, #param "(\"%s\") %s my_" #param, \
+		    param, (res == 0 ? "==" : "!=")); \
+		if (res != 0) { \
+			list_destroy(&overlay_info->NDs); \
+			free(overlay_info); \
+			overlay_info = NULL; \
+			skip = B_TRUE; \
+		} \
+	} while (0)
+
+#define	PARSE_ND_PARAM(param, fmt, typename) \
+	do { \
+		if (overlay_info == NULL) \
+			continue; \
+		if (nd == NULL) { \
+			logMsg("Error parsing ND_overlays.cfg: " \
+			    "\"" #param "\" must be preceded by \"nd\"."); \
+			goto errout; \
+		} \
+		if (fscanf(fp, fmt, &nd->param) != 1) { \
+			logMsg("Error parsing ND_overlays.cfg: expected " \
+			    typename " following \"" #param "\"."); \
+			goto errout; \
+		} \
+		dbg_log(nd_alert, 3, "ND->" #param " = " fmt, nd->param); \
+	} while (0)
+
+	while (!feof(fp) && fscanf(fp, "%127s", buf) == 1) {
+		if (buf[0] == '#') {
+			logMsg("found comment, skipping");
+			while (fgetc(fp) != '\n' && !feof(fp))
+				;
+			continue;
+		}
+		if (!skip)
+			dbg_log(nd_alert, 4, "found keyword \"%s\"", buf);
+		if (strcmp(buf, "debug") == 0) {
+			debug_on = B_TRUE;
+			dbg_log(nd_alert, 3, "ND debug on");
+		} else if (strcmp(buf, "icao") == 0) {
+			char icao[8];
+			int res;
+			if (overlay_info != NULL) {
+				/* We're done parsing the entry we wanted */
+				break;
+			}
+			if (fscanf(fp, "%7s", icao) != 1) {
+				logMsg("Error parsing ND_overlays.cfg: "
+				    "expected string following \"icao\".");
+				goto errout;
+			}
+			unescape_percent(icao);
+			res = strcmp(icao, my_icao);
+			dbg_log(nd_alert, 3, "icao(\"%s\") %s my_icao", icao,
+			    (res == 0 ? "==" : "!="));
+			if (res == 0) {
+				overlay_info = calloc(1,
+				    sizeof (*overlay_info));
+				list_create(&overlay_info->NDs,
+				    sizeof (ND_coords_t),
+				    offsetof(ND_coords_t, node));
+				overlay_info->bg_alpha = 0.5;
+				skip = B_FALSE;
+			} else {
+				skip = B_TRUE;
+			}
+		} else if (strcmp(buf, "studio") == 0) {
+			FILTER_PARAM(studio);
+		} else if (strcmp(buf, "acf") == 0) {
+			FILTER_PARAM(acf);
+		} else if (strcmp(buf, "author") == 0) {
+			FILTER_PARAM(author);
+		} else if (strcmp(buf, "fontsz") == 0) {
+			if (overlay_info == NULL)
+				continue;
+			if (fscanf(fp, "%d", &overlay_info->font_sz) != 1) {
+				logMsg("Error parsing ND_overlays.cfg: "
+				    "expected integer following \"fontsz\".");
+				goto errout;
+			}
+			dbg_log(nd_alert, 3, "fontsz: %d",
+			    overlay_info->font_sz);
+		} else if (strcmp(buf, "bgalpha") == 0) {
+			if (overlay_info == NULL)
+				continue;
+			if (fscanf(fp, "%lf", &overlay_info->bg_alpha) != 1) {
+				logMsg("Error parsing ND_overlays.cfg: "
+				    "expected float following \"bgalpha\".");
+				goto errout;
+			}
+			dbg_log(nd_alert, 3, "bgalpha: %.3f",
+			    overlay_info->bg_alpha);
+		} else if (strcmp(buf, "nd") == 0) {
+			if (overlay_info == NULL)
+				continue;
+			nd = calloc(1, sizeof (*nd));
+			list_insert_tail(&overlay_info->NDs, nd);
+			nd->hoff = 0.5;
+			nd->voff = 0.5;
+			dbg_log(nd_alert, 3, "new ND");
+		} else if (strcmp(buf, "x") == 0) {
+			PARSE_ND_PARAM(x, "%d", "integer");
+		} else if (strcmp(buf, "y") == 0) {
+			PARSE_ND_PARAM(y, "%d", "integer");
+		} else if (strcmp(buf, "w") == 0) {
+			PARSE_ND_PARAM(w, "%d", "integer");
+		} else if (strcmp(buf, "h") == 0) {
+			PARSE_ND_PARAM(h, "%d", "integer");
+		} else if (strcmp(buf, "hoff") == 0) {
+			PARSE_ND_PARAM(hoff, "%lf", "float");
+		} else if (strcmp(buf, "voff") == 0) {
+			PARSE_ND_PARAM(voff, "%lf", "float");
+		} else if (!skip) {
+			logMsg("Error parsing ND_overlays.cfg: "
+			    "unknown keyword \"%s\".", buf);
+			goto errout;
+		}
+	}
+#undef	FILTER_PARAM
+#undef	PARSE_ND_PARAM
+
+	if (overlay_info != NULL) {
+		dbg_log(nd_alert, 1, "ND_integ_init: match %s/%s/%s/%s",
+		    my_icao, my_acf, my_studio, my_author);
+	}
+
+	if (debug_on)
+		ND_integ_debug_init();
+
+	fclose(fp);
+	return;
+
+errout:
+	if (overlay_info != NULL) {
+		ND_coords_t *nd;
+		while ((nd = list_head(&overlay_info->NDs)) != NULL) {
+			list_remove_head(&overlay_info->NDs);
+			free(nd);
+		}
+		free(overlay_info);
+		overlay_info = NULL;
+	}
+	fclose(fp);
 }
 
 bool_t
@@ -352,41 +583,7 @@ ND_alerts_init(void)
 	}
 	free(filename);
 
-#ifdef	DEBUG_PANEL
-	int w, h;
-	get_text_block_size("00", overlay.face, DEBUG_PANEL_FONT_SIZE, &w, &h);
-	debug_textures = calloc(NUM_DEBUG_PANELS, sizeof (*debug_textures));
-	debug_panels = calloc(NUM_DEBUG_PANELS, sizeof (*debug_panels));
-	for (int i = 0; i < NUM_DEBUG_PANELS; i++) {
-		char text[8];
-		snprintf(text, sizeof (text), "%02x", i);
-		int x = (DEBUG_PANEL_SIZE - w) / 2;
-		int y = (DEBUG_PANEL_SIZE + h) / 2;
-		if (!render_text_block(text, overlay.face,
-		    DEBUG_PANEL_FONT_SIZE,  x, y, 255, 255, 255,
-		    debug_panels[i].tex, DEBUG_PANEL_SIZE, DEBUG_PANEL_SIZE)) {
-			free(debug_textures);
-			free(debug_panels);
-			debug_textures = NULL;
-			debug_panels = NULL;
-			return (B_FALSE);
-		}
-	}
-	glGenTextures(NUM_DEBUG_PANELS, debug_textures);
-	for (int i = 0; i < NUM_DEBUG_PANELS; i++) {
-		glBindTexture(GL_TEXTURE_2D, debug_textures[i]);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
-		    GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
-		    GL_NEAREST);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, DEBUG_PANEL_SIZE,
-		    DEBUG_PANEL_SIZE, 0, GL_RGBA, GL_UNSIGNED_BYTE,
-		    debug_panels[i].tex);
-	}
-
-	XPLMRegisterDrawCallback(debug_panel_draw_cb, DEBUG_PANEL_PHASE,
-	    DEBUG_PANEL_PHASE_FLAG, NULL);
-#endif	/* DEBUG_PANEL */
+	ND_integ_init();
 
 	dr = dr_intf_add_i(DR_NAME, &alert_status, B_FALSE);
 	VERIFY(dr != NULL);
@@ -394,9 +591,8 @@ ND_alerts_init(void)
 	VERIFY(dr_overlay != NULL);
 	XPLMRegisterFlightLoopCallback(alert_sched_cb, ND_SCHED_INTVAL, NULL);
 
-	chk_acf_ND_integration();
 	XPLMRegisterDrawCallback(nd_alert_draw_cb,
-	    acf_ND_info != -1 ? xplm_Phase_Gauges : xplm_Phase_Window,
+	    overlay_info != NULL ? xplm_Phase_Gauges : xplm_Phase_Window,
 	    0, NULL);
 
 	dr_local_x = XPLMFindDataRef("sim/flightmodel/position/local_x");
@@ -417,6 +613,11 @@ ND_alerts_init(void)
 	return (B_TRUE);
 }
 
+/*
+ * Grabs the current setting of the ND alert, decodes it into text and
+ * renders a texture suitable for display either on the ND alert overlay,
+ * or on the ND in the VC of a supported aircraft (see ND_integ_init).
+ */
 static void
 render_alert_texture(void)
 {
@@ -429,9 +630,9 @@ render_alert_texture(void)
 
 	VERIFY(XRAAS_ND_msg_decode(alert_status, msg, &color) != 0);
 
-	if (acf_ND_info != -1) {
-		font_size = overlay_infos[acf_ND_info].font_sz;
-		bg_alpha = overlay_infos[acf_ND_info].bg_alpha;
+	if (overlay_info != NULL) {
+		font_size = overlay_info->font_sz;
+		bg_alpha = overlay_info->bg_alpha;
 	} else {
 		font_size = xraas_state->config.nd_alert_overlay_font_size;
 		bg_alpha = 0.67;
@@ -498,14 +699,15 @@ ND_alerts_fini()
 		overlay.buf = NULL;
 	}
 
-#ifdef	DEBUG_PANEL
-	if (debug_textures != NULL)
+	if (debug_textures != NULL) {
 		glDeleteTextures(NUM_DEBUG_PANELS, debug_textures);
-	free(debug_textures);
-	free(debug_panels);
-	XPLMUnregisterDrawCallback(debug_panel_draw_cb, DEBUG_PANEL_PHASE,
-	    DEBUG_PANEL_PHASE_FLAG, NULL);
-#endif
+		free(debug_textures);
+		free(debug_panels);
+		debug_textures = NULL;
+		debug_panels = NULL;
+		XPLMUnregisterDrawCallback(debug_panel_draw_cb,
+		    DEBUG_PANEL_PHASE, DEBUG_PANEL_PHASE_FLAG, NULL);
+	}
 
 	VERIFY(FT_Done_Face(overlay.face) == 0);
 	VERIFY(FT_Done_FreeType(overlay.ft) == 0);
@@ -517,10 +719,19 @@ ND_alerts_fini()
 	dr = NULL;
 	XPLMUnregisterFlightLoopCallback(alert_sched_cb, NULL);
 	XPLMUnregisterDrawCallback(nd_alert_draw_cb,
-	    acf_ND_info != -1 ? xplm_Phase_Gauges : xplm_Phase_Window,
+	    overlay_info != NULL ? xplm_Phase_Gauges : xplm_Phase_Window,
 	    0, NULL);
 
-	acf_ND_info = -1;
+	if (overlay_info != NULL) {
+		ND_coords_t *nd;
+		while ((nd = list_head(&overlay_info->NDs)) != NULL) {
+			list_remove_head(&overlay_info->NDs);
+			free(nd);
+		}
+		list_destroy(&overlay_info->NDs);
+		free(overlay_info);
+		overlay_info = NULL;
+	}
 
 	inited = B_FALSE;
 }
@@ -579,8 +790,8 @@ ND_alert(nd_alert_msg_type_t msg, nd_alert_level_t level, const char *rwy_id,
 	alert_status = msg;
 	alert_start_time = microclock();
 
-	if (xraas_state->config.nd_alert_overlay_enabled &&
-	    alert_overlay_dis == 0)
+	if ((xraas_state->config.nd_alert_overlay_enabled &&
+	    alert_overlay_dis == 0) || overlay_info != NULL)
 		render_alert_texture();
 }
 

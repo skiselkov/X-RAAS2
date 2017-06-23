@@ -60,6 +60,7 @@ DIST_FILES=(
     'data/fonts/Aileron/Aileron-Regular.otf'			''
     'data/fonts/ShareTechMono/OFL.txt'				''
     'data/fonts/ShareTechMono/ShareTechMono-Regular.ttf'	''
+    'data/ND_overlays.cfg'					''
     'data/msgs/female/0.wav'					''
     'data/msgs/female/1.wav'					''
     'data/msgs/female/2.wav'					''

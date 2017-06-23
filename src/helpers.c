@@ -332,6 +332,26 @@ append_format(char **str, size_t *sz, const char *format, ...)
 }
 
 /*
+ * Unescapes a string that uses '%XX' escape sequences, where 'XX' are two
+ * hex digits denoting the ASCII code of the character to be inserted in
+ * place of the escape sequence. The argument 'str' is shortened appropriately.
+ */
+void
+unescape_percent(char *str)
+{
+	for (int i = 0, n = strlen(str); i + 2 < n; i++) {
+		if (str[i] == '%') {
+			char dig[3] = { str[i + 1], str[i + 2], 0 };
+			unsigned val;
+			sscanf(dig, "%x", &val);
+			str[i] = val;
+			memmove(&str[i + 1], &str[i + 3], n - 3);
+			n -= 2;
+		}
+	}
+}
+
+/*
  * strlcpy is a BSD function not available on Windows, so we roll a simple
  * version of it ourselves.
  */

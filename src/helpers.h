@@ -185,6 +185,7 @@ void free_strlist(char **comps, size_t len);
 void strip_space(char *line);
 void append_format(char **str, size_t *sz, const char *format,
 	...) PRINTF_ATTR(3);
+void unescape_percent(char *str);
 
 char *mkpathname(const char *comp, ...);
 char *mkpathname_v(const char *comp, va_list ap);
