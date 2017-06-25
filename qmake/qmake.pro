@@ -57,27 +57,28 @@ contains(XRAAS_EMBED, yes) {
 win32 {
 	CONFIG += dll
 	DEFINES += APL=0 IBM=1 LIN=0
-	LIBS += -ldbghelp
-	LIBS += -L../SDK/Libraries/Win
 	TARGET = win.xpl
 	INCLUDEPATH += /usr/include/GL
 	QMAKE_DEL_FILE = rm -f
 }
 
 win32:contains(CROSS_COMPILE, x86_64-w64-mingw32-) {
-	LIBS += -lXPLM_64 -lXPWidgets_64
+	# This must go first so GCC finds the deps in the latter libraries
+	LIBS += -L $$[LIBACFUTILS]/qmake/win64 -lacfutils
+	LIBS += -ldbghelp
+	LIBS += -L../SDK/Libraries/Win -lXPLM_64 -lXPWidgets_64
 	LIBS += -L../OpenAL/libs/Win64 -lOpenAL32
 	LIBS += -L../GL_for_Windows/lib -lopengl32
 	LIBS += -L../FreeType/freetype-win-64/lib -lfreetype
-	LIBS += -L $$[LIBACFUTILS]/qmake/win64 -lacfutils
 }
 
 win32:contains(CROSS_COMPILE, i686-w64-mingw32-) {
-	LIBS += -lXPLM -lXPWidgets
+	LIBS += -L $$[LIBACFUTILS]/qmake/win32 -lacfutils
+	LIBS += -ldbghelp
+	LIBS += -L../SDK/Libraries/Win -lXPLM -lXPWidgets
 	LIBS += -L../OpenAL/libs/Win32 -lOpenAL32
 	LIBS += -L../GL_for_Windows/lib -lopengl32
 	LIBS += -L../FreeType/freetype-win-32/lib -lfreetype
-	LIBS += -L $$[LIBACFUTILS]/qmake/win32 -lacfutils
 }
 
 unix:!macx {
