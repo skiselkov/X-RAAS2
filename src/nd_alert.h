@@ -18,7 +18,7 @@
 #ifndef	_XRAAS_ND_ALERT_H_
 #define	_XRAAS_ND_ALERT_H_
 
-#include "types.h"
+#include <acfutils/types.h>
 #include "xraas2.h"
 
 #ifdef	__cplusplus

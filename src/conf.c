@@ -22,9 +22,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "avl.h"
-#include "helpers.h"
-#include "log.h"
+#include <acfutils/avl.h>
+#include <acfutils/helpers.h>
+#include <acfutils/log.h>
 
 #include "conf.h"
 
@@ -106,15 +106,15 @@ parse_conf(FILE *fp, int *errline)
 		strip_space(line);
 		strip_space(&sep[1]);
 
-		my_strlcpy(srch.key, line, sizeof (srch.key));
+		strlcpy(srch.key, line, sizeof (srch.key));
 		ck = avl_find(&conf->tree, &srch, &where);
 		if (ck == NULL) {
 			/* if the key didn't exist yet, create a new one */
 			ck = calloc(1, sizeof (*ck));
-			my_strlcpy(ck->key, line, sizeof (ck->key));
+			strlcpy(ck->key, line, sizeof (ck->key));
 			avl_insert(&conf->tree, ck, where);
 		}
-		my_strlcpy(ck->value, &sep[1], sizeof (ck->value));
+		strlcpy(ck->value, &sep[1], sizeof (ck->value));
 	}
 
 	free(line);
@@ -138,7 +138,7 @@ static conf_key_t *
 conf_find(const conf_t *conf, const char *key)
 {
 	conf_key_t srch;
-	my_strlcpy(srch.key, key, sizeof (srch.key));
+	strlcpy(srch.key, key, sizeof (srch.key));
 	return (avl_find(&conf->tree, &srch, NULL));
 }
 

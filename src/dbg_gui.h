@@ -18,7 +18,7 @@
 #ifndef	_XRAAS_DBG_GUI_H_
 #define	_XRAAS_DBG_GUI_H_
 
-#include "types.h"
+#include <acfutils/types.h>
 
 #ifdef	__cplusplus
 extern "C" {

@@ -20,7 +20,7 @@
 
 #include <stdlib.h>
 
-#include "types.h"
+#include <acfutils/types.h>
 #include "xraas2.h"
 
 #ifdef	__cplusplus

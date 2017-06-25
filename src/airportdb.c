@@ -32,16 +32,16 @@
 #include <dirent.h>
 #endif	/* !IBM */
 
-#include "assert.h"
-#include "avl.h"
-#include "geom.h"
-#include "helpers.h"
+#include <acfutils/assert.h>
+#include <acfutils/avl.h>
+#include <acfutils/geom.h>
+#include <acfutils/helpers.h>
+#include <acfutils/list.h>
+#include <acfutils/math.h>
+#include <acfutils/perf.h>
+#include <acfutils/types.h>
 #include "init_msg.h"
-#include "list.h"
-#include "log.h"
-#include "math.h"
-#include "perf.h"
-#include "types.h"
+#include "dbg_log.h"
 #include "xraas2.h"
 
 #include "airportdb.h"
@@ -376,7 +376,7 @@ static airport_t *
 apt_dat_lookup(airportdb_t *db, const char *icao)
 {
 	airport_t search, *result;
-	my_strlcpy(search.icao, icao, sizeof (search.icao));
+	strlcpy(search.icao, icao, sizeof (search.icao));
 	result = avl_find(&db->apt_dat, &search, NULL);
 	ASSERT(result == NULL || is_valid_icao_code(result->icao));
 	return (result);
@@ -615,7 +615,7 @@ parse_apt_dat_1_line(airportdb_t *db, const char *filename,
 	arpt = calloc(1, sizeof (*arpt));
 	avl_create(&arpt->rwys, runway_compar, sizeof (runway_t),
 	    offsetof(runway_t, node));
-	my_strlcpy(arpt->icao, new_icao, sizeof (arpt->icao));
+	strlcpy(arpt->icao, new_icao, sizeof (arpt->icao));
 	arpt->refpt = pos;
 	arpt->TL = TL;
 	arpt->TA = TA;
@@ -1460,7 +1460,7 @@ load_CIFP_file(airportdb_t *db, const char *dirpath, const char *filename)
 	/* the filename must be "XXXX.dat" */
 	if (strlen(filename) != 8 || strcmp(&filename[4], ".dat"))
 		return (B_FALSE);
-	my_strlcpy(icao, filename, sizeof (icao));
+	strlcpy(icao, filename, sizeof (icao));
 	arpt = apt_dat_lookup(db, icao);
 	if (arpt == NULL)
 		return (B_FALSE);

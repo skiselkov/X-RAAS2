@@ -26,15 +26,15 @@
 #include <XPLMDisplay.h>
 #include <XPLMGraphics.h>
 
+#include <acfutils/assert.h>
+#include <acfutils/geom.h>
+#include <acfutils/helpers.h>
+#include <acfutils/perf.h>
+
 #include "airdata.h"
 #include "airportdb.h"
-#include "assert.h"
-#include "geom.h"
-#include "helpers.h"
-#include "log.h"
-#include "perf.h"
+#include "dbg_log.h"
 #include "xraas2.h"
-
 #include "dbg_gui.h"
 
 bool_t dbg_gui_inited = B_FALSE;

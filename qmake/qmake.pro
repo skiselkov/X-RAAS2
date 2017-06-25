@@ -27,6 +27,7 @@ INCLUDEPATH += ../SDK/CHeaders/XPLM ../SDK/CHeaders/Widgets ../SDK
 # Always just use the shipped OpenAL headers for predictability.
 # The ABI is X-Plane-internal and stable anyway.
 INCLUDEPATH += ../OpenAL/include
+INCLUDEPATH += $$[LIBACFUTILS]/src
 
 QMAKE_CFLAGS += -std=c99 -g -W -Wall -Wextra -Werror -fvisibility=hidden
 QMAKE_CFLAGS += -Wunused-result
@@ -68,6 +69,7 @@ win32:contains(CROSS_COMPILE, x86_64-w64-mingw32-) {
 	LIBS += -L../OpenAL/libs/Win64 -lOpenAL32
 	LIBS += -L../GL_for_Windows/lib -lopengl32
 	LIBS += -L../FreeType/freetype-win-64/lib -lfreetype
+	LIBS += -L $$[LIBACFUTILS]/qmake/win64 -lacfutils
 }
 
 win32:contains(CROSS_COMPILE, i686-w64-mingw32-) {
@@ -75,7 +77,7 @@ win32:contains(CROSS_COMPILE, i686-w64-mingw32-) {
 	LIBS += -L../OpenAL/libs/Win32 -lOpenAL32
 	LIBS += -L../GL_for_Windows/lib -lopengl32
 	LIBS += -L../FreeType/freetype-win-32/lib -lfreetype
-	DEFINES += __MIDL_user_allocate_free_DEFINED__
+	LIBS += -L $$[LIBACFUTILS]/qmake/win32 -lacfutils
 }
 
 unix:!macx {
@@ -86,6 +88,7 @@ unix:!macx {
 
 linux-g++-64 {
 	LIBS += -L../FreeType/freetype-linux-64/lib -lfreetype
+	LIBS += -L $$[LIBACFUTILS]/qmake/lin64 -lacfutils
 }
 
 linux-g++-32 {
@@ -94,6 +97,7 @@ linux-g++-32 {
 	QMAKE_CFLAGS += -fno-stack-protector
 	LIBS += -fno-stack-protector
 	LIBS += -L../FreeType/freetype-linux-32/lib -lfreetype
+	LIBS += -L $$[LIBACFUTILS]/qmake/lin32 -lacfutils
 }
 
 macx {
@@ -103,23 +107,16 @@ macx {
 	LIBS += -F../SDK/Libraries/Mac
 	LIBS += -framework XPLM -framework XPWidgets
 	LIBS += -framework OpenGL -framework OpenAL
-
-	# To make sure we run on everything that X-Plane 10 ran on
-	QMAKE_MACOSX_DEPLOYMENT_TARGET=10.6
-
-	# The default mac qmake rules insist on linking us as C++
-	# which limits us to OSX 10.7.
-	QMAKE_LINK = $$QMAKE_CC
-	QMAKE_LINK_SHLIB = $$QMAKE_CC
-	QMAKE_LFLAGS -= -stdlib=libc++
 }
 
 macx-clang {
 	LIBS += -L../FreeType/freetype-mac-64/lib -lfreetype
+	LIBS += -L $$[LIBACFUTILS]/qmake/mac64 -lacfutils
 }
 
 macx-clang-32 {
 	LIBS += -L../FreeType/freetype-mac-32/lib -lfreetype
+	LIBS += -L$$[LIBACFUTILS]/qmake/mac32 -lacfutils
 }
 
 HEADERS += ../src/*.h ../api/c/XRAAS_ND_msg_decode.h

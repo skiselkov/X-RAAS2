@@ -31,7 +31,7 @@
 #include <ft2build.h>
 #include FT_FREETYPE_H
 
-#include "types.h"
+#include <acfutils/types.h>
 
 #ifdef	__cplusplus
 extern "C" {

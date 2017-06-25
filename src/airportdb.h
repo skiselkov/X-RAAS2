@@ -18,10 +18,10 @@
 #ifndef	_XRAAS_AIRPORTDB_H_
 #define	_XRAAS_AIRPORTDB_H_
 
-#include "avl.h"
-#include "geom.h"
-#include "list.h"
-#include "helpers.h"
+#include <acfutils/avl.h>
+#include <acfutils/geom.h>
+#include <acfutils/list.h>
+#include <acfutils/helpers.h>
 
 #ifdef	__cplusplus
 extern "C" {

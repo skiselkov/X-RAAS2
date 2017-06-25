@@ -11,41 +11,11 @@
  * http://www.illumos.org/license/CDDL.
  *
  * CDDL HEADER END
- *
+ */
+/*
  * Copyright 2017 Saso Kiselkov. All rights reserved.
  */
 
-#ifndef	_XRAAS_THREADING_H_
-#define	_XRAAS_THREADING_H_
+#include "dbg_log.h"
 
-#if	IBM
-#include <windows.h>
-#else	/* !IBM */
-#include <pthread.h>
-#endif	/* !IBM */
-
-#ifdef	__cplusplus
-extern "C" {
-#endif
-
-#if	IBM
-
-#define	mutex_t	HANDLE
-
-#else	/* !IBM */
-
-typedef pthread_mutex_t mutex_t;
-
-#endif	/* !IBM */
-
-void mutex_init(mutex_t *mtx);
-void mutex_destroy(mutex_t *mtx);
-
-void mutex_enter(mutex_t *mtx);
-void mutex_exit(mutex_t *mtx);
-
-#ifdef	__cplusplus
-}
-#endif
-
-#endif	/* _XRAAS_THREADING_H_ */
+debug_config_t xraas_debug_config;

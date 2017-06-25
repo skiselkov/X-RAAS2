@@ -23,8 +23,8 @@
  * Copyright 2017 Saso Kiselkov. All rights reserved.
  */
 
-#include "assert.h"
-#include "helpers.h"
+#include <acfutils/assert.h>
+#include <acfutils/helpers.h>
 
 #include "text_rendering.h"
 

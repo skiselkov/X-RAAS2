@@ -27,7 +27,7 @@
 #define	_XRAAS_DR_INTF_H_
 
 #include <XPLMDataAccess.h>
-#include "types.h"
+#include <acfutils/types.h>
 
 #ifdef	__cplusplus
 extern "C" {

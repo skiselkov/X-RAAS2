@@ -35,10 +35,12 @@
 #include <XPWidgets.h>
 #include <XPStandardWidgets.h>
 
-#include "assert.h"
+#include <acfutils/assert.h>
+#include <acfutils/list.h>
+#include <acfutils/time.h>
+
 #include "dbg_gui.h"
 #include "init_msg.h"
-#include "list.h"
 #include "nd_alert.h"
 #include "xraas2.h"
 #include "xraas_cfg.h"
@@ -247,14 +249,14 @@ nd_alert2str(int level, char buf[32])
 {
 	switch (level) {
 	case ND_ALERT_ROUTINE:
-		my_strlcpy(buf, "ALL", 32);
+		strlcpy(buf, "ALL", 32);
 		break;
 	case ND_ALERT_NONROUTINE:
-		my_strlcpy(buf, "NON-R", 32);
+		strlcpy(buf, "NON-R", 32);
 		break;
 	default:
 		ASSERT(level == ND_ALERT_CAUTION);
-		my_strlcpy(buf, "CAUT", 32);
+		strlcpy(buf, "CAUT", 32);
 		break;
 	}
 }

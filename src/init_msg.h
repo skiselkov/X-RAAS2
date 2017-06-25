@@ -26,8 +26,8 @@
 #ifndef	_XRAAS_INIT_MSG_H_
 #define	_XRAAS_INIT_MSG_H_
 
-#include "helpers.h"
-#include "types.h"
+#include <acfutils/helpers.h>
+#include <acfutils/types.h>
 
 #ifdef	__cplusplus
 extern "C" {

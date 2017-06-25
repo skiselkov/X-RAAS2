@@ -39,7 +39,9 @@
 #include <GL/gl.h>
 #endif	/* LIN */
 
-#include "assert.h"
+#include <acfutils/assert.h>
+#include <acfutils/time.h>
+
 #include "text_rendering.h"
 #include "xraas2.h"
 
@@ -60,7 +62,7 @@ static bool_t inited = B_FALSE;
 static struct {
 	char		*msg;
 	int		timeout;
-	long long	end;
+	uint64_t	end;
 	int		width;
 	int		height;
 	GLuint		texture;

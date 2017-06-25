@@ -31,11 +31,14 @@
 #include <XPLMPlanes.h>
 #include <XPLMProcessing.h>
 
-#include "assert.h"
+#include <acfutils/assert.h>
+#include <acfutils/helpers.h>
+#include <acfutils/perf.h>
+#include <acfutils/time.h>
+
+#include "dbg_log.h"
 #include "dr_intf.h"
-#include "helpers.h"
 #include "init_msg.h"
-#include "perf.h"
 #include "text_rendering.h"
 #include "../api/c/XRAAS_ND_msg_decode.h"
 
@@ -64,23 +67,23 @@ const char *ND_alert_overlay_default_font = "ShareTechMono" DIRSEP_S
 	"ShareTechMono-Regular.ttf";
 const int ND_alert_overlay_default_font_size = 28;
 
-static bool_t			inited = B_FALSE;
-static XPLMDataRef		dr = NULL, dr_overlay = NULL;
-static int			alert_status = 0;
-static long long		alert_start_time = 0;
+static bool_t		inited = B_FALSE;
+static XPLMDataRef	dr = NULL, dr_overlay = NULL;
+static int		alert_status = 0;
+static uint64_t		alert_start_time = 0;
 
-static int			alert_overlay_dis = 0;
+static int		alert_overlay_dis = 0;
 
-static XPLMDataRef		dr_local_x, dr_local_y, dr_local_z;
-static XPLMDataRef		dr_pitch, dr_roll, dr_hdg;
+static XPLMDataRef	dr_local_x, dr_local_y, dr_local_z;
+static XPLMDataRef	dr_pitch, dr_roll, dr_hdg;
 
 static struct {
-	FT_Library		ft;
-	FT_Face			face;
-	GLuint			texture;
-	int			width;
-	int			height;
-	uint8_t			*buf;
+	FT_Library	ft;
+	FT_Face		face;
+	GLuint		texture;
+	int		width;
+	int		height;
+	uint8_t		*buf;
 } overlay = { NULL, NULL, 0, 0, 0, NULL };
 
 typedef struct {
@@ -243,7 +246,7 @@ alert_sched_cb(float elapsed_since_last_call, float elapsed_since_last_floop,
 	UNUSED(refcon);
 
 	if (alert_status != 0 && (microclock() - alert_start_time >
-	    SEC2USEC(xraas_state->config.nd_alert_timeout))) {
+	    (unsigned)SEC2USEC(xraas_state->config.nd_alert_timeout))) {
 		if (overlay.buf != NULL) {
 			glDeleteTextures(1, &overlay.texture);
 			free(overlay.buf);
@@ -383,7 +386,7 @@ ND_integ_init(void)
 	while (getline(&line, &line_len, fp) > 0) {
 		if (strstr(line, "P acf/_studio ") == line) {
 			strip_space(line);
-			my_strlcpy(my_studio, &line[14], sizeof (my_studio));
+			strlcpy(my_studio, &line[14], sizeof (my_studio));
 			break;
 		}
 	}

@@ -28,16 +28,16 @@
 #include <XPLMDataAccess.h>
 #include <XPLMPlugin.h>
 
-#include "airdata.h"
-#include "assert.h"
-#include "geom.h"
-#include "log.h"
-#include "perf.h"
-#include "threading.h"
+#include <acfutils/assert.h>
+#include <acfutils/geom.h>
+#include <acfutils/perf.h>
+#include <acfutils/thread.h>
 
 /* A320 interface */
 #include <FF_A320/SharedValue.h>
 
+#include "airdata.h"
+#include "dbg_log.h"
 #include "xraas2.h"
 
 #define	HDG_ALIGN_THRESH	20	/* degrees */
@@ -842,8 +842,8 @@ ff_a320_find_nearest_rwy(void)
 				    p));
 				if (fabs(rel_hdg(adc->hdg, re->hdg)) <
 				    HDG_ALIGN_THRESH &&
-				    (vect2_in_poly(p, re->apch_bbox) ||
-				    vect2_in_poly(p, rwy->rwy_bbox))) {
+				    (point_in_poly(p, re->apch_bbox) ||
+				    point_in_poly(p, rwy->rwy_bbox))) {
 					/* succeed on a bbox match */
 					ff_a320_rwy_info_set(B_TRUE, re->thr,
 					    rwy->length, rwy->width, re->hdg);

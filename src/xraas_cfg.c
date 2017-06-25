@@ -18,15 +18,15 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include "helpers.h"
+#include <acfutils/helpers.h>
+#include <acfutils/log.h>
+#include <acfutils/wav.h>
+
 #include "init_msg.h"
-#include "log.h"
+#include "dbg_log.h"
 #include "nd_alert.h"
-#include "wav.h"
 
 #include "xraas_cfg.h"
-
-debug_config_t xraas_debug_config;
 
 const char *const monitor_conf_keys[NUM_MONITORS] = {
 	"apch_rwy_on_gnd_mon",		/* APCH_RWY_ON_GND_MON */
@@ -94,7 +94,7 @@ reset_config(xraas_state_t *state)
 	state->config.nd_alert_filter = ND_ALERT_ROUTINE;
 	state->config.nd_alert_overlay_enabled = B_TRUE;
 	state->config.nd_alert_timeout = 7;
-	my_strlcpy(state->config.nd_alert_overlay_font,
+	strlcpy(state->config.nd_alert_overlay_font,
 	    ND_alert_overlay_default_font,
 	    sizeof (state->config.nd_alert_overlay_font));
 	state->config.nd_alert_overlay_font_size =
@@ -110,10 +110,10 @@ reset_config(xraas_state_t *state)
 
 	memset(&xraas_debug_config, 0, sizeof (xraas_debug_config));
 
-	my_strlcpy(state->config.GPWS_priority_dataref,
+	strlcpy(state->config.GPWS_priority_dataref,
 	    "sim/cockpit2/annunciators/GPWS",
 	    sizeof (state->config.GPWS_priority_dataref));
-	my_strlcpy(state->config.GPWS_inop_dataref,
+	strlcpy(state->config.GPWS_inop_dataref,
 	    "sim/cockpit/warnings/annunciators/GPWS",
 	    sizeof (state->config.GPWS_inop_dataref));
 
@@ -187,7 +187,7 @@ process_conf(xraas_state_t *state, conf_t *conf)
 	CONF_GET(i, nd_alert_timeout);
 	CONF_GET(b, debug_graphical);
 	if (conf_get_str(conf, "nd_alert_overlay_font", &str)) {
-		my_strlcpy(state->config.nd_alert_overlay_font, str,
+		strlcpy(state->config.nd_alert_overlay_font, str,
 		    sizeof (state->config.nd_alert_overlay_font));
 	}
 	CONF_GET(i, nd_alert_overlay_font_size);
@@ -208,10 +208,10 @@ process_conf(xraas_state_t *state, conf_t *conf)
 		openal_set_shared_ctx(state->config.openal_shared);
 
 	if (conf_get_str(conf, "gpws_prio_dr", &str))
-		my_strlcpy(state->config.GPWS_priority_dataref, str,
+		strlcpy(state->config.GPWS_priority_dataref, str,
 		    sizeof (state->config.GPWS_priority_dataref));
 	if (conf_get_str(conf, "gpws_inop_dr", &str))
-		my_strlcpy(state->config.GPWS_inop_dataref, str,
+		strlcpy(state->config.GPWS_inop_dataref, str,
 		    sizeof (state->config.GPWS_inop_dataref));
 
 #define	CONF_GET_DEBUG(value) \

@@ -30,26 +30,28 @@
 #include <XPLMUtilities.h>
 #include <XPLMPlugin.h>
 
+#include <acfutils/assert.h>
+#include <acfutils/avl.h>
+#include <acfutils/geom.h>
+#include <acfutils/helpers.h>
+#include <acfutils/list.h>
+#include <acfutils/math.h>
+#include <acfutils/perf.h>
+#include <acfutils/time.h>
+#include <acfutils/types.h>
+#include <acfutils/wav.h>
+
 #include "airdata.h"
 #include "airportdb.h"
-#include "assert.h"
-#include "avl.h"
 #include "conf.h"
 #include "dbg_gui.h"
+#include "dbg_log.h"
 #include "dr_intf.h"
-#include "geom.h"
 #include "gui.h"
-#include "helpers.h"
 #include "init_msg.h"
-#include "list.h"
-#include "log.h"
-#include "math.h"
 #include "nd_alert.h"
-#include "perf.h"
 #include "rwy_key_tbl.h"
 #include "snd_sys.h"
-#include "types.h"
-#include "wav.h"
 #include "xraas2.h"
 #include "xraas_cfg.h"
 
@@ -521,9 +523,9 @@ set_rto(const char *icao, const char *rwy_id)
 		    strcmp(state.rejected_takeoff.rwy_id, rwy_id) == 0)
 			return;
 		dbg_log(flt_state, 1, "rejected_takeoff = %s/%s", icao, rwy_id);
-		my_strlcpy(state.rejected_takeoff.icao, icao,
+		strlcpy(state.rejected_takeoff.icao, icao,
 		    sizeof (state.rejected_takeoff.icao));
-		my_strlcpy(state.rejected_takeoff.rwy_id, rwy_id,
+		strlcpy(state.rejected_takeoff.rwy_id, rwy_id,
 		    sizeof (state.rejected_takeoff.rwy_id));
 	} else {
 		ASSERT(icao == NULL && rwy_id == NULL);
@@ -906,7 +908,7 @@ ground_runway_approach_arpt_rwy(const airport_t *arpt, const runway_t *rwy,
 	ASSERT(arpt != NULL);
 	ASSERT(rwy != NULL);
 
-	if (vect2_in_poly(pos_v, rwy->prox_bbox) ||
+	if (point_in_poly(pos_v, rwy->prox_bbox) ||
 	    vect2poly_isect(vel_v, pos_v, rwy->prox_bbox)) {
 		do_approaching_rwy(arpt, rwy, closest_rwy_end(pos_v, rwy),
 		    B_TRUE);
@@ -1382,7 +1384,7 @@ ground_on_runway_aligned_arpt(const airport_t *arpt)
 	for (const runway_t *rwy = avl_first(&arpt->rwys); rwy != NULL;
 	    rwy = AVL_NEXT(&arpt->rwys, rwy)) {
 		ASSERT(rwy->tora_bbox != NULL);
-		if (!airborne && vect2_in_poly(pos_v, rwy->tora_bbox)) {
+		if (!airborne && point_in_poly(pos_v, rwy->tora_bbox)) {
 			/*
 			 * In order to produce on-runway annunciations we need
 			 * to be both NOT airborne AND in the TORA bbox.
@@ -1394,7 +1396,7 @@ ground_on_runway_aligned_arpt(const airport_t *arpt)
 			on_rwy_check(arpt_id, rwy->ends[1].id, hdg,
 			    rwy->ends[1].hdg, pos_v, rwy->ends[1].dthr_v,
 			    rwy->ends[0].thr_v);
-		} else if (!vect2_in_poly(pos_v, rwy->prox_bbox)) {
+		} else if (!point_in_poly(pos_v, rwy->prox_bbox)) {
 			/*
 			 * To reset the 'on-runway' annunciation state, we must
 			 * have left the wider approach bbox. This is to give
@@ -1410,7 +1412,7 @@ ground_on_runway_aligned_arpt(const airport_t *arpt)
 			    check_rto(arpt->icao, rwy->ends[1].id))
 				set_rto(NULL, NULL);
 		}
-		if (vect2_in_poly(pos_v, rwy->asda_bbox)) {
+		if (point_in_poly(pos_v, rwy->asda_bbox)) {
 			stop_check(rwy, 0, hdg, pos_v);
 			stop_check(rwy, 1, hdg, pos_v);
 		} else {
@@ -1808,7 +1810,7 @@ air_runway_approach_arpt_rwy(const airport_t *arpt, const runway_t *rwy,
 	const char *arpt_id = arpt->icao;
 	double elev = arpt->refpt.elev;
 	double rwy_hdg = rwy_end->hdg;
-	bool_t in_prox_bbox = vect2_in_poly(pos_v, rwy_end->apch_bbox);
+	bool_t in_prox_bbox = point_in_poly(pos_v, rwy_end->apch_bbox);
 
 	if (in_prox_bbox && fabs(rel_hdg(hdg, rwy_hdg)) < HDG_ALIGN_THRESH) {
 		msg_type_t *msg = NULL;
@@ -1913,7 +1915,7 @@ air_runway_approach_arpt(const airport_t *arpt)
 		    hdg, alt) ||
 		    air_runway_approach_arpt_rwy(arpt, rwy, 1, pos_v,
 		    hdg, alt) ||
-		    vect2_in_poly(pos_v, rwy->rwy_bbox))
+		    point_in_poly(pos_v, rwy->rwy_bbox))
 			in_apch_bbox++;
 	}
 
@@ -2009,7 +2011,7 @@ guess_TATL_from_airport(int *TA, int *TL, bool_t *field_changed)
 		*TL = cur_arpt->TL;
 		state.TATL_field_elev = cur_arpt->refpt.elev;
 		if (strcmp(arpt_id, state.TATL_source) != 0) {
-			my_strlcpy(state.TATL_source, arpt_id,
+			strlcpy(state.TATL_source, arpt_id,
 			    sizeof (state.TATL_source));
 			*field_changed = B_TRUE;
 			dbg_log(altimeter, 1, "TATL_source: %s "
@@ -2053,7 +2055,7 @@ guess_TATL_from_airport(int *TA, int *TL, bool_t *field_changed)
 			*TA = cur_arpt->TA;
 			*TL = cur_arpt->TL;
 			state.TATL_field_elev = cur_arpt->refpt.elev;
-			my_strlcpy(state.TATL_source, cur_arpt->icao,
+			strlcpy(state.TATL_source, cur_arpt->icao,
 			    sizeof (state.TATL_source));
 			*field_changed = B_TRUE;
 			dbg_log(altimeter, 1, "TATL_source: %s "
@@ -2671,7 +2673,6 @@ XPluginStart(char *outName, char *outSig, char *outDesc)
 PLUGIN_API void
 XPluginStop(void)
 {
-	close_private_log();
 	overrides_fini();
 	init_msg_sys_fini();
 }

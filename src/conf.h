@@ -29,8 +29,8 @@
 #include <stdio.h>
 #include <stdint.h>
 
-#include "types.h"
-#include "avl.h"
+#include <acfutils/types.h>
+#include <acfutils/avl.h>
 
 #ifdef	__cplusplus
 extern "C" {

@@ -21,11 +21,13 @@
 #include <XPLMProcessing.h>
 #include <XPLMUtilities.h>
 
-#include "assert.h"
-#include "init_msg.h"
-#include "list.h"
-#include "wav.h"
+#include <acfutils/assert.h>
+#include <acfutils/list.h>
+#include <acfutils/wav.h>
+#include <acfutils/time.h>
 
+#include "dbg_log.h"
+#include "init_msg.h"
 #include "snd_sys.h"
 
 typedef struct {

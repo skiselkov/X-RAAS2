@@ -28,9 +28,8 @@
 
 #include <stdlib.h>
 #include <XPLMDataAccess.h>
-
-#include "geom.h"
-#include "types.h"
+#include <acfutils/geom.h>
+#include <acfutils/types.h>
 
 #ifdef	__cplusplus
 extern "C" {

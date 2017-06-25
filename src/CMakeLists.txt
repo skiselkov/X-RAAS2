@@ -16,14 +16,12 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(plugin C)
 
-SET(SRC xraas2.c geom.c math.c helpers.c perf.c log.c list.c avl.c conf.c
-    riff.c wav.c airportdb.c rwy_key_tbl.c xraas_cfg.c snd_sys.c nd_alert.c
-    dbg_gui.c ../api/c/XRAAS_ND_msg_decode.c gui.c init_msg.c text_rendering.c
-    dr_intf.c airdata.c threading.c)
-SET(HDR geom.h math.h types.h helpers.h perf.h log.h list.h avl.h avl_impl.h
-    conf.h riff.h wav.h airportdb.h rwy_key_tbl.h xraas_cfg.h snd_sys.h
+SET(SRC xraas2.c dbg_log.c conf.c rwy_key_tbl.c xraas_cfg.c snd_sys.c
+    nd_alert.c dbg_gui.c ../api/c/XRAAS_ND_msg_decode.c gui.c init_msg.c
+    text_rendering.c dr_intf.c airdata.c airportdb.c)
+SET(HDR dbg_log.h conf.h airportdb.h rwy_key_tbl.h xraas_cfg.h snd_sys.h
     nd_alert.h dbg_gui.h ../api/c/XRAAS_ND_msg_decode.h gui.h init_msg.h
-    text_rendering.h dr_intf.h airdata.h threading.h)
+    text_rendering.h dr_intf.h airdata.h)
 
 SET(ALL_SRC ${SRC} ${HDR})
 LIST(SORT ALL_SRC)
@@ -44,6 +42,8 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Werror --std=c99")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} \
     -DCHECK_RESULT_USED=\"__attribute__ ((warn_unused_result))\"")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_GNU_SOURCE -D_FILE_OFFSET_BITS=64")
+
+include_directories(xtcas PUBLIC "${LIBACFUTILS}/src")
 
 #libraries
 if(APPLE)
@@ -88,6 +88,9 @@ else()
 	    "../FreeType/freetype-linux-64/lib")
 	target_link_libraries(plugin ${FREETYPE_LIBRARY})
 endif()
+
+set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} \
+    -L${LIBACFUTILS}/qmake/mac64 -lacfutils")
 
 #output
 SET_TARGET_PROPERTIES(plugin PROPERTIES PREFIX "")

@@ -26,8 +26,8 @@
 #ifndef	_XRAAS_RWY_KEY_TBL_H_
 #define	_XRAAS_RWY_KEY_TBL_H_
 
-#include "avl.h"
-#include "list.h"
+#include <acfutils/avl.h>
+#include <acfutils/list.h>
 
 #ifdef	__cplusplus
 extern "C" {

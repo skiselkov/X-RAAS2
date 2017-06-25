@@ -29,7 +29,7 @@
 #include <stdio.h>
 
 #include "airportdb.h"
-#include "log.h"
+#include "dbg_log.h"
 
 #include "rwy_key_tbl.h"
 
