@@ -30,6 +30,7 @@
 #include <XPLMUtilities.h>
 #include <XPLMPlugin.h>
 
+#include <acfutils/acfutils.h>
 #include <acfutils/assert.h>
 #include <acfutils/avl.h>
 #include <acfutils/geom.h>
@@ -2563,6 +2564,8 @@ PLUGIN_API int
 XPluginStart(char *outName, char *outSig, char *outDesc)
 {
 	char *p;
+
+	acfutils_logfunc = XPLMDebugString;
 
 	/* Always use Unix-native paths on the Mac! */
 	XPLMEnableFeature("XPLM_USE_NATIVE_PATHS", 1);
