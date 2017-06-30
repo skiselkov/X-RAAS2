@@ -33,6 +33,7 @@
 #include <acfutils/acfutils.h>
 #include <acfutils/assert.h>
 #include <acfutils/avl.h>
+#include <acfutils/dr.h>
 #include <acfutils/geom.h>
 #include <acfutils/helpers.h>
 #include <acfutils/list.h>
@@ -47,7 +48,6 @@
 #include "conf.h"
 #include "dbg_gui.h"
 #include "dbg_log.h"
-#include "dr_intf.h"
 #include "gui.h"
 #include "init_msg.h"
 #include "nd_alert.h"
@@ -204,7 +204,7 @@ static struct {
 		int		value_i;
 		float		value_f;
 	};
-	XPLMDataRef		dr;
+	dr_t			dr;
 	const XPLMDataTypeID	type;
 	const char		*name;
 } overrides[NUM_OVERRIDES] = {
@@ -274,7 +274,7 @@ static struct {
 	}
 };
 
-static XPLMDataRef	input_faulted_dr = NULL;
+static dr_t	input_faulted_dr;
 
 static bool_t plugin_conflict = B_FALSE;
 
@@ -311,14 +311,13 @@ overrides_init(void)
 	for (int i = 0; i < NUM_OVERRIDES; i++) {
 		overrides[i].value_i = 0;
 		if (overrides[i].type == xplmType_Int) {
-			overrides[i].dr = dr_intf_add_i(overrides[i].name,
-			    &overrides[i].value_i, B_TRUE);
+			dr_create_i(&overrides[i].dr, &overrides[i].value_i,
+			    B_TRUE, overrides[i].name);
 		} else {
-			ASSERT(overrides[i].type == xplmType_Float);
-			overrides[i].dr = dr_intf_add_f(overrides[i].name,
-			    &overrides[i].value_f, B_TRUE);
+			ASSERT3S(overrides[i].type, ==, xplmType_Float);
+			dr_create_f(&overrides[i].dr, &overrides[i].value_f,
+			    B_TRUE, overrides[i].name);
 		}
-		VERIFY(overrides[i].dr != NULL);
 	}
 }
 
@@ -326,8 +325,7 @@ static void
 overrides_fini(void)
 {
 	for (int i = 0; i < NUM_OVERRIDES; i++) {
-		dr_intf_remove(overrides[i].dr);
-		overrides[i].dr = NULL;
+		dr_delete(&overrides[i].dr);
 		overrides[i].value_i = 0;
 	}
 }
@@ -2495,8 +2493,8 @@ xraas_init(void)
 	rwy_key_tbl_create(&state.air_apch_spd3_ann, "air_apch_spd3_ann");
 
 	XPLMRegisterFlightLoopCallback(raas_exec_cb, EXEC_INTVAL, NULL);
-	input_faulted_dr = dr_intf_add_i("xraas/state/input_faulted",
-	    (int *)&state.input_faulted, B_FALSE);
+	dr_create_i(&input_faulted_dr, (int *)&state.input_faulted, B_FALSE,
+	    "xraas/state/input_faulted");
 
 	xraas_inited = B_TRUE;
 	startup_complete();
@@ -2555,7 +2553,7 @@ xraas_fini(void)
 	if (state.config.debug_graphical)
 		dbg_gui_fini();
 
-	dr_intf_remove(input_faulted_dr);
+	dr_delete(&input_faulted_dr);
 
 	xraas_inited = B_FALSE;
 }

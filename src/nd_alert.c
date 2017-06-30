@@ -32,12 +32,12 @@
 #include <XPLMProcessing.h>
 
 #include <acfutils/assert.h>
+#include <acfutils/dr.h>
 #include <acfutils/helpers.h>
 #include <acfutils/perf.h>
 #include <acfutils/time.h>
 
 #include "dbg_log.h"
-#include "dr_intf.h"
 #include "init_msg.h"
 #include "text_rendering.h"
 #include "../api/c/XRAAS_ND_msg_decode.h"
@@ -68,14 +68,14 @@ const char *ND_alert_overlay_default_font = "ShareTechMono" DIRSEP_S
 const int ND_alert_overlay_default_font_size = 28;
 
 static bool_t		inited = B_FALSE;
-static XPLMDataRef	dr = NULL, dr_overlay = NULL;
+static dr_t		dr, dr_overlay;
 static int		alert_status = 0;
 static uint64_t		alert_start_time = 0;
 
 static int		alert_overlay_dis = 0;
 
-static XPLMDataRef	dr_local_x, dr_local_y, dr_local_z;
-static XPLMDataRef	dr_pitch, dr_roll, dr_hdg;
+static dr_t		dr_local_x, dr_local_y, dr_local_z;
+static dr_t		dr_pitch, dr_roll, dr_hdg;
 
 static struct {
 	FT_Library	ft;
@@ -365,16 +365,15 @@ ND_integ_init(void)
 	char		acf_path[512] = { 0 };
 	char		*line = NULL;
 	size_t		line_len = 0;
-	XPLMDataRef icao_dr = XPLMFindDataRef("sim/aircraft/view/acf_ICAO");
-	XPLMDataRef auth_dr = XPLMFindDataRef("sim/aircraft/view/acf_author");
+	dr_t		icao_dr, auth_dr;
 	bool_t		skip = B_FALSE;
 
-	XPLMGetNthAircraftModel(0, my_acf, acf_path);
-	XPLMGetDatab(icao_dr, my_icao, 0, sizeof (my_icao) - 1);
-	my_icao[sizeof (my_icao) - 1] = 0;
+	fdr_find(&icao_dr, "sim/aircraft/view/acf_ICAO");
+	fdr_find(&auth_dr, "sim/aircraft/view/acf_author");
 
-	XPLMGetDatab(auth_dr, my_author, 0, sizeof (my_author) - 1);
-	my_author[sizeof (my_author) - 1] = 0;
+	XPLMGetNthAircraftModel(0, my_acf, acf_path);
+	dr_gets(&icao_dr, my_icao, sizeof (my_icao));
+	dr_gets(&auth_dr, my_author, sizeof (my_author));
 
 	/*
 	 * Unfortunately the studio isn't available via datarefs, so parse
@@ -589,28 +588,20 @@ ND_alerts_init(void)
 
 	ND_integ_init();
 
-	dr = dr_intf_add_i(DR_NAME, &alert_status, B_FALSE);
-	VERIFY(dr != NULL);
-	dr_overlay = dr_intf_add_i(OVERLAY_DIS_DR, &alert_overlay_dis, B_TRUE);
-	VERIFY(dr_overlay != NULL);
+	dr_create_i(&dr, &alert_status, B_FALSE, DR_NAME);
+	dr_create_i(&dr_overlay, &alert_overlay_dis, B_TRUE, OVERLAY_DIS_DR);
 	XPLMRegisterFlightLoopCallback(alert_sched_cb, ND_SCHED_INTVAL, NULL);
 
 	XPLMRegisterDrawCallback(nd_alert_draw_cb,
 	    overlay_info != NULL ? xplm_Phase_Gauges : xplm_Phase_Window,
 	    0, NULL);
 
-	dr_local_x = XPLMFindDataRef("sim/flightmodel/position/local_x");
-	VERIFY(dr_local_x != NULL);
-	dr_local_y = XPLMFindDataRef("sim/flightmodel/position/local_y");
-	VERIFY(dr_local_y != NULL);
-	dr_local_z = XPLMFindDataRef("sim/flightmodel/position/local_z");
-	VERIFY(dr_local_z != NULL);
-	dr_pitch = XPLMFindDataRef("sim/flightmodel/position/theta");
-	VERIFY(dr_pitch != NULL);
-	dr_roll = XPLMFindDataRef("sim/flightmodel/position/phi");
-	VERIFY(dr_roll != NULL);
-	dr_hdg = XPLMFindDataRef("sim/flightmodel/position/psi");
-	VERIFY(dr_hdg != NULL);
+	fdr_find(&dr_local_x, "sim/flightmodel/position/local_x");
+	fdr_find(&dr_local_y, "sim/flightmodel/position/local_y");
+	fdr_find(&dr_local_z, "sim/flightmodel/position/local_z");
+	fdr_find(&dr_pitch, "sim/flightmodel/position/theta");
+	fdr_find(&dr_roll, "sim/flightmodel/position/phi");
+	fdr_find(&dr_hdg, "sim/flightmodel/position/psi");
 
 	inited = B_TRUE;
 
@@ -718,9 +709,8 @@ ND_alerts_fini()
 
 	memset(&overlay, 0, sizeof (overlay));
 
-	dr_intf_remove(dr);
-	dr_intf_remove(dr_overlay);
-	dr = NULL;
+	dr_delete(&dr);
+	dr_delete(&dr_overlay);
 	XPLMUnregisterFlightLoopCallback(alert_sched_cb, NULL);
 	XPLMUnregisterDrawCallback(nd_alert_draw_cb,
 	    overlay_info != NULL ? xplm_Phase_Gauges : xplm_Phase_Window,

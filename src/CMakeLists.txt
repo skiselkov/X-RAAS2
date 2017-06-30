@@ -18,10 +18,10 @@ project(plugin C)
 
 SET(SRC xraas2.c dbg_log.c conf.c rwy_key_tbl.c xraas_cfg.c snd_sys.c
     nd_alert.c dbg_gui.c ../api/c/XRAAS_ND_msg_decode.c gui.c init_msg.c
-    text_rendering.c dr_intf.c airdata.c airportdb.c)
+    text_rendering.c airdata.c airportdb.c)
 SET(HDR dbg_log.h conf.h airportdb.h rwy_key_tbl.h xraas_cfg.h snd_sys.h
     nd_alert.h dbg_gui.h ../api/c/XRAAS_ND_msg_decode.h gui.h init_msg.h
-    text_rendering.h dr_intf.h airdata.h)
+    text_rendering.h airdata.h)
 
 SET(ALL_SRC ${SRC} ${HDR})
 LIST(SORT ALL_SRC)
