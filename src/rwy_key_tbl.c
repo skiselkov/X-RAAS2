@@ -28,9 +28,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#include "airportdb.h"
-#include "dbg_log.h"
+#include <acfutils/airportdb.h>
 
+#include "dbg_log.h"
 #include "rwy_key_tbl.h"
 
 #define	RWY_ID_KEY_SZ			16

@@ -32,7 +32,6 @@
 #include <acfutils/perf.h>
 
 #include "airdata.h"
-#include "airportdb.h"
 #include "dbg_log.h"
 #include "xraas2.h"
 #include "dbg_gui.h"

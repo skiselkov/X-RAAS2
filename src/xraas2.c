@@ -30,9 +30,9 @@
 #include <XPLMUtilities.h>
 #include <XPLMPlugin.h>
 
-#include <acfutils/acfutils.h>
 #include <acfutils/assert.h>
 #include <acfutils/avl.h>
+#include <acfutils/conf.h>
 #include <acfutils/dr.h>
 #include <acfutils/geom.h>
 #include <acfutils/helpers.h>
@@ -44,8 +44,6 @@
 #include <acfutils/wav.h>
 
 #include "airdata.h"
-#include "airportdb.h"
-#include "conf.h"
 #include "dbg_gui.h"
 #include "dbg_log.h"
 #include "gui.h"
@@ -130,6 +128,8 @@
 #define	UNITS_APPEND_INTVAL		120	/* seconds */
 
 #define	TILE_NAME_FMT			"%+03.0f%+04.0f"
+
+#define	XRAAS_CACHE_DIR			"X-RAAS.cache"
 
 typedef struct {
 	double min, max;
@@ -312,11 +312,11 @@ overrides_init(void)
 		overrides[i].value_i = 0;
 		if (overrides[i].type == xplmType_Int) {
 			dr_create_i(&overrides[i].dr, &overrides[i].value_i,
-			    B_TRUE, overrides[i].name);
+			    B_TRUE, "%s", overrides[i].name);
 		} else {
 			ASSERT3S(overrides[i].type, ==, xplmType_Float);
 			dr_create_f(&overrides[i].dr, &overrides[i].value_f,
-			    B_TRUE, overrides[i].name);
+			    B_TRUE, "%s", overrides[i].name);
 		}
 	}
 }
@@ -2386,6 +2386,7 @@ xraas_init(void)
 	bool_t airportdb_created = B_FALSE;
 	char *sep;
 	char livpath[1024];
+	char *cachedir;
 
 	ASSERT(!xraas_inited);
 
@@ -2443,8 +2444,15 @@ xraas_init(void)
 	if (state.config.debug_graphical)
 		dbg_gui_init();
 
-	airportdb_create(&state.airportdb, xpdir);
+#ifdef	XRAAS_IS_EMBEDDED
+	cachedir = mkpathname(xraas_plugindir, XRAAS_CACHE_DIR, NULL);
+#else	/* !XRAAS_IS_EMBEDDED */
+	cachedir = mkpathname(xpdir, "Output", "caches", XRAAS_CACHE_DIR,
+	    NULL);
+#endif	/* !XRAAS_IS_EMBEDDED */
+	airportdb_create(&state.airportdb, xpdir, cachedir);
 	airportdb_created = B_TRUE;
+	free(cachedir);
 
 	if (!recreate_cache(&state.airportdb))
 		goto errout;
@@ -2563,7 +2571,7 @@ XPluginStart(char *outName, char *outSig, char *outDesc)
 {
 	char *p;
 
-	acfutils_logfunc = XPLMDebugString;
+	log_init(XPLMDebugString, XRAAS2_PLUGIN_NAME);
 
 	/* Always use Unix-native paths on the Mac! */
 	XPLMEnableFeature("XPLM_USE_NATIVE_PATHS", 1);

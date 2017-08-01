@@ -63,8 +63,12 @@ win32 {
 }
 
 win32:contains(CROSS_COMPILE, x86_64-w64-mingw32-) {
+	QMAKE_CFLAGS += $$system("$$[LIBACFUTILS]/pkg-config-deps win-64 \
+	    --cflags")
+
 	# This must go first so GCC finds the deps in the latter libraries
 	LIBS += -L $$[LIBACFUTILS]/qmake/win64 -lacfutils
+	LIBS += $$system("$$[LIBACFUTILS]/pkg-config-deps win-64 --libs")
 	LIBS += -ldbghelp
 	LIBS += -L../SDK/Libraries/Win -lXPLM_64 -lXPWidgets_64
 	LIBS += -L../OpenAL/libs/Win64 -lOpenAL32
@@ -73,7 +77,10 @@ win32:contains(CROSS_COMPILE, x86_64-w64-mingw32-) {
 }
 
 win32:contains(CROSS_COMPILE, i686-w64-mingw32-) {
+	QMAKE_CFLAGS += $$system("$$[LIBACFUTILS]/pkg-config-deps win-32 \
+	    --cflags")
 	LIBS += -L $$[LIBACFUTILS]/qmake/win32 -lacfutils
+	LIBS += $$system("$$[LIBACFUTILS]/pkg-config-deps win-32 --libs")
 	LIBS += -ldbghelp
 	LIBS += -L../SDK/Libraries/Win -lXPLM -lXPWidgets
 	LIBS += -L../OpenAL/libs/Win32 -lOpenAL32
@@ -88,17 +95,24 @@ unix:!macx {
 }
 
 linux-g++-64 {
+	QMAKE_CFLAGS += $$system("$$[LIBACFUTILS]/pkg-config-deps linux-64 \
+	    --cflags")
 	LIBS += -L../FreeType/freetype-linux-64/lib -lfreetype
 	LIBS += -L $$[LIBACFUTILS]/qmake/lin64 -lacfutils
+	LIBS += $$system("$$[LIBACFUTILS]/pkg-config-deps linux-64 --libs")
 }
 
 linux-g++-32 {
+	QMAKE_CFLAGS += $$system("$$[LIBACFUTILS]/pkg-config-deps linux-32 \
+	    --cflags")
 	# The stack protector forces us to depend on libc,
 	# but we'd prefer to be static.
 	QMAKE_CFLAGS += -fno-stack-protector
 	LIBS += -fno-stack-protector
 	LIBS += -L../FreeType/freetype-linux-32/lib -lfreetype
 	LIBS += -L $$[LIBACFUTILS]/qmake/lin32 -lacfutils
+	LIBS += $$system("$$[LIBACFUTILS]/pkg-config-deps linux-32 --libs")
+	LIBS += -lssp_nonshared
 }
 
 macx {
@@ -111,13 +125,19 @@ macx {
 }
 
 macx-clang {
+	QMAKE_CFLAGS += $$system("$$[LIBACFUTILS]/pkg-config-deps mac-64 \
+	    --cflags")
 	LIBS += -L../FreeType/freetype-mac-64/lib -lfreetype
 	LIBS += -L $$[LIBACFUTILS]/qmake/mac64 -lacfutils
+	LIBS += $$system("$$[LIBACFUTILS]/pkg-config-deps mac-64 --libs")
 }
 
 macx-clang-32 {
+	QMAKE_CFLAGS += $$system("$$[LIBACFUTILS]/pkg-config-deps mac-32 \
+	    --cflags")
 	LIBS += -L../FreeType/freetype-mac-32/lib -lfreetype
 	LIBS += -L$$[LIBACFUTILS]/qmake/mac32 -lacfutils
+	LIBS += $$system("$$[LIBACFUTILS]/pkg-config-deps mac-32 --libs")
 }
 
 HEADERS += ../src/*.h ../api/c/XRAAS_ND_msg_decode.h

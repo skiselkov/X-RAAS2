@@ -18,12 +18,12 @@
 #ifndef	_XRAAS2_H_
 #define	_XRAAS2_H_
 
+#include <acfutils/airportdb.h>
 #include <acfutils/avl.h>
 #include <acfutils/geom.h>
 #include <acfutils/list.h>
 #include <acfutils/types.h>
 
-#include "airportdb.h"
 #include "rwy_key_tbl.h"
 
 #ifdef	__cplusplus

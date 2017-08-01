@@ -16,12 +16,11 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(plugin C)
 
-SET(SRC xraas2.c dbg_log.c conf.c rwy_key_tbl.c xraas_cfg.c snd_sys.c
+SET(SRC xraas2.c dbg_log.c rwy_key_tbl.c xraas_cfg.c snd_sys.c
     nd_alert.c dbg_gui.c ../api/c/XRAAS_ND_msg_decode.c gui.c init_msg.c
-    text_rendering.c airdata.c airportdb.c)
-SET(HDR dbg_log.h conf.h airportdb.h rwy_key_tbl.h xraas_cfg.h snd_sys.h
-    nd_alert.h dbg_gui.h ../api/c/XRAAS_ND_msg_decode.h gui.h init_msg.h
-    text_rendering.h airdata.h)
+    text_rendering.c airdata.c)
+SET(HDR dbg_log.h rwy_key_tbl.h xraas_cfg.h snd_sys.h nd_alert.h dbg_gui.h
+    ../api/c/XRAAS_ND_msg_decode.h gui.h init_msg.h text_rendering.h airdata.h)
 
 SET(ALL_SRC ${SRC} ${HDR})
 LIST(SORT ALL_SRC)
@@ -39,11 +38,11 @@ else()
 endif()
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Werror --std=c99")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} \
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -I${LIBACFUTILS}/src \
     -DCHECK_RESULT_USED=\"__attribute__ ((warn_unused_result))\"")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_GNU_SOURCE -D_FILE_OFFSET_BITS=64")
 
-include_directories(xtcas PUBLIC "${LIBACFUTILS}/src")
+#include_directories(xtcas PUBLIC "")
 
 #libraries
 if(APPLE)
@@ -74,23 +73,47 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fvisibility=hidden")
 #linking
 link_libraries(m)
 if(APPLE)
-	set(CMAKE_LIBRARY_PATH ${CMAKE_LIBRARY_PATH} ../SDK/Libraries/Mac)
 	FIND_LIBRARY(XPLM_LIBRARY XPLM ../SDK/Libraries/Mac)
 	FIND_LIBRARY(XPWIDGETS_LIBRARY XPWidgets ../SDK/Libraries/Mac)
 	FIND_LIBRARY(OPENAL_LIBRARY OpenAL)
 	FIND_LIBRARY(OPENGL_LIBRARY OpenGL)
+	FIND_LIBRARY(ACFUTILS_LIBRARY acfutils ${LIBACFUTILS}/qmake/mac64)
+	FIND_LIBRARY(OPUSFILE_LIBRARY opusfile
+	    ${LIBACFUTILS}/opus/opusfile-mac-64/lib)
+	FIND_LIBRARY(OPUS_LIBRARY opus ${LIBACFUTILS}/opus/opus-mac-64/lib)
+	FIND_LIBRARY(OGG_LIBRARY ogg
+	    ${LIBACFUTILS}/opus/libogg-mac-64/install/lib)
+
 	# Can't use FIND_LIBRARY for FreeType, because it uses the system-level
 	# dylib. Instead, we append it manually to the linker flags below.
-	target_link_libraries(plugin ${XPLM_LIBRARY} ${XPWIDGETS_LIBRARY}
-	    ${OPENAL_LIBRARY} ${OPENGL_LIBRARY})
+	target_link_libraries(plugin
+	    ${XPLM_LIBRARY}
+	    ${XPWIDGETS_LIBRARY}
+	    ${OPENAL_LIBRARY}
+	    ${OPENGL_LIBRARY}
+	    ${ACFUTILS_LIBRARY}
+	    ${OPUSFILE_LIBRARY}
+	    ${OPUS_LIBRARY}
+	    ${OGG_LIBRARY}
+	    )
 else()
 	FIND_LIBRARY(FREETYPE_LIBRARY freetype
 	    "../FreeType/freetype-linux-64/lib")
-	target_link_libraries(plugin ${FREETYPE_LIBRARY})
-endif()
+	FIND_LIBRARY(ACFUTILS_LIBRARY acfutils ${LIBACFUTILS}/qmake/lin64)
+	FIND_LIBRARY(OPUSFILE_LIBRARY opusfile
+	    ${LIBACFUTILS}/opus/opusfile-linux-64/lib)
+	FIND_LIBRARY(OPUS_LIBRARY opus ${LIBACFUTILS}/opus/opus-linux-64/lib)
+	FIND_LIBRARY(OGG_LIBRARY ogg
+	    ${LIBACFUTILS}/opus/libogg-linux-64/install/lib)
 
-set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} \
-    -L${LIBACFUTILS}/qmake/mac64 -lacfutils")
+	target_link_libraries(plugin
+	    ${FREETYPE_LIBRARY}
+	    ${ACFUTILS_LIBRARY}
+	    ${OPUSFILE_LIBRARY}
+	    ${OPUS_LIBRARY}
+	    ${OGG_LIBRARY}
+	    )
+endif()
 
 #output
 SET_TARGET_PROPERTIES(plugin PROPERTIES PREFIX "")
@@ -107,6 +130,7 @@ elseif(UNIX)
 	    "${CMAKE_SHARED_LINKER_FLAGS} -rdynamic -nodefaultlibs \
 	    -undefined_warning -fPIC -fvisibility=hidden")
 endif()
+
 
 set_target_properties(plugin PROPERTIES RUNTIME_OUTPUT_DIRECTORY
     "${CMAKE_SOURCE_DIR}/bin/xraas2" )

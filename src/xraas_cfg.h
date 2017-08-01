@@ -18,8 +18,8 @@
 #ifndef	_XRAAS_CFG_H_
 #define	_XRAAS_CFG_H_
 
+#include <acfutils/conf.h>
 #include "xraas2.h"
-#include "conf.h"
 
 #ifdef	__cplusplus
 extern "C" {
