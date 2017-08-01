@@ -45,116 +45,123 @@
 ######################################
 
 DIST_FILES=(
-    'COPYING'					'Documentation'
-    'api/COPYING'				'Documentation/api'
-    'api/python/XRAAS_ND_msg_decode.py'		'Documentation/api/python'
-    'api/python/test_sample.py'			'Documentation/api/python'
-    'api/lua/test_sample.lua'			'Documentation/api/lua'
-    'api/lua/XRAAS_ND_msg_decode.lua'		'Documentation/api/lua'
-    'api/c/XRAAS_ND_msg_decode.h'		'Documentation/api/c'
-    'api/c/XRAAS_ND_msg_decode.c'		'Documentation/api/c'
-    'api/c/test_sample.c'			'Documentation/api/c'
+    'COPYING'				'Documentation'
+    'api/COPYING'			'Documentation/api'
+    'api/python/XRAAS_ND_msg_decode.py'	'Documentation/api/python'
+    'api/python/test_sample.py'		'Documentation/api/python'
+    'api/lua/test_sample.lua'		'Documentation/api/lua'
+    'api/lua/XRAAS_ND_msg_decode.lua'	'Documentation/api/lua'
+    'api/c/XRAAS_ND_msg_decode.h'	'Documentation/api/c'
+    'api/c/XRAAS_ND_msg_decode.c'	'Documentation/api/c'
+    'api/c/test_sample.c'		'Documentation/api/c'
     'Documentation/AvionicsIntegrationGuide/AvionicsIntegrationGuide.pdf' \
 	'Documentation'
     'Documentation/UserManual/UserManual.pdf'	'Documentation'
     'data/fonts/Aileron/Aileron-Regular.otf'			''
     'data/fonts/ShareTechMono/OFL.txt'				''
     'data/fonts/ShareTechMono/ShareTechMono-Regular.ttf'	''
-    'data/ND_overlays.cfg'					''
-    'data/msgs/female/0.wav'					''
-    'data/msgs/female/1.wav'					''
-    'data/msgs/female/2.wav'					''
-    'data/msgs/female/3.wav'					''
-    'data/msgs/female/30.wav'					''
-    'data/msgs/female/4.wav'					''
-    'data/msgs/female/5.wav'					''
-    'data/msgs/female/6.wav'					''
-    'data/msgs/female/7.wav'					''
-    'data/msgs/female/8.wav'					''
-    'data/msgs/female/9.wav'					''
-    'data/msgs/female/alt_set.wav'				''
-    'data/msgs/female/apch.wav'					''
-    'data/msgs/female/avail.wav'				''
-    'data/msgs/female/caution.wav'				''
-    'data/msgs/female/center.wav'				''
-    'data/msgs/female/deep_land.wav'				''
-    'data/msgs/female/feet.wav'					''
-    'data/msgs/female/flaps.wav'				''
-    'data/msgs/female/hundred.wav'				''
-    'data/msgs/female/left.wav'					''
-    'data/msgs/female/long_land.wav'				''
-    'data/msgs/female/meters.wav'				''
-    'data/msgs/female/on_rwy.wav'				''
-    'data/msgs/female/on_twy.wav'				''
-    'data/msgs/female/pause.wav'				''
-    'data/msgs/female/right.wav'				''
-    'data/msgs/female/rmng.wav'					''
-    'data/msgs/female/rwys.wav'					''
-    'data/msgs/female/short_rwy.wav'				''
-    'data/msgs/female/thousand.wav'				''
-    'data/msgs/female/too_fast.wav'				''
-    'data/msgs/female/too_high.wav'				''
-    'data/msgs/female/twy.wav'					''
-    'data/msgs/female/unstable.wav'				''
-    'data/msgs/male/0.wav'					''
-    'data/msgs/male/1.wav'					''
-    'data/msgs/male/2.wav'					''
-    'data/msgs/male/3.wav'					''
-    'data/msgs/male/30.wav'					''
-    'data/msgs/male/4.wav'					''
-    'data/msgs/male/5.wav'					''
-    'data/msgs/male/6.wav'					''
-    'data/msgs/male/7.wav'					''
-    'data/msgs/male/8.wav'					''
-    'data/msgs/male/9.wav'					''
-    'data/msgs/male/alt_set.wav'				''
-    'data/msgs/male/apch.wav'					''
-    'data/msgs/male/avail.wav'					''
-    'data/msgs/male/caution.wav'				''
-    'data/msgs/male/center.wav'					''
-    'data/msgs/male/deep_land.wav'				''
-    'data/msgs/male/feet.wav'					''
-    'data/msgs/male/flaps.wav'					''
-    'data/msgs/male/hundred.wav'				''
-    'data/msgs/male/left.wav'					''
-    'data/msgs/male/long_land.wav'				''
-    'data/msgs/male/meters.wav'					''
-    'data/msgs/male/on_rwy.wav'					''
-    'data/msgs/male/on_twy.wav'					''
-    'data/msgs/male/pause.wav'					''
-    'data/msgs/male/right.wav'					''
-    'data/msgs/male/rmng.wav'					''
-    'data/msgs/male/rwys.wav'					''
-    'data/msgs/male/short_rwy.wav'				''
-    'data/msgs/male/thousand.wav'				''
-    'data/msgs/male/too_fast.wav'				''
-    'data/msgs/male/too_high.wav'				''
-    'data/msgs/male/twy.wav'					''
-    'data/msgs/male/unstable.wav'				''
+    'data/ND_overlays.cfg'		''
+    'data/msgs/female/0.wav'		'//WAV2OPUS//'
+    'data/msgs/female/1.wav'		'//WAV2OPUS//'
+    'data/msgs/female/2.wav'		'//WAV2OPUS//'
+    'data/msgs/female/3.wav'		'//WAV2OPUS//'
+    'data/msgs/female/30.wav'		'//WAV2OPUS//'
+    'data/msgs/female/4.wav'		'//WAV2OPUS//'
+    'data/msgs/female/5.wav'		'//WAV2OPUS//'
+    'data/msgs/female/6.wav'		'//WAV2OPUS//'
+    'data/msgs/female/7.wav'		'//WAV2OPUS//'
+    'data/msgs/female/8.wav'		'//WAV2OPUS//'
+    'data/msgs/female/9.wav'		'//WAV2OPUS//'
+    'data/msgs/female/alt_set.wav'	'//WAV2OPUS//'
+    'data/msgs/female/apch.wav'		'//WAV2OPUS//'
+    'data/msgs/female/avail.wav'	'//WAV2OPUS//'
+    'data/msgs/female/caution.wav'	'//WAV2OPUS//'
+    'data/msgs/female/center.wav'	'//WAV2OPUS//'
+    'data/msgs/female/deep_land.wav'	'//WAV2OPUS//'
+    'data/msgs/female/feet.wav'		'//WAV2OPUS//'
+    'data/msgs/female/flaps.wav'	'//WAV2OPUS//'
+    'data/msgs/female/hundred.wav'	'//WAV2OPUS//'
+    'data/msgs/female/left.wav'		'//WAV2OPUS//'
+    'data/msgs/female/long_land.wav'	'//WAV2OPUS//'
+    'data/msgs/female/meters.wav'	'//WAV2OPUS//'
+    'data/msgs/female/on_rwy.wav'	'//WAV2OPUS//'
+    'data/msgs/female/on_twy.wav'	'//WAV2OPUS//'
+    'data/msgs/female/pause.wav'	'//WAV2OPUS//'
+    'data/msgs/female/right.wav'	'//WAV2OPUS//'
+    'data/msgs/female/rmng.wav'		'//WAV2OPUS//'
+    'data/msgs/female/rwys.wav'		'//WAV2OPUS//'
+    'data/msgs/female/short_rwy.wav'	'//WAV2OPUS//'
+    'data/msgs/female/thousand.wav'	'//WAV2OPUS//'
+    'data/msgs/female/too_fast.wav'	'//WAV2OPUS//'
+    'data/msgs/female/too_high.wav'	'//WAV2OPUS//'
+    'data/msgs/female/twy.wav'		'//WAV2OPUS//'
+    'data/msgs/female/unstable.wav'	'//WAV2OPUS//'
+    'data/msgs/male/0.wav'		'//WAV2OPUS//'
+    'data/msgs/male/1.wav'		'//WAV2OPUS//'
+    'data/msgs/male/2.wav'		'//WAV2OPUS//'
+    'data/msgs/male/3.wav'		'//WAV2OPUS//'
+    'data/msgs/male/30.wav'		'//WAV2OPUS//'
+    'data/msgs/male/4.wav'		'//WAV2OPUS//'
+    'data/msgs/male/5.wav'		'//WAV2OPUS//'
+    'data/msgs/male/6.wav'		'//WAV2OPUS//'
+    'data/msgs/male/7.wav'		'//WAV2OPUS//'
+    'data/msgs/male/8.wav'		'//WAV2OPUS//'
+    'data/msgs/male/9.wav'		'//WAV2OPUS//'
+    'data/msgs/male/alt_set.wav'	'//WAV2OPUS//'
+    'data/msgs/male/apch.wav'		'//WAV2OPUS//'
+    'data/msgs/male/avail.wav'		'//WAV2OPUS//'
+    'data/msgs/male/caution.wav'	'//WAV2OPUS//'
+    'data/msgs/male/center.wav'		'//WAV2OPUS//'
+    'data/msgs/male/deep_land.wav'	'//WAV2OPUS//'
+    'data/msgs/male/feet.wav'		'//WAV2OPUS//'
+    'data/msgs/male/flaps.wav'		'//WAV2OPUS//'
+    'data/msgs/male/hundred.wav'	'//WAV2OPUS//'
+    'data/msgs/male/left.wav'		'//WAV2OPUS//'
+    'data/msgs/male/long_land.wav'	'//WAV2OPUS//'
+    'data/msgs/male/meters.wav'		'//WAV2OPUS//'
+    'data/msgs/male/on_rwy.wav'		'//WAV2OPUS//'
+    'data/msgs/male/on_twy.wav'		'//WAV2OPUS//'
+    'data/msgs/male/pause.wav'		'//WAV2OPUS//'
+    'data/msgs/male/right.wav'		'//WAV2OPUS//'
+    'data/msgs/male/rmng.wav'		'//WAV2OPUS//'
+    'data/msgs/male/rwys.wav'		'//WAV2OPUS//'
+    'data/msgs/male/short_rwy.wav'	'//WAV2OPUS//'
+    'data/msgs/male/thousand.wav'	'//WAV2OPUS//'
+    'data/msgs/male/too_fast.wav'	'//WAV2OPUS//'
+    'data/msgs/male/too_high.wav'	'//WAV2OPUS//'
+    'data/msgs/male/twy.wav'		'//WAV2OPUS//'
+    'data/msgs/male/unstable.wav'	'//WAV2OPUS//'
     'config/X-RAAS.cfg'			'Documentation/sample-config'
 )
 
+function install_xtra_file() {
+	FILE="$1"
+	DSTDIR="$2"
+	if [[ "$DSTDIR" = "//PNG2DDS//" ]]; then
+		DSTDIR=""
+		XFERCMD="convert"
+		TGTFILE="$(basename "$FILE")"
+		TGTFILE="${TGTFILE/%.png/.dds}"
+	elif [[ "$DSTDIR" = "//WAV2OPUS//" ]]; then
+		DSTDIR=""
+		XFERCMD="opusenc --bitrate 64 --framesize 60"
+		TGTFILE="$(basename "$FILE")"
+		TGTFILE="${TGTFILE/%.wav/.opus}"
+	else
+		TGTFILE="$(basename "$FILE")"
+		XFERCMD="cp"
+	fi
+	if [[ "$DSTDIR" = "" ]]; then
+		DSTDIR="$(dirname "$FILE")"
+	fi
+	mkdir -p "X-RAAS2${embed_suffix}/$DSTDIR"
+	$XFERCMD "$FILE" "X-RAAS2${embed_suffix}/$DSTDIR/$TGTFILE"
+}
+
 function install_xtra_files() {
-	for (( I=0; $I < ${#DIST_FILES[@]}; I=$I + 2 )); do
-		FILE="${DIST_FILES[$I]}"
-		DSTDIR="${DIST_FILES[$I+1]}"
-		# Documentation isn't needed in the embeddable build
-		# (except when it's the FF A320!)
-		if [ -n "${embed}" ] && [[ "$acf_type" != 1 ]] &&
-		    ( [[ "$DSTDIR" == Documentation/* ]] ||
-		    [[ "$DSTDIR" == Documentation ]] ); then
-			continue
-		fi
-		if [[ "$acf_type" == 1 ]] && ( [[ "$FILE" == api/* ]] ||
-		    [[ "$FILE" == */AvionicsIntegrationGuide.pdf ]] ); then
-			continue
-		fi
-		if [[ "$DSTDIR" = "" ]]; then
-			DSTDIR="$(dirname "$FILE")"
-		fi
-		mkdir -p "X-RAAS2${embed_suffix}/$DSTDIR"
-		cp "$FILE" "X-RAAS2${embed_suffix}/$DSTDIR"
-	done
+        for (( I=0; $I < ${#DIST_FILES[@]}; I=$I + 2 )); do
+                install_xtra_file "${DIST_FILES[$I]}" "${DIST_FILES[$I + 1]}"
+        done
 }
 
 embed=''
