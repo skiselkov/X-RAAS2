@@ -299,7 +299,7 @@ const char *xraas_plugindir = plugindir;
 
 static const char *FJS737[] = { "B732", NULL };
 static const char *IXEG737[] = { "B733", NULL };
-static const char *FF757[] = { "B752", "B753", NULL };
+static const char *FF757_767[] = { "B752", "B753", "B763", NULL };
 static const char *FF777[] = { "B772", "B773", "B77L", "B77W", NULL };
 static const char *JAR[] = {
 	"A318", "A319", "A320", "A321", "A322", "A333", "A338", "A339", NULL
@@ -461,7 +461,7 @@ gpws_terr_ovrd(void)
 {
 	if (overrides[OVRD_GPWS_TERR_OVRD].value_i != 0) {
 		return (overrides[OVRD_GPWS_TERR_OVRD_ACT].value_i != 0);
-	} else if (chk_acf_dr(FF757, NULL, "anim/75/button")) {
+	} else if (chk_acf_dr(FF757_767, NULL, "anim/75/button")) {
 		return (XPLMGetDatai(XPLMFindDataRef("anim/75/button")) == 1);
 	} else if (chk_acf_dr(FF777, NULL, "anim/51/button")) {
 		return (XPLMGetDatai(XPLMFindDataRef("anim/51/button")) == 1);
@@ -492,7 +492,7 @@ gpws_flaps_ovrd(void)
 {
 	if (overrides[OVRD_GPWS_FLAPS_OVRD].value_i != 0) {
 		return (overrides[OVRD_GPWS_FLAPS_OVRD_ACT].value_i != 0);
-	} else if (chk_acf_dr(FF757, NULL, "anim/72/button")) {
+	} else if (chk_acf_dr(FF757_767, NULL, "anim/72/button")) {
 		return (XPLMGetDatai(XPLMFindDataRef("anim/72/button")) == 1);
 	} else if (chk_acf_dr(FF777, NULL, "anim/79/button")) {
 		return (XPLMGetDatai(XPLMFindDataRef("anim/79/button")) == 1);
