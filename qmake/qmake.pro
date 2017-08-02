@@ -40,6 +40,7 @@ DEFINES += _GNU_SOURCE DEBUG _FILE_OFFSET_BITS=64 _USE_MATH_DEFINES
 
 # Latest X-Plane APIs. No legacy support needed.
 DEFINES += XPLM200 XPLM210
+DEFINES += XRAAS2_BUILD_VERSION=\'\"$$system("git rev-parse --short HEAD")\"\'
 
 # Aircraft-specific defines
 DEFINES += ACF_TYPE=$$[ACF_TYPE]

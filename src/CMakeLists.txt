@@ -68,6 +68,14 @@ else()
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DAPL=0 -DIBM=0 -DLIN=1")
 endif()
 
+# Yes, we need to strip a trailing newline from command output. CMake is
+# "smart" like that...
+execute_process(COMMAND git rev-parse --short HEAD
+    OUTPUT_VARIABLE XRAAS2_BUILD_VERSION)
+string(REGEX REPLACE "\n$" "" XRAAS2_BUILD_VERSION "${XRAAS2_BUILD_VERSION}")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} \
+    -DXRAAS2_BUILD_VERSION='\"${XRAAS2_BUILD_VERSION}\"'")
+
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fvisibility=hidden")
 
 #linking
