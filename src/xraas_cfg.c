@@ -253,7 +253,7 @@ load_config(xraas_state_t *state, const char *dirname)
 		int errline;
 
 		dbg_log(config, 1, "loading config file: %s", cfgname);
-		if ((conf = parse_conf(cfg_f, &errline)) == NULL) {
+		if ((conf = conf_read(cfg_f, &errline)) == NULL) {
 			log_init_msg(B_TRUE, INIT_ERR_MSG_TIMEOUT, "5",
 			    "Configuration", "X-RAAS startup error: syntax "
 			    "error on line %d in config file:\n%s\n"
@@ -264,7 +264,7 @@ load_config(xraas_state_t *state, const char *dirname)
 			return (B_FALSE);
 		}
 		process_conf(state, conf);
-		free_conf(conf);
+		conf_free(conf);
 		fclose(cfg_f);
 	}
 	free(cfgname);
