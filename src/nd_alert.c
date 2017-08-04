@@ -442,7 +442,6 @@ ND_integ_init(void)
 
 	while (!feof(fp) && fscanf(fp, "%127s", buf) == 1) {
 		if (buf[0] == '#') {
-			logMsg("found comment, skipping");
 			while (fgetc(fp) != '\n' && !feof(fp))
 				;
 			continue;
