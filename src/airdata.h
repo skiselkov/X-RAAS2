@@ -113,17 +113,17 @@ typedef struct {
 	XPLMDataRef replay_mode;
 
 	XPLMDataRef nav1_frequency;
-	XPLMDataRef nav1_flag_glideslope;
+	XPLMDataRef nav1_type;
 	XPLMDataRef nav1_nav_id;
-	XPLMDataRef nav1_hdef_dots_pilot;
-	XPLMDataRef nav1_vdef_dots_pilot;
+	XPLMDataRef nav1_hdef_dots;
+	XPLMDataRef nav1_vdef_dots;
 	XPLMDataRef nav1_power;
 
 	XPLMDataRef nav2_frequency;
-	XPLMDataRef nav2_flag_glideslope;
+	XPLMDataRef nav2_type;
 	XPLMDataRef nav2_nav_id;
-	XPLMDataRef nav2_hdef_dots_pilot;
-	XPLMDataRef nav2_vdef_dots_pilot;
+	XPLMDataRef nav2_hdef_dots;
+	XPLMDataRef nav2_vdef_dots;
 	XPLMDataRef nav2_power;
 } drs_t;
 

@@ -56,6 +56,7 @@
 	(adc)->ils_info.active ? (adc)->ils_info.id : "", \
 	(adc)->ils_info.active ? (adc)->ils_info.hdef : 0.0, \
 	(adc)->ils_info.active ? (adc)->ils_info.vdef : 0.0
+#define	XPLANE_NAV_TYPE_ILS	40
 
 enum {
 	XP_DEFAULT_INTERFACE,
@@ -217,26 +218,20 @@ adc_init(void)
 	drs_l.replay_mode = dr_get("sim/operation/prefs/replay_mode");
 
 	drs_l.nav1_frequency = dr_get("sim/cockpit/radios/nav1_freq_hz");
-	drs_l.nav1_flag_glideslope =
-	    dr_get("sim/cockpit2/radios/indicators/nav1_flag_glideslope");
+	drs_l.nav1_type = dr_get("sim/cockpit2/radios/indicators/nav1_type");
 	drs_l.nav1_nav_id =
 	    dr_get("sim/cockpit2/radios/indicators/nav1_nav_id");
-	drs_l.nav1_hdef_dots_pilot =
-	    dr_get("sim/cockpit2/radios/indicators/nav1_hdef_dots_pilot");
-	drs_l.nav1_vdef_dots_pilot =
-	    dr_get("sim/cockpit2/radios/indicators/nav1_vdef_dots_pilot");
+	drs_l.nav1_hdef_dots = dr_get("sim/cockpit/radios/nav1_hdef_dot");
+	drs_l.nav1_vdef_dots = dr_get("sim/cockpit/radios/nav1_vdef_dot");
 	drs_l.nav1_power =
 	    dr_get("sim/cockpit2/radios/actuators/nav1_power");
 
 	drs_l.nav2_frequency = dr_get("sim/cockpit/radios/nav2_freq_hz");
-	drs_l.nav2_flag_glideslope =
-	    dr_get("sim/cockpit2/radios/indicators/nav2_flag_glideslope");
+	drs_l.nav2_type = dr_get("sim/cockpit2/radios/indicators/nav2_type");
 	drs_l.nav2_nav_id =
 	    dr_get("sim/cockpit2/radios/indicators/nav2_nav_id");
-	drs_l.nav2_hdef_dots_pilot =
-	    dr_get("sim/cockpit2/radios/indicators/nav2_hdef_dots_pilot");
-	drs_l.nav2_vdef_dots_pilot =
-	    dr_get("sim/cockpit2/radios/indicators/nav2_vdef_dots_pilot");
+	drs_l.nav2_hdef_dots = dr_get("sim/cockpit/radios/nav2_hdef_dot");
+	drs_l.nav2_vdef_dots = dr_get("sim/cockpit/radios/nav2_vdef_dot");
 	drs_l.nav2_power =
 	    dr_get("sim/cockpit2/radios/actuators/nav2_power");
 
@@ -326,23 +321,23 @@ xp_adc_get(adc_t *adc)
 	adc->vapp = NAN;
 
 	if (XPLMGetDatai(drs_l.nav1_power) == 1 &&
-	    XPLMGetDatai(drs_l.nav1_flag_glideslope) == 0) {
+	    XPLMGetDatai(drs_l.nav1_type) == XPLANE_NAV_TYPE_ILS) {
 		adc->ils_info.active = B_TRUE;
 		adc->ils_info.freq = XPLMGetDatai(drs_l.nav1_frequency) / 100.0;
 		XPLMGetDatab(drs_l.nav1_nav_id, adc->ils_info.id, 0,
 		    sizeof (adc->ils_info.id) - 1);
 		adc->ils_info.id[sizeof (adc->ils_info.id) - 1] = 0;
-		adc->ils_info.hdef = XPLMGetDataf(drs_l.nav1_hdef_dots_pilot);
-		adc->ils_info.vdef = XPLMGetDataf(drs_l.nav1_vdef_dots_pilot);
+		adc->ils_info.hdef = XPLMGetDataf(drs_l.nav1_hdef_dots);
+		adc->ils_info.vdef = XPLMGetDataf(drs_l.nav1_vdef_dots);
 	} else if (XPLMGetDatai(drs_l.nav2_power) == 1 &&
-	    XPLMGetDatai(drs_l.nav2_flag_glideslope) == 0) {
+	    XPLMGetDatai(drs_l.nav2_type) == XPLANE_NAV_TYPE_ILS) {
 		adc->ils_info.active = B_TRUE;
 		adc->ils_info.freq = XPLMGetDatai(drs_l.nav2_frequency) / 100.0;
 		XPLMGetDatab(drs_l.nav1_nav_id, adc->ils_info.id, 0,
 		    sizeof (adc->ils_info.id) - 1);
 		adc->ils_info.id[sizeof (adc->ils_info.id) - 1] = 0;
-		adc->ils_info.hdef = XPLMGetDataf(drs_l.nav2_hdef_dots_pilot);
-		adc->ils_info.vdef = XPLMGetDataf(drs_l.nav2_vdef_dots_pilot);
+		adc->ils_info.hdef = XPLMGetDataf(drs_l.nav2_hdef_dots);
+		adc->ils_info.vdef = XPLMGetDataf(drs_l.nav2_vdef_dots);
 	} else {
 		adc->ils_info.active = B_FALSE;
 		adc->ils_info.freq = NAN;
