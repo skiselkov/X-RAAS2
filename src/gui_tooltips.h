@@ -170,8 +170,7 @@ static const char *monitor_tooltips[NUM_MONITORS] = {
     /* LATE ROTATION_MON */
     "ON: the late rotation on takeoff monitor is enabled.\n"
     "OFF: the late rotation on takeoff monitor is disabled.\n"
-    MAN_REF("4.6"),
-    NULL
+    MAN_REF("4.6")
 };
 
 static const char *disable_ext_view_tooltip =
