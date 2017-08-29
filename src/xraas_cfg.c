@@ -25,6 +25,7 @@
 #include "init_msg.h"
 #include "dbg_log.h"
 #include "nd_alert.h"
+#include "snd_sys.h"
 
 #include "xraas_cfg.h"
 
@@ -105,8 +106,6 @@ reset_config(xraas_state_t *state)
 
 	/* The QFE monitor is the exception - off by default */
 	state->config.monitors[ALTM_QFE_MON] = B_FALSE;
-
-	openal_set_shared_ctx(B_FALSE);
 
 	memset(&xraas_debug_config, 0, sizeof (xraas_debug_config));
 
@@ -205,7 +204,9 @@ process_conf(xraas_state_t *state, conf_t *conf)
 	}
 
 	if (conf_get_b(conf, "openal_shared", &state->config.openal_shared))
-		openal_set_shared_ctx(state->config.openal_shared);
+		snd_sys_set_shared(state->config.openal_shared);
+	else
+		snd_sys_set_shared(B_FALSE);
 
 	if (conf_get_str(conf, "gpws_prio_dr", &str))
 		strlcpy(state->config.GPWS_priority_dataref, str,

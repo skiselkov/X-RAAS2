@@ -87,6 +87,8 @@ static msg_t voice_msgs[NUM_MSGS] = {
 static bool_t inited = B_FALSE;
 static bool_t view_is_ext = B_FALSE;
 static list_t playback_queue;
+static alc_t *alc = NULL;
+static bool_t openal_shared = B_FALSE;
 
 static void
 set_sound_on(bool_t flag)
@@ -306,7 +308,8 @@ snd_sys_init(const char *plugindir)
 	ASSERT(!inited);
 
 	/* no WAV/OpenAL calls before this */
-	if (!openal_init())
+	alc = openal_init(NULL, openal_shared);
+	if (alc == NULL)
 		return (B_FALSE);
 
 	gender_dir = (xraas_state->config.voice_female ? "female" : "male");
@@ -327,7 +330,8 @@ snd_sys_init(const char *plugindir)
 			pathname = mkpathname(plugindir, "data", "msgs",
 			    gender_dir, fname, NULL);
 		}
-		voice_msgs[msg].wav = wav_load(pathname, voice_msgs[msg].name);
+		voice_msgs[msg].wav = wav_load(pathname, voice_msgs[msg].name,
+		    alc);
 		if (voice_msgs[msg].wav == NULL) {
 			log_init_msg(B_TRUE, INIT_ERR_MSG_TIMEOUT, NULL, NULL,
 			    "X-RAAS initialization error: cannot load WAV "
@@ -355,7 +359,8 @@ errout:
 			voice_msgs[msg].wav = NULL;
 		}
 	}
-	openal_fini();
+	openal_fini(alc);
+	alc = NULL;
 
 	return (B_FALSE);
 }
@@ -387,7 +392,14 @@ snd_sys_fini(void)
 	}
 
 	/* no more OpenAL/WAV calls after this */
-	openal_fini();
+	openal_fini(alc);
+	alc = NULL;
 
 	inited = B_FALSE;
+}
+
+void
+snd_sys_set_shared(bool_t flag)
+{
+	openal_shared = flag;
 }
