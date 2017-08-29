@@ -297,6 +297,8 @@ const char *xraas_acf_dirpath = acf_dirpath;
 const char *xraas_acf_livpath = acf_livpath;
 const char *xraas_plugindir = plugindir;
 
+static dr_t sim_time_dr;
+
 static const char *FJS737[] = { "B732", NULL };
 static const char *IXEG737[] = { "B733", NULL };
 static const char *FF757_767[] = { "B752", "B753", "B763", NULL };
@@ -2233,6 +2235,11 @@ raas_exec(void)
 {
 	dbg_log(pwr_state, 3, "raas_exec");
 
+	if (dr_getf(&sim_time_dr) < state.inited_time + STARTUP_DELAY) {
+		dbg_log(pwr_state, 1, "init delay");
+		return;
+	}
+
 	/*
 	 * Ahead of the enabling check so that we can provide sensible runway
 	 * info in the embedded FF A320 case.
@@ -2507,6 +2514,13 @@ xraas_init(void)
 	xraas_inited = B_TRUE;
 	startup_complete();
 
+	/*
+	 * Memorize when we inited so we can delay actually starting to
+	 * issue advisories until some time has passed (in case the sim
+	 * is still loading scenery, or is paused).
+	 */
+	state.inited_time = dr_getf(&sim_time_dr);
+
 	return;
 
 errout:
@@ -2675,6 +2689,8 @@ XPluginStart(char *outName, char *outSig, char *outDesc)
 	 * aircraft-specific plugin to override us in its load routine.
 	 */
 	overrides_init();
+
+	fdr_find(&sim_time_dr, "sim/time/total_running_time_sec");
 
 	return (1);
 }

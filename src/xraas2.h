@@ -136,6 +136,7 @@ typedef struct xraas_state {
 	} config;
 
 	bool_t		input_faulted;	/* when adc_collect failed */
+	double		inited_time;	/* when we started up in sim time */
 
 	rwy_key_tbl_t	on_rwy_ann;
 	rwy_key_tbl_t	apch_rwy_ann;
