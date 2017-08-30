@@ -71,8 +71,8 @@
 # define	NEWLINE "\n"
 #endif		/* !IBM */
 
-#define	COPYRIGHT1	XRAAS_MENU_NAME " version " XRAAS2_VERSION \
-	"   Copyright 2017 Saso Kiselkov. All rights reserved."
+#define	COPYRIGHT1	XRAAS_MENU_NAME XRAAS2_VERSION \
+	"       Copyright 2017 Saso Kiselkov. All rights reserved."
 #define	COPYRIGHT2	"X-RAAS is open-source software. See COPYING for " \
 			"more information."
 #define	TOOLTIP_HINT	"Hint: hover your mouse cursor over any knob to " \
