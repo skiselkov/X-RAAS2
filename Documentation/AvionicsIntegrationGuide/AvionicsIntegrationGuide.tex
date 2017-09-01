@@ -337,7 +337,7 @@ in the datarefs.
 {\small
 \begin{center}
 
-\begin{tabular}{|p{0.42\textwidth}|p{0.51\textwidth}|}
+\begin{tabular}{|p{0.448\textwidth}|p{0.495\textwidth}|}
 
 \hline
 
@@ -348,34 +348,53 @@ in the datarefs.
 
 \dataref{xraas/override/takeoff\_flaps} &
 Setting to `1' or `0' enables or disables the use of the
-xraas/override/takeoff\_flaps\_act dataref. \\
+\dataref{takeoff\_flaps\_min\_act} and \dataref{takeoff\_flaps\_max\_act}
+datarefs. \\
 
 \hline
 
-\dataref{xraas/override/takeoff\_flaps\_act} &
-Provided the above dataref is set to `1', X-RAAS reads the value of this
-dataref to determine the exact required setting of the
+\dataref{xraas/override/takeoff\_flaps\_min\_act} &
+Provided \dataref{takeoff\_flaps} is set to `1', X-RAAS
+reads this dataref to determine the minimum valid setting of the
 \dataref{sim/flightmodel/controls/flaprqst} dataref which must be set
 prior to lining up on the runway. If the actual value of the
-\dataref{\ldots/flaprqst} dataref differs by more than 0.01 from this
-dataref's value, X-RAAS will issue a caution advisory on lining up on a
-runway for takeoff. \\
+\dataref{flaprqst} dataref is less than this value, X-RAAS
+willissue a caution advisory on lining up on a runway for takeoff. \\
+
+\hline
+
+\dataref{xraas/override/takeoff\_flaps\_max\_act} &
+Provided \dataref{takeoff\_flaps} is set to `1', X-RAAS reads this
+dataref to determine the maximum valid setting of the \dataref{flaprqst}
+dataref which must be set prior to lining up on the runway. If the actual
+value of the \dataref{flaprqst} dataref is greater than this value,
+X-RAAS willissue a caution advisory on lining up on a runway for takeoff.
+\\
 
 \hline
 
 \dataref{xraas/override/landing\_flaps} &
 Setting to `1' or `0' enables or disables the use of the
-\dataref{xraas/override/landing\_flaps\_act} dataref. \\
+\dataref{landing\_flaps\_min\_act} and \dataref{landing\_flaps\_max\_act}
+datarefs. \\
 
 \hline
 
-\dataref{xraas/override/landing\_flaps\_act} &
-Provided the above dataref is set to `1', X-RAAS reads the value of this
-dataref to determine the exact required \dataref{\ldots/flaprqst} value
+\dataref{xraas/override/landing\_flaps\_min\_act} &
+Provided \dataref{landing\_flaps} is set to `1', X-RAAS reads the value
+of this dataref to determine the minimum valid \dataref{flaprqst} value
 that must be set during approach to a runway. If the actual value of the
-\dataref{\ldots/flaprqst} dataref differs by more than 0.01 from this
-dataref's value, X-RAAS will issue appropriate advisories during
-approach. \\
+\dataref{flaprqst} dataref is less than this value, X-RAAS will issue
+appropriate advisories during approach. \\
+
+\hline
+
+\dataref{xraas/override/landing\_flaps\_max\_act} &
+Provided \dataref{landing\_flaps} is set to `1', X-RAAS reads the value
+of this dataref to determine the maximum valid \dataref{flaprqst} value
+that must be set during approach to a runway. If the actual value of the
+\dataref{flaprqst} dataref is greater than this value, X-RAAS will issue
+appropriate advisories during approach. \\
 
 \hline
 

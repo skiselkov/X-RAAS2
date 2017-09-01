@@ -45,13 +45,15 @@
 #define	ADC_PRINTF_FMT \
 	"ALT:%05.0fft/%02.2finHg/%04.0fm POS:%02.04fdeg/%03.04fdeg/%05.0fm " \
 	"ATT:%03.0fdeg/%02.1fdeg SPD:%03.0fkt/%03.0fmps TR:%05dft/%05dft " \
-	"FL:%0.02f/%0.02f VR:%03.0fkt/%03.0fkt ILS:%d/%.2f/%s/%.01f/%.01f"
+	"FL:%0.02f-%0.02f/%0.02f-%0.02f VR:%03.0fkt/%03.0fkt " \
+	"ILS:%d/%.2f/%s/%.01f/%.01f"
 #define	ADC_PRINTF_ARGS(adc) \
 	(adc)->baro_alt, (adc)->baro_set, (adc)->rad_alt, (adc)->lat, \
 	(adc)->lon, (adc)->elev, (adc)->hdg, (adc)->pitch, (adc)->cas, \
-	(adc)->gs, (adc)->trans_alt, (adc)->trans_lvl, (adc)->takeoff_flaps, \
-	(adc)->landing_flaps, (adc)->vref, (adc)->vapp, \
-	(adc)->ils_info.active, \
+	(adc)->gs, (adc)->trans_alt, (adc)->trans_lvl, \
+	(adc)->takeoff_flaps_min, (adc)->takeoff_flaps_max, \
+	(adc)->landing_flaps_min, (adc)->landing_flaps_max, \
+	(adc)->vref, (adc)->vapp, (adc)->ils_info.active, \
 	(adc)->ils_info.active ? (adc)->ils_info.freq : 0.0, \
 	(adc)->ils_info.active ? (adc)->ils_info.id : "", \
 	(adc)->ils_info.active ? (adc)->ils_info.hdef : 0.0, \
@@ -315,8 +317,10 @@ xp_adc_get(adc_t *adc)
 	adc->pitch = XPLMGetDataf(drs_l.pitch);
 	adc->cas = XPLMGetDataf(drs_l.cas);
 	adc->gs = XPLMGetDataf(drs_l.gs);
-	adc->takeoff_flaps = NAN;
-	adc->landing_flaps = NAN;
+	adc->takeoff_flaps_min = NAN;
+	adc->takeoff_flaps_max = NAN;
+	adc->landing_flaps_min = NAN;
+	adc->landing_flaps_max = NAN;
 	adc->vref = NAN;
 	adc->vapp = NAN;
 
@@ -531,25 +535,30 @@ ff_a320_val_id(const char *name)
 
 /*
  * Translates the flaps configuration parameter values from the FF A320
- * model into flap handle positions we get from X-Plane.
+ * model into flap handle positions we get from X-Plane. We need to provide
+ * ranges for cases when using an analog flap handle.
  */
-static double
-ff_a320_flaps2flaprqst(int config)
+static void
+ff_a320_flaps2gates(int config, double *lower_gate, double *upper_gate)
 {
-	switch (config) {
-	case 0:
-		return (0.0);
-	case 1:
-	case 2:
-		return (0.25);
-	case 3:
-		return (0.5);
-	case 4:
-		return (0.75);
-	case 5:
-		return (1.0);
-	default:
-		return (NAN);
+	if (config == 0) {
+		*lower_gate = 0.0;
+		*upper_gate = 0.125;
+	} else if (config == 1 || config == 2) {
+		*lower_gate = 0.125;
+		*upper_gate = 0.375;
+	} else if (config == 3) {
+		*lower_gate = 0.375;
+		*upper_gate = 0.625;
+	} else if (config == 4) {
+		*lower_gate = 0.375;
+		*upper_gate = 0.875;
+	} else if (config == 5) {
+		*lower_gate = 0.875;
+		*upper_gate = 1.0;
+	} else {
+		*lower_gate = NAN;
+		*upper_gate = NAN;
 	}
 }
 
@@ -692,10 +701,10 @@ ff_a320_update(double step, void *tag)
 	ff_adc.trans_lvl = MET2FEET(ff_a320_getf32(ff_a320.ids.trans_lvl));
 
 
-	ff_adc.takeoff_flaps = ff_a320_flaps2flaprqst(ff_a320_gets32(
-	    ff_a320.ids.takeoff_flaps));
-	ff_adc.landing_flaps = ff_a320_flaps2flaprqst(ff_a320_gets32(
-	    ff_a320.ids.landing_flaps));
+	ff_a320_flaps2gates(ff_a320_gets32(ff_a320.ids.takeoff_flaps),
+	    &ff_adc.takeoff_flaps_min, &ff_adc.takeoff_flaps_max);
+	ff_a320_flaps2gates(ff_a320_gets32(ff_a320.ids.landing_flaps),
+	    &ff_adc.landing_flaps_min, &ff_adc.landing_flaps_max);
 	ff_adc.vref = NAN;
 	ff_adc.vapp = ff_a320_getf32(ff_a320.ids.vapp);
 

@@ -188,9 +188,11 @@ enum {
 	OVRD_VREF,
 	OVRD_VREF_ACT,
 	TAKEOFF_FLAPS,
-	TAKEOFF_FLAPS_ACT,
+	TAKEOFF_FLAPS_MIN_ACT,
+	TAKEOFF_FLAPS_MAX_ACT,
 	LANDING_FLAPS,
-	LANDING_FLAPS_ACT,
+	LANDING_FLAPS_MIN_ACT,
+	LANDING_FLAPS_MAX_ACT,
 	NUM_OVERRIDES
 };
 
@@ -262,7 +264,11 @@ static struct {
 	},
 	{
 		.type = xplmType_Float,
-		.name = XRAAS2_DR_PREFIX "/override/takeoff_flaps_act"
+		.name = XRAAS2_DR_PREFIX "/override/takeoff_flaps_min_act"
+	},
+	{
+		.type = xplmType_Float,
+		.name = XRAAS2_DR_PREFIX "/override/takeoff_flaps_max_act"
 	},
 	{
 		.type = xplmType_Int,
@@ -270,7 +276,11 @@ static struct {
 	},
 	{
 		.type = xplmType_Float,
-		.name = XRAAS2_DR_PREFIX "/override/landing_flaps_act"
+		.name = XRAAS2_DR_PREFIX "/override/landing_flaps_min_act"
+	},
+	{
+		.type = xplmType_Float,
+		.name = XRAAS2_DR_PREFIX "/override/landing_flaps_max_act"
 	}
 };
 
@@ -983,21 +993,25 @@ flaps_chk(bool_t takeoff)
 	double lower_gate, upper_gate;
 
 	if (takeoff) {
-		if (!isnan(adc->takeoff_flaps)) {
-			lower_gate = upper_gate = adc->takeoff_flaps;
+		if (!isnan(adc->takeoff_flaps_min)) {
+			ASSERT(!isnan(adc->takeoff_flaps_max));
+			lower_gate = adc->takeoff_flaps_min;
+			upper_gate = adc->takeoff_flaps_max;
 		} else if (overrides[TAKEOFF_FLAPS].value_i != 0) {
-			lower_gate = upper_gate =
-			    overrides[TAKEOFF_FLAPS_ACT].value_f;
+			lower_gate = overrides[TAKEOFF_FLAPS_MIN_ACT].value_f;
+			upper_gate = overrides[TAKEOFF_FLAPS_MAX_ACT].value_f;
 		} else {
 			lower_gate = state.config.min_takeoff_flap;
 			upper_gate = state.config.max_takeoff_flap;
 		}
 	} else {
-		if (!isnan(adc->landing_flaps)) {
-			lower_gate = upper_gate = adc->landing_flaps;
+		if (!isnan(adc->landing_flaps_min)) {
+			ASSERT(!isnan(adc->landing_flaps_max));
+			lower_gate = adc->landing_flaps_min;
+			upper_gate = adc->landing_flaps_max;
 		} else if (overrides[LANDING_FLAPS].value_i != 0) {
-			lower_gate = upper_gate =
-			    overrides[LANDING_FLAPS_ACT].value_f;
+			lower_gate = overrides[LANDING_FLAPS_MIN_ACT].value_f;
+			upper_gate = overrides[LANDING_FLAPS_MAX_ACT].value_f;
 		} else {
 			lower_gate = state.config.min_landing_flap;
 			upper_gate = 1.0;
@@ -1052,9 +1066,11 @@ perform_on_rwy_ann(const char *rwy_id, vect2_t pos_v, vect2_t thr_v,
 	if (!flaps_chk(B_TRUE) && !state.landing &&
 	    !gpws_flaps_ovrd() && flap_check) {
 		dbg_log(apch_cfg_chk, 1, "FLAPS: flaprqst = %g "
-		    "min_flap = %g (adc: %g ovrd: %g)", adc->flaprqst,
-		    state.config.min_landing_flap, adc->landing_flaps,
-		    overrides[LANDING_FLAPS_ACT].value_f);
+		    "min_flap = %g (adc: %g-%g ovrd: %g-%g)", adc->flaprqst,
+		    state.config.min_landing_flap, adc->landing_flaps_min,
+		    adc->landing_flaps_max,
+		    overrides[LANDING_FLAPS_MIN_ACT].value_f,
+		    overrides[LANDING_FLAPS_MAX_ACT].value_f);
 		append_msglist(&msg, &msg_len, FLAPS_MSG);
 		append_msglist(&msg, &msg_len, FLAPS_MSG);
 		allow_on_rwy_ND_alert = B_FALSE;
@@ -1736,9 +1752,11 @@ apch_cfg_chk(const char *arpt_id, const char *rwy_id, double height_abv_thr,
 		    !flaps_chk(B_FALSE) && !gpws_flaps_ovrd() &&
 		    state.config.monitors[flaps_mon]) {
 			dbg_log(apch_cfg_chk, 1, "FLAPS: flaprqst = %g "
-			    "min_flap = %g (adc: %g ovrd: %g)", adc->flaprqst,
-			    state.config.min_landing_flap, adc->landing_flaps,
-			    overrides[LANDING_FLAPS_ACT].value_f);
+			    "min_flap = %g (adc: %g-%g ovrd: %g-%g)",
+			    adc->flaprqst, state.config.min_landing_flap,
+			    adc->landing_flaps_min, adc->landing_flaps_max,
+			    overrides[LANDING_FLAPS_MIN_ACT].value_f,
+			    overrides[LANDING_FLAPS_MAX_ACT].value_f);
 			if (!critical)
 				ann_apch_cfg(msg, msg_len, add_pause,
 				    FLAPS_MSG, ND_ALERT_FLAPS);

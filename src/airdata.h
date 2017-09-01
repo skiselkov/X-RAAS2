@@ -72,10 +72,13 @@ typedef struct {
 	float	gear[NUM_GEAR];
 	int	gear_type[NUM_GEAR];
 
-	double	takeoff_flaps;	/* flaprqst value from FMS, NAN if N/A */
-	double	landing_flaps;	/* flaprqst value from FMS, NAN if N/A */
-	double	vref;		/* knots from FMS, NAN if N/A */
-	double	vapp;		/* knots from FMS, NAN if N/A */
+	/* Following values are NAN if N/A. */
+	double	takeoff_flaps_min;	/* min flaprqst value from FMS */
+	double	takeoff_flaps_max;	/* max flaprqst value from FMS */
+	double	landing_flaps_min;	/* min flaprqst value from FMS */
+	double	landing_flaps_max;	/* max flaprqst value from FMS */
+	double	vref;			/* knots from FMS */
+	double	vapp;			/* knots from FMS */
 
 	struct {
 		bool_t	active;	/* flag indicating if the info is reliable */
