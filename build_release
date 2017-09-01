@@ -163,6 +163,13 @@ function install_xtra_file() {
 	if [[ "$DSTDIR" = "" ]]; then
 		DSTDIR="$(dirname "$FILE")"
 	fi
+	# When making an aircraft-type-specific build, don't include the
+	# API & integration docs, as those are not necessary (we've already
+	# done the integration ourselves).
+	if [ "$acf_type" -ne 0 ] && ( [[ "$FILE" = api/* ]] || \
+	    [[ "$FILE" = *AvionicsIntegrationGuide.pdf* ]] ); then
+		return
+	fi
 	mkdir -p "X-RAAS2${embed_suffix}/$DSTDIR"
 	$XFERCMD "$FILE" "X-RAAS2${embed_suffix}/$DSTDIR/$TGTFILE"
 }
