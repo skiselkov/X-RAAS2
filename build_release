@@ -144,7 +144,16 @@ function install_xtra_file() {
 		TGTFILE="${TGTFILE/%.png/.dds}"
 	elif [[ "$DSTDIR" = "//WAV2OPUS//" ]]; then
 		DSTDIR=""
-		XFERCMD="opusenc --bitrate 64 --framesize 60"
+		# We need to fix the logical stream serial number, otherwise
+		# opusenc randomly generates a new one each time and that
+		# makes our output non-deterministic. This messes with our
+		# product distribution platform, since it will be downloading
+		# the new Opus sound files even though nothing has changed.
+		# So to make the serial number pseudo-random, we fix it to
+		# first 32 bits of the MD5 hash of the source WAV file.
+		MD5=$(md5sum "$FILE")
+		XFERCMD="opusenc --bitrate 64 --framesize 60 --serial \
+		    $(printf '%d' "0x${MD5:0:8}")"
 		TGTFILE="$(basename "$FILE")"
 		TGTFILE="${TGTFILE/%.wav/.opus}"
 	else
