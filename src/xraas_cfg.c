@@ -91,9 +91,11 @@ reset_config(xraas_state_t *state)
 	state->config.speak_units = B_TRUE;
 	state->config.long_land_lim_abs = 610;	/* 2000 feet */
 	state->config.long_land_lim_fract = 0.25;
-	state->config.nd_alerts_enabled = B_TRUE;
 	state->config.nd_alert_filter = ND_ALERT_ROUTINE;
+#if	ACF_TYPE != FF_A320_ACF_TYPE
+	state->config.nd_alerts_enabled = B_TRUE;
 	state->config.nd_alert_overlay_enabled = B_TRUE;
+#endif	/* ACF_TYPE != FF_A320_ACF_TYPE */
 	state->config.nd_alert_timeout = 7;
 	strlcpy(state->config.nd_alert_overlay_font,
 	    ND_alert_overlay_default_font,
@@ -101,8 +103,13 @@ reset_config(xraas_state_t *state)
 	state->config.nd_alert_overlay_font_size =
 	    ND_alert_overlay_default_font_size;
 
-	for (int i = 0; i < NUM_MONITORS; i++)
+	for (int i = 0; i < NUM_MONITORS; i++) {
 		state->config.monitors[i] = B_TRUE;
+#if	ACF_TYPE == FF_A320_ACF_TYPE
+		if (i == ON_RWY_FLAP_MON)
+			state->config.monitors[i] = B_FALSE;
+#endif	/* ACF_TYPE == FF_A320_ACF_TYPE */
+	}
 
 	/* The QFE monitor is the exception - off by default */
 	state->config.monitors[ALTM_QFE_MON] = B_FALSE;
@@ -193,6 +200,10 @@ process_conf(xraas_state_t *state, conf_t *conf)
 #undef	CONF_GET
 
 	for (int i = 0; i < NUM_MONITORS; i++) {
+#if	ACF_TYPE == FF_A320_ACF_TYPE
+		if (i == ON_RWY_FLAP_MON)
+			continue;
+#endif	/* ACF_TYPE == FF_A320_ACF_TYPE */
 		if (conf_get_b(conf, monitor_conf_keys[i],
 		    &state->config.monitors[i])) {
 			int l = strlen(monitor_conf_keys[i]) + 6;

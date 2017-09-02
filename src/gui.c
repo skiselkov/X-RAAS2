@@ -739,9 +739,16 @@ create_main_window(void)
 	x = LAYOUT_START_X + COLUMN_X + WINDOW_MARGIN;
 	y = LAYOUT_START_Y + WINDOW_MARGIN / 2;
 
-	for (int i = 0; i < NUM_MONITORS; i++)
+	for (int i = 0; i < NUM_MONITORS; i++) {
 		LAYOUT_BUTTON(monitors[i], monitor_names[i], PushButton,
 		    CheckBox, monitor_tooltips[i]);
+#if	ACF_TYPE == FF_A320_ACF_TYPE
+		if (i == ON_RWY_FLAP_MON) {
+			XPSetWidgetProperty(buttons.monitors[i],
+			    xpProperty_Enabled, 0);
+		}
+#endif	/* ACF_TYPE == FF_A320_ACF_TYPE */
+	}
 
 #undef	LAYOUT_BUTTON
 

@@ -93,6 +93,9 @@ static const char *monitor_tooltips[NUM_MONITORS] = {
     /* ON_RWY_FLAP_MON */
     "ON: the on-runway lineup late flap selection monitor is enabled.\n"
     "OFF: the on-runway lineup late flap selection monitor is disabled.\n"
+#if	ACF_TYPE == FF_A320_ACF_TYPE
+    "NOTE: this monitor is not available on the Airbus A320.\n"
+#endif	/* ACF_TYPE == FF_A320_ACF_TYPE */
     MAN_REF("4.1"),
     /* ON_RWY_TKOFF_SHORT_MON */
     "ON: the short runway takeoff monitor is enabled.\n"
