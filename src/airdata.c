@@ -374,7 +374,7 @@ ff_a320_intf_init(void)
 		return (B_FALSE);
 	}
 	XPLMSendMessageToPlugin(plugin, XPLM_FF_MSG_GET_SHARED_INTERFACE,
-	    &ff_a320);
+	    &ff_a320.svi);
 	if (ff_a320.svi.DataAddUpdate == NULL) {
 		dbg_log(ff_a320, 1, "init fail: func vector empty");
 		return (B_FALSE);
