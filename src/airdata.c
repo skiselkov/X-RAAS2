@@ -126,10 +126,6 @@ static struct {
 
 		int hdg;			/* degrees true -180..+180 */
 
-		int fpa;			/* degrees nose up */
-		int aoa_value;			/* degrees down */
-		int aoa_valid;			/* flag 0/1 */
-
 		int cas;			/* meters/second */
 		int gs;				/* meters/second */
 
@@ -609,13 +605,6 @@ ff_a320_update(double step, void *tag)
 		    ff_a320_val_id("Aircraft.Navigation.GPWC.Elevation");
 		ff_a320.ids.hdg =
 		    ff_a320_val_id("Aircraft.Navigation.GPWC.Heading");
-
-		ff_a320.ids.fpa =
-		    ff_a320_val_id("Aircraft.Navigation.GPWC.Path");
-		ff_a320.ids.aoa_value = ff_a320_val_id(
-		    "Aircraft.Navigation.ADIRS.Sensors.AOA1.Value");
-		ff_a320.ids.aoa_valid = ff_a320_val_id(
-		    "Aircraft.Navigation.ADIRS.Sensors.AOA1.Valid");
 
 		ff_a320.ids.cas =
 		    ff_a320_val_id("Aircraft.Navigation.GPWC.AirSpeed");
