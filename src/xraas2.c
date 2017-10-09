@@ -2660,9 +2660,9 @@ XPluginStart(char *outName, char *outSig, char *outDesc)
 	/* cut off the trailing path component (our filename) */
 	if ((p = strrchr(plugindir, DIRSEP)) != NULL)
 		*p = '\0';
-	/* cut off an optional '64' trailing component */
+	/* cut off an optional trailing '64' or '32' component */
 	if ((p = strrchr(plugindir, DIRSEP)) != NULL) {
-		if (strcmp(p + 1, "64") == 0)
+		if (strcmp(p + 1, "64") == 0 || strcmp(p + 1, "32") == 0)
 			*p = '\0';
 	}
 

@@ -8,10 +8,10 @@ extern "C" {
 
 #define bool bool_t
 
-#if	!WIN
+#if	!IBM
 #undef __stdcall
 #define __stdcall
-#endif	/* !WIN */
+#endif	/* !IBM */
 
 #define Value_Type_Deleted				0
 #define Value_Type_Object				1

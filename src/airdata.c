@@ -70,7 +70,7 @@ static void xp_adc_get(adc_t *adc);
 
 static bool_t ff_a320_intf_init(void);
 static void ff_a320_intf_fini(void);
-static void ff_a320_update(double step, void *tag);
+static void __stdcall ff_a320_update(double step, void *tag);
 static bool_t ff_a320_adc_get(adc_t *adc);
 static const char *ff_a320_type2str(unsigned int t);
 
@@ -558,7 +558,7 @@ ff_a320_flaps2gates(int config, double *lower_gate, double *upper_gate)
 	}
 }
 
-static void
+static void __stdcall
 ff_a320_update(double step, void *tag)
 {
 	double alt_uncorr;

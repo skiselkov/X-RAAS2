@@ -319,7 +319,8 @@ snd_sys_init(const char *plugindir)
 		char *pathname;
 
 		ASSERT(voice_msgs[msg].wav == NULL);
-		snprintf(fname, sizeof (fname), "%s.opus", voice_msgs[msg].name);
+		snprintf(fname, sizeof (fname), "%s.opus",
+		    voice_msgs[msg].name);
 		pathname = mkpathname(plugindir, "data", "msgs", gender_dir,
 		    fname, NULL);
 		if (!file_exists(pathname, NULL)) {
