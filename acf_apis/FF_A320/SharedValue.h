@@ -2,6 +2,8 @@
 #define __SharedValue__
 //--------------------------------------------------------------------------
 
+#include <acfutils/types.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -11,7 +13,7 @@ extern "C" {
 #if	!IBM
 #undef __stdcall
 #define __stdcall
-#endif	/* !IBM */
+#endif	/* !WIN */
 
 #define Value_Type_Deleted				0
 #define Value_Type_Object				1

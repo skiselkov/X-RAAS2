@@ -22,12 +22,18 @@ CONFIG -= thread exceptions qt rtti debug
 
 VERSION = 1.0.0
 
-INCLUDEPATH += ../FreeType/freetype-2.7/include
-INCLUDEPATH += ../SDK/CHeaders/XPLM ../SDK/CHeaders/Widgets ../SDK
-# Always just use the shipped OpenAL headers for predictability.
+INCLUDEPATH += $$[LIBACFUTILS]/FreeType/freetype-2.7/include
+INCLUDEPATH += $$[LIBACFUTILS]/SDK/CHeaders/XPLM
+INCLUDEPATH += $$[LIBACFUTILS]/SDK/CHeaders/Widgets
+INCLUDEPATH += $$[LIBACFUTILS]/SDK
+
+# Always just use the libacfutils OpenAL headers for predictability.
 # The ABI is X-Plane-internal and stable anyway.
-INCLUDEPATH += ../OpenAL/include
+INCLUDEPATH += $$[LIBACFUTILS]/OpenAL/include
 INCLUDEPATH += $$[LIBACFUTILS]/src
+
+# Aircraft-type-specific APIs
+INCLUDEPATH += ../acf_apis
 
 QMAKE_CFLAGS += -std=c99 -g -W -Wall -Wextra -Werror -fvisibility=hidden
 QMAKE_CFLAGS += -Wunused-result
@@ -72,10 +78,9 @@ win32:contains(CROSS_COMPILE, x86_64-w64-mingw32-) {
 	LIBS += -L $$[LIBACFUTILS]/qmake/win64 -lacfutils
 	LIBS += $$system("$$[LIBACFUTILS]/pkg-config-deps win-64 --libs")
 	LIBS += -ldbghelp
-	LIBS += -L../SDK/Libraries/Win -lXPLM_64 -lXPWidgets_64
-	LIBS += -L../OpenAL/libs/Win64 -lOpenAL32
-	LIBS += -L../GL_for_Windows/lib -lopengl32
-	LIBS += -L../FreeType/freetype-win-64/lib -lfreetype
+	LIBS += -L$$[LIBACFUTILS]/SDK/Libraries/Win -lXPLM_64 -lXPWidgets_64
+	LIBS += -L$$[LIBACFUTILS]/OpenAL/libs/Win64 -lOpenAL32
+	LIBS += -L$$[LIBACFUTILS]/GL_for_Windows/lib -lopengl32
 }
 
 win32:contains(CROSS_COMPILE, i686-w64-mingw32-) {
@@ -84,10 +89,9 @@ win32:contains(CROSS_COMPILE, i686-w64-mingw32-) {
 	LIBS += -L $$[LIBACFUTILS]/qmake/win32 -lacfutils
 	LIBS += $$system("$$[LIBACFUTILS]/pkg-config-deps win-32 --libs")
 	LIBS += -ldbghelp
-	LIBS += -L../SDK/Libraries/Win -lXPLM -lXPWidgets
-	LIBS += -L../OpenAL/libs/Win32 -lOpenAL32
-	LIBS += -L../GL_for_Windows/lib -lopengl32
-	LIBS += -L../FreeType/freetype-win-32/lib -lfreetype
+	LIBS += -L$$[LIBACFUTILS]/SDK/Libraries/Win -lXPLM -lXPWidgets
+	LIBS += -L$$[LIBACFUTILS]/OpenAL/libs/Win32 -lOpenAL32
+	LIBS += -L$$[LIBACFUTILS]/GL_for_Windows/lib -lopengl32
 }
 
 unix:!macx {

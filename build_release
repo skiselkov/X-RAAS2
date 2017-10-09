@@ -241,11 +241,6 @@ if [[ "$#" -ge $OPTIND ]]; then
 	exit 1
 fi
 
-if ! ( cd FreeType && ./build_freetype_deps ); then
-	echo "FreeType build failed" >&2
-	exit 1
-fi
-
 if [[ "$nodoc" == "no" ]] && ! ( cd Documentation && make ) ; then
 	cat << EOF >&2
 Documentation build failed, please make sure you have pdfTeX installed.
