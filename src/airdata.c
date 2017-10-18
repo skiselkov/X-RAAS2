@@ -674,9 +674,14 @@ ff_a320_update(double step, void *tag)
 	ff_adc.baro_set = 29.92 + ((adc_l.baro_alt - alt_uncorr) / 1000.0);
 	ff_adc.rad_alt = MET2FEET(ff_a320_getf32(ff_a320.ids.rad_alt));
 
-	ff_adc.lat = RAD2DEG(ff_a320_getf64(ff_a320.ids.lat));
-	ff_adc.lon = RAD2DEG(ff_a320_getf64(ff_a320.ids.lon));
-	ff_adc.elev = ff_a320_getf32(ff_a320.ids.elev);
+	/*
+	 * The IRS positions can be quite inaccurate and result in spurious
+	 * annunciations. So we will instead opt to use X-Plane's position,
+	 * which is always accurate.
+	 */
+	ff_adc.lat = XPLMGetDatad(drs_l.lat);
+	ff_adc.lon = XPLMGetDatad(drs_l.lon);
+	ff_adc.elev = XPLMGetDatad(drs_l.elev);
 
 	ff_adc.hdg = ff_a320_getf32(ff_a320.ids.hdg);
 	if (ff_adc.hdg < 0)
