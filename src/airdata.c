@@ -663,6 +663,15 @@ ff_a320_update(double step, void *tag)
 
 	ff_adc.baro_alt = MET2FEET(ff_a320_getf32(ff_a320.ids.baro_alt));
 	alt_uncorr = MET2FEET(ff_a320_getf32(ff_a320.ids.baro_raw));
+	if (!is_valid_alt(ff_adc.baro_alt)) {
+		/*
+		 * The FF A320 signals that the altimeter setting is STD by
+		 * passing an invalid value for the baro altitude (-10000m).
+		 * So in that case, we take the uncorrected value to be the
+		 * actual baro altitude (since they are equivalent).
+		 */
+		ff_adc.baro_alt = alt_uncorr;
+	}
 	/*
 	 * Since we don't get access to the raw baro setting on the altimeter,
 	 * we work it out from the baro-corrected and baro-uncorrected
@@ -671,7 +680,8 @@ ff_a320_update(double step, void *tag)
 	 * this, we only need it to check that the altimeter setting is QNE
 	 * when doing the alt->FL transition.
 	 */
-	ff_adc.baro_set = 29.92 + ((adc_l.baro_alt - alt_uncorr) / 1000.0);
+	ff_adc.baro_set = 29.92 + ((ff_adc.baro_alt - alt_uncorr) / 1000.0);
+
 	ff_adc.rad_alt = MET2FEET(ff_a320_getf32(ff_a320.ids.rad_alt));
 
 	/*
