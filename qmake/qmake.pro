@@ -125,7 +125,7 @@ macx {
 	DEFINES += APL=1 IBM=0 LIN=0
 	TARGET = mac.xpl
 	INCLUDEPATH += ../OpenAL/include
-	LIBS += -F../SDK/Libraries/Mac
+	LIBS += -F$$[LIBACFUTILS]/SDK/Libraries/Mac
 	LIBS += -framework XPLM -framework XPWidgets
 	LIBS += -framework OpenGL -framework OpenAL
 }

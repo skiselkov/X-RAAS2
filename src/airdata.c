@@ -420,18 +420,6 @@ ff_a320_setf32(int id, float val)
 	ff_a320.svi.ValueSet(id, &val);
 }
 
-static inline double
-ff_a320_getf64(int id)
-{
-	double val;
-	unsigned int type = ff_a320.svi.ValueType(id);
-	ASSERT_MSG(type == Value_Type_float64,
-	    "%s isn't a float64 type, instead it is %s",
-	    ff_a320.svi.ValueName(id), ff_a320_type2str(type));
-	ff_a320.svi.ValueGet(id, &val);
-	return (val);
-}
-
 static inline void
 ff_a320_setf64(int id, double val)
 {
