@@ -260,11 +260,11 @@ case `uname` in
 Linux)
 	set -e
 	( cd qmake && ./build-win-lin $embed -t "$acf_type" )
-	mkdir -p X-RAAS2${embed_suffix}/{32,64}
 	if [[ "$acf_type" == 1 ]]; then
-		cp qmake/output/32/win.xpl X-RAAS2${embed_suffix}/32
+		mkdir -p X-RAAS2${embed_suffix}/64
 		cp qmake/output/64/win.xpl X-RAAS2${embed_suffix}/64
 	else
+		mkdir -p X-RAAS2${embed_suffix}/{32,64}
 		cp qmake/output/32/{win,lin}.xpl X-RAAS2${embed_suffix}/32
 		cp qmake/output/64/{win,lin}.xpl X-RAAS2${embed_suffix}/64
 	fi
