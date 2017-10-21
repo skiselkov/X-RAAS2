@@ -156,6 +156,11 @@ function install_xtra_file() {
 		    $(printf '%d' "0x${MD5:0:8}")"
 		TGTFILE="$(basename "$FILE")"
 		TGTFILE="${TGTFILE/%.wav/.opus}"
+	elif [[ "$DSTDIR" = "//WAV2MP3//" ]]; then
+		DSTDIR=""
+		XFERCMD="lame -b 64 -h"
+		TGTFILE="$(basename "$FILE")"
+		TGTFILE="${TGTFILE/%.wav/.mp3}"
 	else
 		TGTFILE="$(basename "$FILE")"
 		XFERCMD="cp"
