@@ -9,6 +9,12 @@ The installation zip package includes a full user manual with
 installation instructions in Documentation/User Manual.pdf. Refer to
 COPYING for the license.
 
+## DONATIONS
+
+To leave a voluntary donation, please follow the PayPal link below:
+
+[![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=8DN9LYD5VP4NY)
+
 ### BUILDING
 
 To build X-RAAS, check to see you have the pre-requisites installed. The
