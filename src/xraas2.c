@@ -2233,6 +2233,10 @@ xraas_is_on(void)
 	float bus_volts[2];
 	bool_t turned_on;
 
+	if (XPLMGetDatai(drs->replay_mode) != 0 &&
+	    !state.config.override_replay)
+		return (B_FALSE);
+
 	if (ff_a320_is_loaded() && !GPWS_is_inop())
 		return (ff_a320_powered());
 
@@ -2243,9 +2247,7 @@ xraas_is_on(void)
 	    XPLMGetDatai(drs->avionics_on) == 1 &&
 	    !GPWS_is_inop());
 
-	return ((turned_on || state.config.override_electrical) &&
-	    (XPLMGetDatai(drs->replay_mode) == 0 ||
-	    state.config.override_replay));
+	return (turned_on || state.config.override_electrical);
 }
 
 static void
