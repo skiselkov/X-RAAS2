@@ -23,10 +23,15 @@
 # build on your platform. We currently support the following build platforms:
 #
 #	*) Ubuntu 16.04 LTS (or later): this builds the Linux and Windows
-#	   32 & 64-bit flavors. Refer to qmake/build-win-lin for details of
+#	   64-bit flavors. Refer to qmake/build-win-lin for details of
 #	   the required build packages.
-#	*) Mac OS 10.9.5 (or later): this builds the Mac OS 32 & 64-bit
-#	   flavors. Refer to qmake/build-mac for details.
+#	*) Mac OS 10.9.5 (or later): this builds the Mac OS 64-bit
+#	   flavor. Refer to qmake/build-mac for details.
+#
+# Please note that X-RAAS2 no longer performs 32-bit builds by default.
+# The qmake specifications contain the necessary stanzas, but they are no
+# longer built by default and tested and are subject to removal at some
+# later point in time.
 #
 # In each case, you'll want to have your basic build environment working
 # (i.e. build packages installed on Linux, Xcode on Mac).
@@ -260,25 +265,14 @@ case `uname` in
 Linux)
 	set -e
 	( cd qmake && ./build-win-lin $embed -t "$acf_type" )
-	if [[ "$acf_type" == 1 ]]; then
-		mkdir -p X-RAAS2${embed_suffix}/64
-		cp qmake/output/64/win.xpl X-RAAS2${embed_suffix}/64
-	else
-		mkdir -p X-RAAS2${embed_suffix}/{32,64}
-		cp qmake/output/32/{win,lin}.xpl X-RAAS2${embed_suffix}/32
-		cp qmake/output/64/{win,lin}.xpl X-RAAS2${embed_suffix}/64
-	fi
+	mkdir -p X-RAAS2${embed_suffix}/64
+	cp qmake/output/64/{win,lin}.xpl X-RAAS2${embed_suffix}/64
 	install_xtra_files
 	set +e
 	;;
 Darwin)
-	if [[ "$acf_type" == 1 ]]; then
-		echo "The FlightFactor Airbus A320 isn't supported on Mac." >&2
-		exit 1
-	fi
 	( cd qmake && ./build-mac $embed -t "$acf_type" ) && \
-	    mkdir -p X-RAAS2${embed_suffix}/{32,64} && \
-	    cp qmake/output/32/mac.xpl X-RAAS2${embed_suffix}/32 && \
+	    mkdir -p X-RAAS2${embed_suffix}/64 && \
 	    cp qmake/output/64/mac.xpl X-RAAS2${embed_suffix}/64 && \
 	    install_xtra_files
 	;;

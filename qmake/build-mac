@@ -15,7 +15,7 @@
 
 # Copyright 2016 Saso Kiselkov. All rights reserved.
 
-# Invoke this script to build X-RAAS2 for Mac 32- & 64-bit flavors.
+# Invoke this script to build X-RAAS2 for Mac 64-bit flavor.
 # Make sure also to install macports's qt5-qtcreator package and
 # have `qmake' available in your $PATH.
 
@@ -45,8 +45,7 @@ if [ "$LIBACFUTILS" = "**Unknown**" ]; then
 	exit 1
 fi
 
-if ! [ -f "$LIBACFUTILS/qmake/mac32/libacfutils.a" ] ||
-    ! [ -f "$LIBACFUTILS/qmake/mac64/libacfutils.a" ]; then
+if ! [ -f "$LIBACFUTILS/qmake/mac64/libacfutils.a" ]; then
 	if ! ( cd "$LIBACFUTILS/qmake" && ./build-mac ) ; then
 		exit 1
 	fi
@@ -57,7 +56,7 @@ fi
 NCPUS=$(( $(sysctl -n hw.ncpu) + 1 ))
 
 rm -rf output
-mkdir -p output/{32,64}
+mkdir -p output/64
 
 make distclean > /dev/null
 qmake -set XRAAS_EMBED $embed && \
@@ -65,16 +64,6 @@ qmake -set XRAAS_EMBED $embed && \
     qmake -spec macx-clang && \
     make -j $NCPUS && \
     mv libmac.xpl.dylib output/64/mac.xpl
-if [ $? != 0 ] ; then
-  exit
-fi
-
-make distclean > /dev/null
-qmake -set XRAAS_EMBED $embed && \
-    qmake -set ACF_TYPE "$acf_type" && \
-    qmake -spec macx-clang-32 && \
-    make -j $NCPUS && \
-    mv libmac.xpl.dylib output/32/mac.xpl
 if [ $? != 0 ] ; then
   exit
 fi
