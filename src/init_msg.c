@@ -283,4 +283,5 @@ init_msg_sys_fini(void)
 	VERIFY(FT_Done_FreeType(ft) == 0);
 	clear_init_msg();
 	XPLMUnregisterFlightLoopCallback(init_msg_sched_cb, NULL);
+	inited = B_FALSE;
 }
