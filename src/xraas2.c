@@ -2000,7 +2000,8 @@ const airport_t *
 find_nearest_curarpt(void)
 {
 	double min_dist = ARPT_LOAD_LIMIT;
-	vect3_t pos_ecef = sph2ecef(GEO_POS3(adc->lat, adc->lon, adc->elev));
+	vect3_t pos_ecef = geo2ecef(GEO_POS3(adc->lat, adc->lon, adc->elev),
+	    &wgs84);
 	const airport_t *cur_arpt = NULL;
 
 	if (state.cur_arpts == NULL)
@@ -2049,8 +2050,10 @@ guess_TATL_from_airport(int *TA, int *TL, bool_t *field_changed)
 		if (arpt_ref != 0) {
 			XPLMGetNavAidInfo(arpt_ref, NULL, &outLat, &outLon,
 			    NULL, NULL, NULL, outID, NULL, NULL);
-			arpt_ecef = sph2ecef(GEO_POS3(outLat, outLon, 0));
-			pos_ecef = sph2ecef(GEO_POS3(adc->lat, adc->lon, 0));
+			arpt_ecef = geo2ecef(GEO_POS3(outLat, outLon, 0),
+			    &wgs84);
+			pos_ecef = geo2ecef(GEO_POS3(adc->lat, adc->lon, 0),
+			    &wgs84);
 		}
 
 		if (!IS_NULL_VECT(arpt_ecef) &&
