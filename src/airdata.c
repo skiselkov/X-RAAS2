@@ -25,10 +25,10 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include <XPLMDataAccess.h>
 #include <XPLMPlugin.h>
 
 #include <acfutils/assert.h>
+#include <acfutils/dr.h>
 #include <acfutils/geom.h>
 #include <acfutils/perf.h>
 #include <acfutils/thread.h>
@@ -38,7 +38,9 @@
 
 #include "airdata.h"
 #include "dbg_log.h"
+#include "nd_alert.h"
 #include "xraas2.h"
+#include "../api/c/XRAAS_ND_msg_decode.h"
 
 #define	HDG_ALIGN_THRESH	20	/* degrees */
 #define	GPWC_ARPT_ELEV_THRESH	609	/* meters, 2000 feet */
@@ -147,6 +149,9 @@ static struct {
 		int localizer_valid;		/* bool */
 		int glideslope;			/* dots = 2 * (gs / 0.175) */
 		int glideslope_valid;		/* bool */
+
+		int adv_text;			/* string */
+		int adv_lvl;			/* 0=none, 1=green, 2=yellow */
 	} ids;
 
 	ff_a320_rwy_info_t rwy_info;
@@ -398,6 +403,26 @@ ff_a320_gets32(int id)
 	return (val);
 }
 
+static inline void
+ff_a320_sets32(int id, int val)
+{
+	unsigned int type = ff_a320.svi.ValueType(id);
+	ASSERT_MSG(type >= Value_Type_sint8 && type <= Value_Type_uint32,
+	    "%s isn't an integer type, instead it is %s",
+	    ff_a320.svi.ValueName(id), ff_a320_type2str(type));
+	ff_a320.svi.ValueSet(id, &val);
+}
+
+static inline void
+ff_a320_set_str(int id, const char *val)
+{
+	unsigned int type = ff_a320.svi.ValueType(id);
+	ASSERT_MSG(type == Value_Type_String,
+	    "%s isn't a string type, instead it is %s",
+	    ff_a320.svi.ValueName(id), ff_a320_type2str(type));
+	ff_a320.svi.ValueSet(id, val);
+}
+
 static inline float
 ff_a320_getf32(int id)
 {
@@ -551,6 +576,9 @@ ff_a320_update(double step, void *tag)
 {
 	double alt_uncorr;
 	adc_t ff_adc;
+	int nd_alert = ND_alert_status();
+	char alert_text[16];
+	int alert_color;
 
 	UNUSED(step);
 	UNUSED(tag);
@@ -633,6 +661,11 @@ ff_a320_update(double step, void *tag)
 		    ff_a320_val_id("Aircraft.Navigation.GPWC.Localizer");
 		ff_a320.ids.localizer_valid =
 		    ff_a320_val_id("Aircraft.Navigation.GPWC.LocalizerValid");
+
+		ff_a320.ids.adv_text =
+		    ff_a320_val_id("Aircraft.Navigation.GPWC.AdvisoryText");
+		ff_a320.ids.adv_lvl =
+		    ff_a320_val_id("Aircraft.Navigation.GPWC.AdvisoryLevel");
 	}
 
 	ff_a320.status.powered = ff_a320_gets32(ff_a320.ids.powered);
@@ -745,6 +778,14 @@ ff_a320_update(double step, void *tag)
 		ff_adc.ils_info.id[0] = 0;
 		ff_adc.ils_info.hdef = NAN;
 		ff_adc.ils_info.vdef = NAN;
+	}
+
+	if (nd_alert != 0 &&
+	    XRAAS_ND_msg_decode(nd_alert, alert_text, &alert_color)) {
+		ff_a320_set_str(ff_a320.ids.adv_text, alert_text);
+		ff_a320_sets32(ff_a320.ids.adv_lvl, alert_color + 1);
+	} else {
+		ff_a320_sets32(ff_a320.ids.adv_lvl, 0);
 	}
 
 	mutex_enter(&ff_a320.lock);

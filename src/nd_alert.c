@@ -793,3 +793,9 @@ ND_alert_overlay_enable(void)
 {
 	alert_overlay_dis = 0;
 }
+
+int
+ND_alert_status(void)
+{
+	return (alert_status);
+}
