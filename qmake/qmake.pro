@@ -64,7 +64,7 @@ contains(XRAAS_EMBED, yes) {
 
 win32 {
 	CONFIG += dll
-	DEFINES += APL=0 IBM=1 LIN=0
+	DEFINES += APL=0 IBM=1 LIN=0 _WIN32_WINNT=0x0600
 	TARGET = win.xpl
 	INCLUDEPATH += /usr/include/GL
 	QMAKE_DEL_FILE = rm -f
@@ -72,11 +72,12 @@ win32 {
 
 win32:contains(CROSS_COMPILE, x86_64-w64-mingw32-) {
 	QMAKE_CFLAGS += $$system("$$[LIBACFUTILS]/pkg-config-deps win-64 \
-	    --cflags")
+	    --static-openal --cflags")
 
 	# This must go first so GCC finds the deps in the latter libraries
 	LIBS += -L $$[LIBACFUTILS]/qmake/win64 -lacfutils
-	LIBS += $$system("$$[LIBACFUTILS]/pkg-config-deps win-64 --libs")
+	LIBS += $$system("$$[LIBACFUTILS]/pkg-config-deps win-64 \
+	    --static-openal --libs")
 	LIBS += -ldbghelp
 	LIBS += -L$$[LIBACFUTILS]/SDK/Libraries/Win -lXPLM_64 -lXPWidgets_64
 	LIBS += -L$$[LIBACFUTILS]/OpenAL/libs/Win64 -lOpenAL32
